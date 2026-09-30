@@ -1,0 +1,21 @@
+# NSE equity segment trading holidays and special weekend sessions.
+# kind: holiday = weekday with no trading; special_session = weekend day with trading.
+# verified: "no" means entered from memory and not yet checked against the NSE holiday
+# circular. M1 checks past years against bhavcopy dates; future years must be checked
+# against the circular before the scanner relies on them.
+date,kind,description,verified
+2025-02-26,holiday,Mahashivratri,no
+2025-03-14,holiday,Holi,no
+2025-03-31,holiday,Id-Ul-Fitr (Ramadan Eid),no
+2025-04-10,holiday,Shri Mahavir Jayanti,no
+2025-04-14,holiday,Dr. Baba Saheb Ambedkar Jayanti,no
+2025-04-18,holiday,Good Friday,no
+2025-05-01,holiday,Maharashtra Day,no
+2025-08-15,holiday,Independence Day,no
+2025-08-27,holiday,Ganesh Chaturthi,no
+2025-10-02,holiday,Mahatma Gandhi Jayanti / Dussehra,no
+2025-10-21,holiday,Diwali Laxmi Pujan (muhurat session held separately),no
+2025-10-22,holiday,Balipratipada,no
+2025-11-05,holiday,Prakash Gurpurb Sri Guru Nanak Dev,no
+2025-12-25,holiday,Christmas,no
+2025-02-01,special_session,Union Budget (Saturday),no

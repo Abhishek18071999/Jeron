@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: jeron
+          POSTGRES_PASSWORD: jeron
+          POSTGRES_DB: jeron_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U jeron"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      JERON_TEST_DATABASE_URL: postgresql+psycopg://jeron:jeron@localhost:5432/jeron_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.17"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app
+      - run: uv run pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+
+  compose:
+    # Starts the whole stack the way you run it at home and checks it answers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose up -d --build --wait --wait-timeout 300
+      - name: Check API and web page
+        run: |
+          for i in $(seq 1 30); do curl -sf localhost:3000 >/dev/null && break; sleep 2; done
+          curl -sf localhost:8000/health | tee /dev/stderr | grep -q '"database":"ok"'
+          curl -sf localhost:3000 | grep -q 'text-green-600">connected' 
+      - if: failure()
+        run: docker compose logs
