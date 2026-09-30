@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
-from app.models import CorporateActionType
+from app.enums import CorporateActionType
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,8 @@ class Bar:
     volume: int
     prev_close: Decimal | None = None
     turnover: Decimal | None = None
+    series: str = "EQ"
+    isin: str | None = None
 
 
 @dataclass(frozen=True)

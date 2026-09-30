@@ -21,6 +21,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -30,6 +31,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+from app.enums import CorporateActionType, Exchange, QualityStatus
 
 Price = Numeric(14, 4)
 
@@ -37,25 +39,6 @@ Price = Numeric(14, 4)
 def pg_enum(enum_cls: type[StrEnum], name: str) -> Enum:
     """Store enum values ("split"), not member names ("SPLIT")."""
     return Enum(enum_cls, name=name, values_callable=lambda e: [m.value for m in e])
-
-
-class Exchange(StrEnum):
-    NSE = "NSE"
-    BSE = "BSE"
-
-
-class CorporateActionType(StrEnum):
-    SPLIT = "split"
-    BONUS = "bonus"
-    RIGHTS = "rights"
-    DIVIDEND = "dividend"
-    OTHER = "other"
-
-
-class QualityStatus(StrEnum):
-    PASS = "pass"
-    WARN = "warn"
-    FAIL = "fail"
 
 
 class User(Base):
@@ -68,11 +51,13 @@ class User(Base):
 
 class Instrument(Base):
     __tablename__ = "instruments"
-    __table_args__ = (UniqueConstraint("exchange", "symbol", "series"),)
+    __table_args__ = (UniqueConstraint("exchange", "symbol"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     exchange: Mapped[Exchange] = mapped_column(pg_enum(Exchange, "exchange"))
     symbol: Mapped[str] = mapped_column(String(32))
+    # Latest series seen (EQ, BE, BZ). A stock keeps one instrument when it moves
+    # between series; each bar records the series it traded in that day.
     series: Mapped[str] = mapped_column(String(4), default="EQ")
     isin: Mapped[str | None] = mapped_column(String(12), index=True)
     name: Mapped[str | None] = mapped_column(String(200))
@@ -90,6 +75,7 @@ class DailyBar(Base):
     instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), primary_key=True)
     trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
     source: Mapped[str] = mapped_column(String(32), primary_key=True)
+    series: Mapped[str | None] = mapped_column(String(4))
     open: Mapped[Decimal] = mapped_column(Price)
     high: Mapped[Decimal] = mapped_column(Price)
     low: Mapped[Decimal] = mapped_column(Price)
@@ -106,7 +92,21 @@ Index("ix_daily_bars_trade_date", DailyBar.trade_date)
 
 
 class CorporateAction(Base):
+    """A corporate action as one source reported it. The same action from NSE and
+    from the cross-check source is stored twice, once per source."""
+
     __tablename__ = "corporate_actions"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "source",
+            "ex_date",
+            "action_type",
+            "raw_text",
+            name="uq_corporate_actions_identity",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
@@ -121,6 +121,7 @@ class CorporateAction(Base):
     amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     source: Mapped[str] = mapped_column(String(32))
     raw_text: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class IndexMembership(Base):
@@ -135,11 +136,34 @@ class IndexMembership(Base):
     end_date: Mapped[date | None] = mapped_column(Date)
 
 
+class SourceFile(Base):
+    """What happened when a source's data for one day was fetched.
+
+    status: "ok", "not_published" (the source has no file: a holiday) or
+    "not_fetched" (the download failed; retried on the next run).
+    """
+
+    __tablename__ = "source_files"
+
+    source: Mapped[str] = mapped_column(String(32), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    status: Mapped[str] = mapped_column(String(16))
+    url: Mapped[str | None] = mapped_column(String(300))
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    rows: Mapped[int | None] = mapped_column(Integer)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class DataQualityReport(Base):
+    """One report per trading day; re-running the checks replaces it."""
+
     __tablename__ = "data_quality_reports"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    trade_date: Mapped[date] = mapped_column(Date, index=True, unique=True)
     status: Mapped[QualityStatus] = mapped_column(pg_enum(QualityStatus, "quality_status"))
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
