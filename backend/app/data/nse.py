@@ -38,6 +38,9 @@ UDIFF_START = date(2024, 7, 8)
 # history stays continuous when it moves between series, and M2's universe filter
 # excludes them.
 EQUITY_SERIES = frozenset({"EQ", "BE", "BZ"})
+# Rights entitlements trade in the EQ series under symbols like "DUCON-RE1"; they are
+# not shares and would pollute the price checks.
+_RIGHTS_ENTITLEMENT = re.compile(r"-RE\d*$")
 _MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
 
 
@@ -94,6 +97,8 @@ def parse_bhavcopy(content: bytes, expected_date: date) -> ParsedBhavcopy:
 
 
 def _keep(parsed: ParsedBhavcopy, bar: Bar) -> None:
+    if _RIGHTS_ENTITLEMENT.search(bar.symbol):
+        return
     try:
         validate_bar(bar)
     except BarValidationError as exc:

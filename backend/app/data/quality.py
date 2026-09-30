@@ -163,7 +163,7 @@ def _check_big_moves(day: DayData) -> Check:
     by_symbol: dict[str, list[CorporateActionRecord]] = {}
     for action in day.actions_today:
         by_symbol.setdefault(action.symbol, []).append(action)
-    unexplained, unadjusted = [], []
+    unexplained, unadjusted, first_trades = [], [], []
     for bar in day.bars:
         base = bar.prev_close
         if base is None and day.recent_closes.get(bar.symbol):
@@ -192,9 +192,13 @@ def _check_big_moves(day: DayData) -> Check:
         if unapplied:
             item["actions"] = ", ".join(t or "" for t in unapplied)
             unadjusted.append(item)
+        elif day.recent_closes and bar.symbol not in day.recent_closes:
+            # Listing day (previous close is the issue price) or back from suspension.
+            item["note"] = "first trade in recent sessions: listing or relisting"
+            first_trades.append(item)
         else:
             unexplained.append(item)
-    if not unexplained and not unadjusted:
+    if not unexplained and not unadjusted and not first_trades:
         return Check("big_moves", QualityStatus.PASS, f"No move over {BIG_MOVE_PCT}% unexplained")
     parts = []
     if unexplained:
@@ -206,7 +210,14 @@ def _check_big_moves(day: DayData) -> Check:
             f"{len(unadjusted)} moved more than {BIG_MOVE_PCT}% on a rights issue or scheme "
             "that Jeron does not adjust for"
         )
-    return Check("big_moves", QualityStatus.WARN, "; ".join(parts), unexplained + unadjusted)
+    if first_trades:
+        parts.append(
+            f"{len(first_trades)} moved more than {BIG_MOVE_PCT}% on their first trade "
+            "(listing or relisting)"
+        )
+    return Check(
+        "big_moves", QualityStatus.WARN, "; ".join(parts), unexplained + unadjusted + first_trades
+    )
 
 
 def _check_stale(day: DayData) -> Check:

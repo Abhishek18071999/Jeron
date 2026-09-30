@@ -126,3 +126,10 @@ def test_rejected_and_zero_volume_rows_warn():
     assert checks(report)["invalid_rows"].status == QualityStatus.WARN
     assert checks(report)["zero_volume"].status == QualityStatus.WARN
     assert report.status == QualityStatus.WARN
+
+
+def test_first_trade_moves_are_labelled_as_listings():
+    report = build_report(clean_day(bars=[bar("NEWCO", DAY, 140, 150, 138, 147, prev_close=100)]))
+    big = checks(report)["big_moves"]
+    assert "first trade" in big.message
+    assert big.items[0]["symbol"] == "NEWCO"

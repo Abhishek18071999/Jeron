@@ -65,6 +65,13 @@ def test_file_for_a_different_day_is_rejected():
         parse_bhavcopy(zipped("x.csv", UDIFF_2024_10_28), date(2024, 10, 29))
 
 
+def test_rights_entitlements_are_skipped():
+    day = date(2024, 10, 28)
+    content = udiff_zip(day, [udiff_row(day, "DUCON-RE1", 1, 1, 1, 1, 1, 100)])
+    parsed = parse_bhavcopy(content, day)
+    assert parsed.bars == [] and parsed.rejected == []
+
+
 def test_impossible_rows_are_rejected_not_stored():
     day = date(2024, 10, 28)
     content = udiff_zip(day, [udiff_row(day, "BAD", 10, 9, 8, 11, 10, 100)])
