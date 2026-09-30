@@ -48,10 +48,29 @@ def _days(start: date, end: date) -> Iterator[date]:
         day += timedelta(days=1)
 
 
+# Weekend days NSE is believed to have traded (Budget days, Muhurat sessions, disaster-
+# recovery drills). Only used to decide which weekend files to try: a wrong date just
+# gets "not published". The trading calendar is not changed by this list.
+KNOWN_WEEKEND_SESSIONS = frozenset(
+    {
+        date(2016, 10, 30),
+        date(2019, 10, 27),
+        date(2020, 2, 1),
+        date(2020, 11, 14),
+        date(2023, 11, 12),
+        date(2024, 1, 20),
+        date(2024, 3, 2),
+        date(2024, 5, 18),
+        date(2025, 2, 1),
+        date(2026, 2, 1),
+    }
+)
+
+
 def _candidate_days(start: date, end: date, calendar: TradingCalendar) -> Iterator[date]:
-    """Weekdays, plus weekend days the calendar lists as special sessions."""
+    """Weekdays, plus weekend days that may have had a special session."""
     for day in _days(start, end):
-        if day.weekday() < 5 or day in calendar.special_sessions:
+        if day.weekday() < 5 or day in calendar.special_sessions or day in KNOWN_WEEKEND_SESSIONS:
             yield day
 
 
@@ -305,6 +324,8 @@ def quality_range(
     reports = []
     for day in _candidate_days(start, end, calendar):
         status = statuses.get(day)
+        if status != "ok" and day.weekday() >= 5 and day not in calendar.special_sessions:
+            continue
         if status != "ok":
             try:
                 expected = calendar.is_trading_day(day)
