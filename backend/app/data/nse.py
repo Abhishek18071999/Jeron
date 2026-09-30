@@ -201,8 +201,8 @@ def parse_purpose(symbol: str, ex_date: date, purpose: str) -> list[CorporateAct
     raw = purpose.strip()
     found: list[CorporateActionRecord] = []
 
-    for m in _BONUS.finditer(text):
-        new, held = int(m.group(1)), int(m.group(2))
+    for bonus in _BONUS.finditer(text):
+        new, held = int(bonus.group(1)), int(bonus.group(2))
         found.append(
             CorporateActionRecord(
                 symbol,
@@ -213,8 +213,8 @@ def parse_purpose(symbol: str, ex_date: date, purpose: str) -> list[CorporateAct
                 raw_text=raw,
             )
         )
-    if m := _SPLIT.search(text):
-        fv_from, fv_to = Decimal(m.group(1)), Decimal(m.group(2))
+    if split := _SPLIT.search(text):
+        fv_from, fv_to = Decimal(split.group(1)), Decimal(split.group(2))
         if fv_from > 0 and fv_to > 0 and fv_from != fv_to:
             # Shares after / before = old face value / new face value.
             found.append(
@@ -227,27 +227,27 @@ def parse_purpose(symbol: str, ex_date: date, purpose: str) -> list[CorporateAct
                     raw_text=raw,
                 )
             )
-    if m := _RIGHTS.search(text):
+    if rights := _RIGHTS.search(text):
         found.append(
             CorporateActionRecord(
                 symbol,
                 ex_date,
                 CorporateActionType.RIGHTS,
-                ratio_new=Decimal(m.group(1)),
-                ratio_old=Decimal(m.group(2)),
+                ratio_new=Decimal(rights.group(1)),
+                ratio_old=Decimal(rights.group(2)),
                 raw_text=raw,
             )
         )
     rest = _RIGHTS.sub(" ", _SPLIT.sub(" ", _BONUS.sub(" ", text)))
-    if (m := _DIVIDEND_WORD.search(rest)) and "DIVISION" not in rest:
-        amounts = [Decimal(a) for a in _NUMBER.findall(rest[m.start() :])]
+    if (word := _DIVIDEND_WORD.search(rest)) and "DIVISION" not in rest:
+        amounts = [Decimal(a) for a in _NUMBER.findall(rest[word.start() :])]
         found.append(
             CorporateActionRecord(
                 symbol,
                 ex_date,
                 CorporateActionType.DIVIDEND,
                 # None when the amount isn't given in rupees (e.g. "INTERIM DIVIDEND").
-                amount=sum(amounts) if amounts else None,
+                amount=sum(amounts, Decimal(0)) if amounts else None,
                 raw_text=raw,
             )
         )

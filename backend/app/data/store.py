@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Row, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -369,13 +369,12 @@ def liquid_symbols(
     return list(session.scalars(stmt))
 
 
-def symbol_search(session: Session, query: str, limit: int = 20) -> list[Row[tuple[str, str]]]:
+def symbol_search(session: Session, query: str, limit: int = 20) -> list[tuple[str, str]]:
     pattern = f"{query.strip().upper()}%"
-    return list(
-        session.execute(
-            select(Instrument.symbol, Instrument.series)
-            .where(Instrument.exchange == Exchange.NSE, Instrument.symbol.like(pattern))
-            .order_by(Instrument.symbol)
-            .limit(limit)
-        )
+    rows = session.execute(
+        select(Instrument.symbol, Instrument.series)
+        .where(Instrument.exchange == Exchange.NSE, Instrument.symbol.like(pattern))
+        .order_by(Instrument.symbol)
+        .limit(limit)
     )
+    return [(symbol, series) for symbol, series in rows]
