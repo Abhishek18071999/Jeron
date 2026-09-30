@@ -22,6 +22,10 @@ services:
     environment:
       JERON_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jeron}:${POSTGRES_PASSWORD:-jeron}@db:5432/${POSTGRES_DB:-jeron}
       JERON_CORS_ORIGINS: http://localhost:3000
+      JERON_DATA_DIR: /data
+    volumes:
+      # Downloaded NSE files, kept so history can be re-read without downloading again.
+      - marketdata:/data
     depends_on:
       db:
         condition: service_healthy
@@ -45,3 +49,4 @@ services:
 
 volumes:
   pgdata:
+  marketdata:

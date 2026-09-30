@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +14,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <nav className="border-b border-neutral-200 dark:border-neutral-800">
+          <div className="mx-auto flex max-w-6xl gap-6 px-4 py-3 text-sm">
+            <Link href="/" className="font-semibold">
+              Jeron
+            </Link>
+            <Link href="/data">Data quality</Link>
+            <Link href="/spot-check">Spot check</Link>
+          </div>
+        </nav>
+        {children}
+      </body>
     </html>
   );
 }
