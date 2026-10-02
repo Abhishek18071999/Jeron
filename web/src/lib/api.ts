@@ -148,6 +148,131 @@ export type ScanView = {
   results: ScanResult[];
 };
 
+// --- Backtests (M3) -----------------------------------------------------------------
+
+export type TradeStats = {
+  trades: number;
+  wins: number;
+  win_rate: number;
+  avg_r: number;
+  expectancy_r: number;
+  profit_factor: number | string;
+  net_pnl: number;
+  avg_win_r: number;
+  avg_loss_r: number;
+  avg_sessions: number;
+};
+
+export type CurveStats = {
+  start_value: number;
+  end_value: number;
+  total_return: number;
+  cagr: number;
+  max_drawdown_pct: number;
+  sharpe: number;
+  volatility: number;
+  sessions: number;
+};
+
+export type Gate = { key: string; label: string; value: string; passed: boolean };
+
+export type BacktestRunSummary = {
+  id: number;
+  strategy_key: string;
+  strategy_version: string;
+  strategy_name: string;
+  tier: string;
+  data_start: string;
+  data_end: string;
+  oos_start: string;
+  holdout_start: string;
+  live_eligible: boolean;
+  fingerprint: string;
+  created_at: string;
+  trades: TradeStats;
+  curve: CurveStats;
+  gates: Gate[];
+};
+
+export type TaxView = {
+  pre_tax_pnl: number;
+  estimated_tax: number;
+  post_tax_pnl: number;
+  years: { fy: string; stcg: number; ltcg: number; dividends: number; tax: number; loss_carried: number }[];
+};
+
+export type BacktestSummary = {
+  periods: { data: string[]; first_tradable: string; out_of_sample: string[]; holdout: string[] };
+  out_of_sample: {
+    trades: TradeStats;
+    curve: CurveStats;
+    benchmark: CurveStats;
+    by_year: Record<string, TradeStats>;
+    by_regime: Record<string, TradeStats>;
+    yearly_returns: Record<string, number>;
+    benchmark_yearly_returns: Record<string, number>;
+    deflated_sharpe: number;
+    variants_tried: number;
+    tax: TaxView;
+  };
+  holdout: { trades: TradeStats; curve: CurveStats; benchmark: CurveStats };
+  gates: Gate[];
+  schedule: { from: string; variant: string; params: Record<string, number> }[];
+  skipped_entries: Record<string, number>;
+  exit_reasons: Record<string, number>;
+  brake_events: { date: string; event: string }[];
+  rules: string[];
+  notes: string[];
+  live_eligible: boolean;
+};
+
+export type EquityPoint = { date: string; equity: number; drawdown_pct: number; benchmark: number | null };
+
+export type BacktestVariant = {
+  window: string;
+  label: string;
+  params: Record<string, number>;
+  train_start: string;
+  train_end: string;
+  trades: number;
+  expectancy_r: string;
+  sharpe: string;
+  chosen: boolean;
+};
+
+export type BacktestView = {
+  run: BacktestRunSummary;
+  summary: BacktestSummary;
+  equity: EquityPoint[];
+  variants: BacktestVariant[];
+  runs_of_strategy: number;
+};
+
+export type BacktestTrade = {
+  seq: number;
+  segment: "oos" | "holdout";
+  symbol: string;
+  variant: string;
+  signal_date: string;
+  entry_date: string;
+  exit_date: string;
+  entry_price: string;
+  stop_price: string;
+  target_price: string;
+  exit_price: string;
+  shares: number;
+  exit_reason: string;
+  gross_pnl: string;
+  charges: string;
+  dividends: string;
+  net_pnl: string;
+  r_multiple: string;
+  regime: string;
+  score: string;
+  sessions: number;
+  open_at_end: boolean;
+};
+
 export type SamplePick = { symbol: string; trade_date: string; reason: string };
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };

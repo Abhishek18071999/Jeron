@@ -21,6 +21,7 @@ export default function RootLayout({
               Jeron
             </Link>
             <Link href="/scanner">Scanner</Link>
+            <Link href="/backtests">Backtests</Link>
             <Link href="/data">Data quality</Link>
             <Link href="/spot-check">Spot check</Link>
           </div>

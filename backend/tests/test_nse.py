@@ -146,6 +146,26 @@ def test_parse_pr_corporate_actions_both_date_formats_and_dedupes():
     ]
 
 
+def test_parse_pr_corporate_actions_day_month_year_with_dashes():
+    # NSE's 29 April 2016 file wrote dates as 02-05-2016.
+    content = pr_zip(
+        date(2016, 4, 29),
+        ["EQ,ITC,ITC Ltd,02-05-2016, , ,02-05-2016, , ,DIVIDEND RS 2.50 PER SHARE"],
+    )
+    (action,) = parse_pr_corporate_actions(content)
+    assert (action.ex_date, action.amount) == (date(2016, 5, 2), Decimal("2.50"))
+
+
+def test_parse_pr_corporate_actions_purpose_with_a_comma():
+    # NSE's 11 October 2019 file: "INT DIV-RS 5, SPL DIV-RS 40" split into two fields.
+    row = "EQ,TCS,Tata Consultancy Serv Ltd,18/10/2019, , ,17/10/2019, , ,"
+    content = pr_zip(date(2019, 10, 11), [row + "INT DIV-RS 5, SPL DIV-RS 40"])
+    actions = parse_pr_corporate_actions(content)
+    assert {a.symbol for a in actions} == {"TCS"}
+    assert all(a.action_type == CorporateActionType.DIVIDEND for a in actions)
+    assert "SPL DIV" in (actions[0].raw_text or "")
+
+
 class FakeFetcher:
     def __init__(self, responses):
         self.responses = responses

@@ -6,6 +6,7 @@ python -m app.cli quality --start 2016-01-01    # data-quality reports
 python -m app.cli lists --start 2016-01-01      # index closes, bands/GSM, Nifty 500 list
 python -m app.cli scan                          # the daily scan for the newest day
 python -m app.cli asm-import asm.csv            # load NSE's ASM list (saved from nseindia.com)
+python -m app.cli backtest                      # walk-forward test of every strategy
 python -m app.cli daily                         # everything since the last run, then the scan
 python -m app.cli holidays --year 2025          # holidays as NSE's files show them
 """
@@ -18,6 +19,8 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from app.backtest.job import run_backtests
+from app.backtest.strategies import STRATEGIES
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.data import pipeline, store
@@ -86,6 +89,16 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("asm-import", help="load the ASM list from a CSV saved from NSE's site")
     p.add_argument("file", type=Path)
     p.add_argument("--date", type=_date, help="date the list applies from (default: today)")
+
+    p = sub.add_parser("backtest", help="walk-forward backtest of the strategies, saved as runs")
+    p.add_argument(
+        "--strategy",
+        choices=sorted(STRATEGIES),
+        action="append",
+        help="strategy to test (repeatable; default: all)",
+    )
+    p.add_argument("--start", type=_date, help="first price date to use (default: all)")
+    p.add_argument("--end", type=_date, help="last price date to use (default: newest)")
 
     sub.add_parser(
         "daily", help="update everything since the last run, then scan (run after 7 pm IST)"
@@ -162,6 +175,10 @@ def main(argv: list[str] | None = None) -> int:
             _log(
                 f"ASM list as of {as_of}: {len(symbols)} stocks ({added} added, {removed} removed)"
             )
+            return 0
+
+        if args.command == "backtest":
+            run_backtests(session, args.strategy, args.start, args.end, log=_log)
             return 0
 
         if args.command == "daily":

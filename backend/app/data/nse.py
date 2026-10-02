@@ -282,7 +282,7 @@ def _parse_bc_date(value: str) -> date | None:
     value = value.strip()
     if not value:
         return None
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%b-%Y", "%d-%b-%y"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d-%b-%Y", "%d-%b-%y"):
         try:
             return datetime.strptime(value, fmt).date()
         except ValueError:
@@ -299,8 +299,12 @@ def parse_pr_corporate_actions(content: bytes) -> list[CorporateActionRecord]:
         text = zf.read(names[0]).decode("latin-1")
     actions: list[CorporateActionRecord] = []
     seen: set[tuple[str, date, str]] = set()
-    for row in csv.DictReader(io.StringIO(text)):
-        row = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
+    for raw in csv.DictReader(io.StringIO(text)):
+        # A purpose containing a comma spills into extra fields; join it back.
+        extra = raw.pop(None, None) or []
+        row = {(k or "").strip(): (v or "").strip() for k, v in raw.items()}
+        if extra:
+            row["PURPOSE"] = ",".join([row.get("PURPOSE", ""), *extra]).strip()
         if row.get("SERIES") not in EQUITY_SERIES:
             continue
         ex_date = _parse_bc_date(row.get("EX_DT", ""))
