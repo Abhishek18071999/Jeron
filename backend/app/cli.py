@@ -3,7 +3,10 @@
 python -m app.cli backfill --start 2016-01-01   # history, resumable
 python -m app.cli crosscheck --start 2016-01-01 # second source for liquid stocks
 python -m app.cli quality --start 2016-01-01    # data-quality reports
-python -m app.cli daily                         # everything since the last run
+python -m app.cli lists --start 2016-01-01      # index closes, bands/GSM, Nifty 500 list
+python -m app.cli scan                          # the daily scan for the newest day
+python -m app.cli asm-import asm.csv            # load NSE's ASM list (saved from nseindia.com)
+python -m app.cli daily                         # everything since the last run, then the scan
 python -m app.cli holidays --year 2025          # holidays as NSE's files show them
 """
 
@@ -23,6 +26,8 @@ from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
+from app.scan.job import ASM, run_scan
+from app.scan.surveillance import read_asm_csv
 
 
 def _log(message: str) -> None:
@@ -68,7 +73,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--start", type=_date)
     p.add_argument("--end", type=_date)
 
-    sub.add_parser("daily", help="update everything since the last run (run after 7 pm IST)")
+    p = sub.add_parser(
+        "lists", help="download index closes, security lists and the reference lists"
+    )
+    p.add_argument("--start", type=_date, default=date(2016, 1, 1))
+    p.add_argument("--end", type=_date)
+    p.add_argument("--force", action="store_true", help="re-read days already stored")
+
+    p = sub.add_parser("scan", help="run the daily scan (default: newest trading day)")
+    p.add_argument("--date", type=_date)
+
+    p = sub.add_parser("asm-import", help="load the ASM list from a CSV saved from NSE's site")
+    p.add_argument("file", type=Path)
+    p.add_argument("--date", type=_date, help="date the list applies from (default: today)")
+
+    sub.add_parser(
+        "daily", help="update everything since the last run, then scan (run after 7 pm IST)"
+    )
 
     p = sub.add_parser(
         "holidays", help="print weekday holidays and weekend sessions seen in NSE files"
@@ -87,6 +108,10 @@ def main(argv: list[str] | None = None) -> int:
             )
             failed = [r.day for r in results if r.status == "not_fetched"]
             _log(f"Done: {sum(r.status == 'ok' for r in results)} trading days stored.")
+            list_failures = pipeline.ingest_lists_range(
+                session, _archive(), args.start, end, today, force=args.force, log=_log
+            )
+            failed += [d for days in list_failures.values() for d in days]
             if failed:
                 _log(f"{len(failed)} days could not be downloaded; run the same command again.")
                 return 1
@@ -113,6 +138,32 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
+        if args.command == "lists":
+            archive = _archive()
+            failures = pipeline.ingest_lists_range(
+                session, archive, args.start, args.end or today, today, force=args.force, log=_log
+            )
+            lists_ok = pipeline.refresh_reference_lists(session, archive, today, log=_log)
+            missing = sum(len(days) for days in failures.values())
+            if missing:
+                _log(f"{missing} files could not be downloaded; run the same command again.")
+            return 0 if lists_ok and not missing else 1
+
+        if args.command == "scan":
+            outcome = run_scan(session, args.date, log=_log)
+            return 0 if outcome.status == "ok" else 1
+
+        if args.command == "asm-import":
+            symbols = read_asm_csv(args.file.read_bytes())
+            as_of = args.date or today
+            added, removed = store.replace_surveillance(session, ASM, symbols, as_of, "manual")
+            store.record_source_file(session, store.ASM_IMPORT, as_of, "ok", rows=len(symbols))
+            session.commit()
+            _log(
+                f"ASM list as of {as_of}: {len(symbols)} stocks ({added} added, {removed} removed)"
+            )
+            return 0
+
         if args.command == "daily":
             report = pipeline.daily_update(session, _archive(), _yahoo(), calendar, today, log=_log)
             if report is None:
@@ -120,7 +171,10 @@ def main(argv: list[str] | None = None) -> int:
             _log(f"{report.trade_date}: data quality {report.status.value.upper()}")
             for reason in report.reasons:
                 _log(f"  - {reason}")
-            return 1 if report.status == QualityStatus.FAIL else 0
+            outcome = run_scan(session, report.trade_date, log=_log)
+            if report.status == QualityStatus.FAIL or outcome.status != "ok":
+                return 1
+            return 0
 
         if args.command == "holidays":
             start, end = date(args.year, 1, 1), date(args.year, 12, 31)

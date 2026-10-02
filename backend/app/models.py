@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Date,
     DateTime,
     Enum,
@@ -128,6 +129,11 @@ class IndexMembership(Base):
     """Point-in-time index constituents. end_date is null while still a member."""
 
     __tablename__ = "index_memberships"
+    __table_args__ = (
+        UniqueConstraint(
+            "index_name", "instrument_id", "start_date", name="uq_index_memberships_period"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     index_name: Mapped[str] = mapped_column(String(64), index=True)
@@ -167,3 +173,94 @@ class DataQualityReport(Base):
     status: Mapped[QualityStatus] = mapped_column(pg_enum(QualityStatus, "quality_status"))
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IndexBar(Base):
+    """One day of an index (Nifty 500, Nifty 50, India VIX, ...) as NSE published it."""
+
+    __tablename__ = "index_bars"
+
+    index_name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    open: Mapped[Decimal | None] = mapped_column(Price)
+    high: Mapped[Decimal | None] = mapped_column(Price)
+    low: Mapped[Decimal | None] = mapped_column(Price)
+    close: Mapped[Decimal] = mapped_column(Price)
+
+
+class SecurityStatus(Base):
+    """A stock's price band and surveillance stage on one day, from NSE's security
+    list. Kept per day (point in time); never overwritten by later days."""
+
+    __tablename__ = "security_status"
+
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    series: Mapped[str] = mapped_column(String(4))
+    # Percent band (2, 5, 10, 20); null for "No Band" (stocks with F&O).
+    price_band: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    remarks: Mapped[str | None] = mapped_column(String(200))
+    gsm_stage: Mapped[str | None] = mapped_column(String(32))
+
+
+class SurveillanceFlag(Base):
+    """A period during which a stock was on a surveillance list (ASM). end_date is
+    null while it still is."""
+
+    __tablename__ = "surveillance_flags"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    measure: Mapped[str] = mapped_column(String(16))
+    stage: Mapped[str | None] = mapped_column(String(64))
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    source: Mapped[str] = mapped_column(String(32))
+
+
+class SymbolChange(Base):
+    """NSE symbol renames, used to join a company's history across its symbols."""
+
+    __tablename__ = "symbol_changes"
+    __table_args__ = (UniqueConstraint("old_symbol", "new_symbol", "change_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    old_symbol: Mapped[str] = mapped_column(String(32), index=True)
+    new_symbol: Mapped[str] = mapped_column(String(32), index=True)
+    change_date: Mapped[date] = mapped_column(Date)
+    company_name: Mapped[str | None] = mapped_column(String(200))
+
+
+class ScanRun(Base):
+    """One run of the daily scan. A blocked run records why it did not run."""
+
+    __tablename__ = "scan_runs"
+    __table_args__ = (UniqueConstraint("trade_date", "score_version"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, index=True)
+    score_version: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16))  # "ok" or "blocked"
+    universe_size: Mapped[int] = mapped_column(Integer, default=0)
+    duration_seconds: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ScanResult(Base):
+    """One stock in a scan's universe with its technical score and the inputs."""
+
+    __tablename__ = "scan_results"
+
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("scan_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    rank: Mapped[int] = mapped_column(Integer)
+    score: Mapped[Decimal] = mapped_column(Numeric(5, 1))
+    close: Mapped[Decimal] = mapped_column(Price)
+    in_nifty500: Mapped[bool] = mapped_column(Boolean, default=False)
+    sector: Mapped[str | None] = mapped_column(String(100))
+    components: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    indicators: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

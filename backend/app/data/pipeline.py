@@ -3,7 +3,9 @@
 - `ingest_range`: NSE bhavcopy prices and NSE corporate actions, day by day.
 - `crosscheck_range`: the second source (Yahoo) for the liquid stocks.
 - `quality_range`: the daily data-quality report.
-- `daily_update`: all three for the days since the last run.
+- `ingest_lists_range`: NSE index closes and the security list (bands, GSM), per day.
+- `refresh_reference_lists`: Nifty 500 constituents, company names, symbol changes.
+- `daily_update`: all of these for the days since the last run.
 
 Every job is safe to re-run; each day is committed on its own, so an interrupted
 backfill continues where it stopped.
@@ -26,9 +28,23 @@ from app.data.nse import (
     BhavcopyError,
     NseArchive,
     bhavcopy_url,
+    index_closes_url,
     parse_bhavcopy,
     parse_pr_corporate_actions,
     pr_url,
+    security_list_url,
+)
+from app.data.nse_lists import (
+    EQUITY_LIST_URL,
+    NIFTY500_LIST_URL,
+    NIFTY_500,
+    SYMBOL_CHANGES_URL,
+    ListFormatError,
+    parse_equity_list,
+    parse_index_closes,
+    parse_index_constituents,
+    parse_security_list,
+    parse_symbol_changes,
 )
 from app.data.quality import STALE_SESSIONS, DayData, QualityReportData, build_report
 from app.data.yahoo import YahooClient
@@ -342,6 +358,120 @@ def quality_range(
     return reports
 
 
+# NSE's archive has security lists from 2020; earlier days are not requested.
+SECURITY_LIST_START = date(2020, 1, 1)
+
+
+def _ingest_list_day(
+    session: Session,
+    archive: NseArchive,
+    source: str,
+    day: date,
+    today: date,
+) -> str:
+    if source == store.NSE_INDICES:
+        url, download = index_closes_url(day), archive.index_closes
+    else:
+        url, download = security_list_url(day), archive.security_list
+    try:
+        content = download(day, today)
+    except FetchError as exc:
+        store.record_source_file(
+            session, source, day, "not_fetched", url=url, details={"error": str(exc)}
+        )
+        return "not_fetched"
+    if content is None:
+        if day <= today - timedelta(days=archive.settle_days):
+            store.record_source_file(session, source, day, "not_published", url=url)
+            return "not_published"
+        return "pending"
+    try:
+        if source == store.NSE_INDICES:
+            rows = store.save_index_closes(session, parse_index_closes(content, day))
+        else:
+            rows = store.save_security_status(session, day, parse_security_list(content))
+    except (ListFormatError, ValueError, KeyError) as exc:
+        session.rollback()
+        store.record_source_file(
+            session, source, day, "not_fetched", url=url, details={"error": str(exc)}
+        )
+        return "not_fetched"
+    store.record_source_file(
+        session, source, day, "ok", url=url, sha256=hashlib.sha256(content).hexdigest(), rows=rows
+    )
+    return "ok"
+
+
+def ingest_lists_range(
+    session: Session,
+    archive: NseArchive,
+    start: date,
+    end: date,
+    today: date,
+    *,
+    force: bool = False,
+    log: Log = _quiet,
+) -> dict[str, list[date]]:
+    """Index closes and security lists for each day NSE traded (has a bhavcopy).
+    Returns the days each source could not be downloaded."""
+    failed: dict[str, list[date]] = {store.NSE_INDICES: [], store.NSE_SEC_LIST: []}
+    days = store.ok_dates(session, store.NSE_BARS, start, end)
+    for source in (store.NSE_INDICES, store.NSE_SEC_LIST):
+        done = store.source_statuses(session, source, start, end)
+        todo = [
+            d
+            for d in days
+            if (force or done.get(d) not in ("ok", "not_published"))
+            and (source != store.NSE_SEC_LIST or d >= SECURITY_LIST_START)
+        ]
+        for i, day in enumerate(todo, 1):
+            status = _ingest_list_day(session, archive, source, day, today)
+            session.commit()
+            if status == "not_fetched":
+                failed[source].append(day)
+                log(f"{day}: {source} could not be downloaded")
+            elif status == "not_published":
+                log(f"{day}: {source} not published")
+            if i % 50 == 0:
+                log(f"{source}: {i} of {len(todo)} days")
+    return failed
+
+
+def refresh_reference_lists(
+    session: Session, archive: NseArchive, today: date, *, log: Log = _quiet
+) -> bool:
+    """Today's Nifty 500 list, company names and symbol changes. These files have no
+    history on NSE's server, so each download is recorded as of `today`. Returns
+    False if any could not be downloaded."""
+    ok = True
+    try:
+        members = parse_index_constituents(archive.current_list(NIFTY500_LIST_URL, today))
+        joined, left = store.refresh_index_membership(session, NIFTY_500, members, today)
+        log(f"Nifty 500: {len(members)} stocks ({joined} joined, {left} left)")
+        names = parse_equity_list(archive.current_list(EQUITY_LIST_URL, today))
+        store.update_instrument_names(session, names)
+        changes = parse_symbol_changes(archive.current_list(SYMBOL_CHANGES_URL, today))
+        store.save_symbol_changes(session, changes)
+        store.record_source_file(
+            session,
+            "nse_lists",
+            today,
+            "ok",
+            rows=len(members),
+            details={
+                "nifty500": len(members),
+                "equities": len(names),
+                "symbol_changes": len(changes),
+            },
+        )
+    except (FetchError, NotPublishedError, ListFormatError) as exc:
+        session.rollback()
+        log(f"Reference lists could not be refreshed: {exc}")
+        ok = False
+    session.commit()
+    return ok
+
+
 def daily_update(
     session: Session,
     archive: NseArchive,
@@ -363,6 +493,8 @@ def daily_update(
     if not new_days:
         log("No trading days found in the last few days")
         return None
+    ingest_lists_range(session, archive, new_days[0] - timedelta(days=7), today, today, log=log)
+    refresh_reference_lists(session, archive, today, log=log)
     crosscheck_range(session, yahoo, new_days[0] - timedelta(days=7), today, log=log)
     reports = quality_range(session, calendar, new_days[0], today, log=log)
     return reports[-1] if reports else None

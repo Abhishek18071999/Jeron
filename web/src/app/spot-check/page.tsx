@@ -115,7 +115,7 @@ function SpotTables({ spot }: { spot: SpotCheck }) {
               <th colSpan={5} className="border-l border-neutral-200 dark:border-neutral-800">
                 Adjusted
               </th>
-              <th colSpan={5} className="border-l border-neutral-200 dark:border-neutral-800">
+              <th colSpan={8} className="border-l border-neutral-200 dark:border-neutral-800">
                 Indicators (adjusted)
               </th>
             </tr>
@@ -137,6 +137,9 @@ function SpotTables({ spot }: { spot: SpotCheck }) {
               <th>EMA 200</th>
               <th>RSI 14</th>
               <th>ATR 14</th>
+              <th>MACD</th>
+              <th>Signal</th>
+              <th>ADX 14</th>
             </tr>
           </thead>
           <tbody>
@@ -176,6 +179,9 @@ function SpotTables({ spot }: { spot: SpotCheck }) {
                 <td>{fmt(r.ema200)}</td>
                 <td>{fmt(r.rsi14)}</td>
                 <td>{fmt(r.atr14)}</td>
+                <td>{fmt(r.macd)}</td>
+                <td>{fmt(r.macd_signal)}</td>
+                <td>{fmt(r.adx14)}</td>
               </tr>
             ))}
           </tbody>

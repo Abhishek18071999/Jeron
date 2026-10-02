@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -10,14 +10,33 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.data.provider import Bar, CorporateActionRecord
+from app.data.nse_lists import (
+    IndexClose,
+    IndexConstituent,
+    SecurityStatusRecord,
+    SymbolChangeRecord,
+)
+from app.data.provider import Bar, CorporateActionRecord, InstrumentRecord
 from app.enums import Exchange
-from app.models import CorporateAction, DailyBar, Instrument, SourceFile
+from app.models import (
+    CorporateAction,
+    DailyBar,
+    IndexBar,
+    IndexMembership,
+    Instrument,
+    SecurityStatus,
+    SourceFile,
+    SurveillanceFlag,
+    SymbolChange,
+)
 
 NSE_BARS = "nse_bhavcopy"
 NSE_ACTIONS = "nse"
 NSE_PR = "nse_pr"
+NSE_INDICES = "nse_indices"
+NSE_SEC_LIST = "nse_sec_list"
 YAHOO = "yahoo"
+ASM_IMPORT = "asm_import"
 _CHUNK = 2000
 
 
@@ -47,6 +66,12 @@ def instrument_ids(
     if missing:
         ids = _existing_ids(session, wanted)
     return ids
+
+
+def existing_ids(session: Session, symbols: Iterable[str]) -> dict[str, int]:
+    """Instrument ids by NSE symbol, for the symbols that exist."""
+    wanted = set(symbols)
+    return _existing_ids(session, wanted) if wanted else {}
 
 
 def _existing_ids(session: Session, symbols: set[str]) -> dict[str, int]:
@@ -378,3 +403,248 @@ def symbol_search(session: Session, query: str, limit: int = 20) -> list[tuple[s
         .limit(limit)
     )
     return [(symbol, series) for symbol, series in rows]
+
+
+# --- Indices, security list, reference lists (M2) -------------------------------------
+
+
+def save_index_closes(session: Session, closes: Sequence[IndexClose]) -> int:
+    if not closes:
+        return 0
+    rows = [
+        {
+            "index_name": c.index_name,
+            "trade_date": c.trade_date,
+            "open": c.open,
+            "high": c.high,
+            "low": c.low,
+            "close": c.close,
+        }
+        for c in closes
+    ]
+    stmt = pg_insert(IndexBar).values(rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["index_name", "trade_date"],
+        set_={c: stmt.excluded[c] for c in ("open", "high", "low", "close")},
+    )
+    session.execute(stmt)
+    return len(rows)
+
+
+def index_closes(session: Session, index_name: str, start: date, end: date) -> dict[date, Decimal]:
+    rows = session.execute(
+        select(IndexBar.trade_date, IndexBar.close).where(
+            IndexBar.index_name == index_name, IndexBar.trade_date.between(start, end)
+        )
+    )
+    return {d: c for d, c in rows}
+
+
+def save_security_status(
+    session: Session, trade_date: date, records: Sequence[SecurityStatusRecord]
+) -> int:
+    if not records:
+        return 0
+    ids = instrument_ids(session, (r.symbol for r in records))
+    rows = [
+        {
+            "instrument_id": ids[r.symbol],
+            "trade_date": trade_date,
+            "series": r.series,
+            "price_band": r.price_band,
+            "remarks": (r.remarks or "")[:200] or None,
+            "gsm_stage": r.gsm_stage,
+        }
+        for r in {r.symbol: r for r in records}.values()
+    ]
+    for start in range(0, len(rows), _CHUNK):
+        stmt = pg_insert(SecurityStatus).values(rows[start : start + _CHUNK])
+        columns = ("series", "price_band", "remarks", "gsm_stage")
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["instrument_id", "trade_date"],
+            set_={c: stmt.excluded[c] for c in columns},
+        )
+        session.execute(stmt)
+    return len(rows)
+
+
+def gsm_symbols(
+    session: Session, as_of: date, max_age_days: int = 7
+) -> tuple[date, set[str]] | None:
+    """Stocks on GSM in the newest security list on or before `as_of` (no older than
+    `max_age_days`), with that list's date. None if there is no recent list."""
+    listed = session.scalar(
+        select(func.max(SourceFile.trade_date)).where(
+            SourceFile.source == NSE_SEC_LIST,
+            SourceFile.status == "ok",
+            SourceFile.trade_date <= as_of,
+            SourceFile.trade_date > as_of - timedelta(days=max_age_days),
+        )
+    )
+    if listed is None:
+        return None
+    rows = session.scalars(
+        select(Instrument.symbol)
+        .join(SecurityStatus, SecurityStatus.instrument_id == Instrument.id)
+        .where(SecurityStatus.trade_date == listed, SecurityStatus.gsm_stage.is_not(None))
+    )
+    return listed, set(rows)
+
+
+def replace_surveillance(
+    session: Session, measure: str, symbols: dict[str, str | None], as_of: date, source: str
+) -> tuple[int, int]:
+    """Make `symbols` (symbol -> stage) the stocks on `measure` from `as_of`: open a
+    period for new ones and close the period of those no longer listed. Returns
+    (added, removed). Earlier periods are kept, so the history stays point in time."""
+    ids = instrument_ids(session, symbols)
+    open_flags = {
+        f.instrument_id: f
+        for f in session.scalars(
+            select(SurveillanceFlag).where(
+                SurveillanceFlag.measure == measure, SurveillanceFlag.end_date.is_(None)
+            )
+        )
+    }
+    wanted = {ids[s]: stage for s, stage in symbols.items()}
+    removed = 0
+    for instrument_id, flag in open_flags.items():
+        if instrument_id not in wanted:
+            flag.end_date = as_of
+            removed += 1
+    added = 0
+    for instrument_id, stage in wanted.items():
+        if instrument_id not in open_flags:
+            session.add(
+                SurveillanceFlag(
+                    instrument_id=instrument_id,
+                    measure=measure,
+                    stage=stage,
+                    start_date=as_of,
+                    source=source,
+                )
+            )
+            added += 1
+    session.flush()
+    return added, removed
+
+
+def surveillance_symbols(session: Session, measure: str, as_of: date) -> set[str]:
+    rows = session.scalars(
+        select(Instrument.symbol)
+        .join(SurveillanceFlag, SurveillanceFlag.instrument_id == Instrument.id)
+        .where(
+            SurveillanceFlag.measure == measure,
+            SurveillanceFlag.start_date <= as_of,
+            (SurveillanceFlag.end_date.is_(None)) | (SurveillanceFlag.end_date > as_of),
+        )
+    )
+    return set(rows)
+
+
+def refresh_index_membership(
+    session: Session, index_name: str, members: Sequence[IndexConstituent], as_of: date
+) -> tuple[int, int]:
+    """Record today's constituents: open a membership for new ones and end the
+    membership of stocks that left. Returns (joined, left)."""
+    ids = instrument_ids(session, (m.symbol for m in members))
+    current = {
+        m.instrument_id: m
+        for m in session.scalars(
+            select(IndexMembership).where(
+                IndexMembership.index_name == index_name, IndexMembership.end_date.is_(None)
+            )
+        )
+    }
+    wanted = set(ids.values())
+    left = 0
+    for instrument_id, membership in current.items():
+        if instrument_id not in wanted:
+            membership.end_date = as_of
+            left += 1
+    joined = 0
+    for instrument_id in wanted - current.keys():
+        session.add(
+            IndexMembership(index_name=index_name, instrument_id=instrument_id, start_date=as_of)
+        )
+        joined += 1
+    for m in members:
+        if m.industry:
+            session.execute(
+                update(Instrument).where(Instrument.id == ids[m.symbol]).values(sector=m.industry)
+            )
+    session.flush()
+    return joined, left
+
+
+def index_members(session: Session, index_name: str, as_of: date) -> set[str]:
+    rows = session.scalars(
+        select(Instrument.symbol)
+        .join(IndexMembership, IndexMembership.instrument_id == Instrument.id)
+        .where(
+            IndexMembership.index_name == index_name,
+            IndexMembership.start_date <= as_of,
+            (IndexMembership.end_date.is_(None)) | (IndexMembership.end_date > as_of),
+        )
+    )
+    return set(rows)
+
+
+def update_instrument_names(session: Session, records: Sequence[InstrumentRecord]) -> int:
+    """Fill in names and listing dates for instruments Jeron already has."""
+    existing = _existing_ids(session, {r.symbol for r in records})
+    updated = 0
+    for r in records:
+        if r.symbol in existing:
+            session.execute(
+                update(Instrument)
+                .where(Instrument.id == existing[r.symbol])
+                .values(name=r.name, listing_date=r.listing_date)
+            )
+            updated += 1
+    return updated
+
+
+def save_symbol_changes(session: Session, changes: Sequence[SymbolChangeRecord]) -> int:
+    if not changes:
+        return 0
+    rows = [
+        {
+            "old_symbol": c.old_symbol[:32],
+            "new_symbol": c.new_symbol[:32],
+            "change_date": c.change_date,
+            "company_name": (c.company_name or "")[:200] or None,
+        }
+        for c in changes
+    ]
+    for start in range(0, len(rows), _CHUNK):
+        session.execute(
+            pg_insert(SymbolChange).values(rows[start : start + _CHUNK]).on_conflict_do_nothing()
+        )
+    return len(rows)
+
+
+def symbol_lineage(session: Session, symbols: Iterable[str]) -> dict[str, list[tuple[str, date]]]:
+    """For each symbol, its earlier symbols and the date each stopped being used,
+    newest first: {"ZYDUSLIFE": [("CADILAHC", 2022-03-07)]}."""
+    renames: dict[str, list[tuple[str, date]]] = {}
+    for old, new, when in session.execute(
+        select(SymbolChange.old_symbol, SymbolChange.new_symbol, SymbolChange.change_date)
+    ):
+        renames.setdefault(new, []).append((old, when))
+    lineage: dict[str, list[tuple[str, date]]] = {}
+    for symbol in symbols:
+        chain: list[tuple[str, date]] = []
+        seen = {symbol}
+        current, cutoff = symbol, date.max
+        while True:
+            earlier = [(o, d) for o, d in renames.get(current, []) if d <= cutoff and o not in seen]
+            if not earlier:
+                break
+            old, when = max(earlier, key=lambda e: e[1])
+            chain.append((old, when))
+            seen.add(old)
+            current, cutoff = old, when
+        if chain:
+            lineage[symbol] = chain
+    return lineage

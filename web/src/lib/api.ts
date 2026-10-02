@@ -59,6 +59,9 @@ export type SpotRow = {
   ema200: number | null;
   rsi14: number | null;
   atr14: number | null;
+  macd: number | null;
+  macd_signal: number | null;
+  adx14: number | null;
 };
 
 export type AdjustmentLogEntry = {
@@ -79,6 +82,70 @@ export type SpotCheck = {
   rows: SpotRow[];
   adjustments: AdjustmentLogEntry[];
   notes: string[];
+};
+
+// --- Scanner (M2) -------------------------------------------------------------------
+
+export type ScanRunSummary = {
+  id: number;
+  trade_date: string;
+  score_version: string;
+  status: "ok" | "blocked";
+  universe_size: number;
+  duration_seconds: string | null;
+  reasons: string[];
+  created_at: string;
+};
+
+export type ScanComponent = {
+  key: string;
+  label: string;
+  value: number | null;
+  points: number;
+  max_points: number;
+};
+
+export type ScanIndicators = {
+  sessions: number;
+  close: number;
+  rsi14: number | null;
+  adx14: number | null;
+  atr_pct: number | null;
+  volume_ratio: number | null;
+  below_52w_high_pct: number;
+  return_3m: number | null;
+  rs_3m: number | null;
+  rs_6m: number | null;
+  support: number | null;
+  resistance: number | null;
+  [key: string]: number | null;
+};
+
+export type ScanResult = {
+  rank: number;
+  symbol: string;
+  score: string;
+  close: string;
+  in_nifty500: boolean;
+  sector: string | null;
+  components: ScanComponent[];
+  indicators: ScanIndicators;
+};
+
+export type ScanExclusion = { rule: string; label: string; count: number; symbols: string[] };
+
+export type ScanView = {
+  run: ScanRunSummary;
+  details: {
+    candidates?: number;
+    exclusions?: ScanExclusion[];
+    notes?: string[];
+    security_list_date?: string | null;
+    asm_list_date?: string | null;
+    reasons?: string[];
+  };
+  total_results: number;
+  results: ScanResult[];
 };
 
 export type SamplePick = { symbol: string; trade_date: string; reason: string };

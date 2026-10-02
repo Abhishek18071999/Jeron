@@ -62,6 +62,16 @@ def pr_url(day: date) -> str:
     return f"{ARCHIVE}/archives/equities/bhavcopy/pr/PR{day:%d%m%y}.zip"
 
 
+def index_closes_url(day: date) -> str:
+    """All NSE indices' closes for one day (parsed in `nse_lists`)."""
+    return f"{ARCHIVE}/content/indices/ind_close_all_{day:%d%m%Y}.csv"
+
+
+def security_list_url(day: date) -> str:
+    """Price bands and surveillance remarks for one day (parsed in `nse_lists`)."""
+    return f"{ARCHIVE}/content/equities/sec_list_{day:%d%m%Y}.csv"
+
+
 @dataclass
 class ParsedBhavcopy:
     trade_date: date
@@ -173,12 +183,14 @@ def _parse_udiff(text: str, expected_date: date) -> ParsedBhavcopy:
 
 _BC_NAME = re.compile(r"^bc\d+\.csv$", re.IGNORECASE)
 _AMOUNT = r"(?:RS|RE|INR)\.?\s*([\d]+(?:\.\d+)?)"
+# The new face value sometimes has no currency word: "FV SPLT FRM RS 10 TO 1".
+_TO_AMOUNT = r"(?:(?:RS|RE|INR)\.?\s*)?([\d]+(?:\.\d+)?)"
 _BONUS = re.compile(r"BONUS\s*(\d+)\s*:\s*(\d+)")
 _SPLIT = re.compile(
     r"(?:SPLT|SPLIT|SUB[- ]?DIVISION|CONSOLIDATION|CONSOL)\D*?"
     + _AMOUNT
     + r"\D*?(?:TO|-)\s*"
-    + _AMOUNT
+    + _TO_AMOUNT
 )
 _RIGHTS = re.compile(r"(?:RIGHTS|RGHTS|RGTS)\s*(\d+)\s*:\s*(\d+)")
 # Dividend wording varies: "DIV - RS 2 PER SH", "INTDVSPDVRS 7.50 & 86.50",
@@ -343,3 +355,17 @@ class NseArchive:
 
     def pr_bundle(self, day: date, today: date) -> bytes | None:
         return self._get("pr", pr_url(day), day, today)
+
+    def index_closes(self, day: date, today: date) -> bytes | None:
+        return self._get("indices", index_closes_url(day), day, today)
+
+    def security_list(self, day: date, today: date) -> bytes | None:
+        return self._get("sec_list", security_list_url(day), day, today)
+
+    def current_list(self, url: str, today: date) -> bytes:
+        """Download an undated list (always fresh) and keep a dated copy."""
+        content = self.fetcher.get(url)
+        path = self.cache_dir / "nse" / "lists" / today.isoformat() / url.rsplit("/", 1)[1]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return content
