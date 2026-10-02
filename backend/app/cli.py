@@ -107,7 +107,15 @@ def main(argv: list[str] | None = None) -> int:
                 session, _archive(), calendar, args.start, end, today, force=args.force, log=_log
             )
             failed = [r.day for r in results if r.status == "not_fetched"]
+            unreadable = [r.day for r in results if r.problem]
             _log(f"Done: {sum(r.status == 'ok' for r in results)} trading days stored.")
+            if unreadable:
+                days = ", ".join(str(d) for d in unreadable[:10])
+                more = f" and {len(unreadable) - 10} more" if len(unreadable) > 10 else ""
+                _log(
+                    f"{len(unreadable)} days' corporate actions files could not be read "
+                    f"({days}{more}); their prices are stored. Please report this."
+                )
             list_failures = pipeline.ingest_lists_range(
                 session, _archive(), args.start, end, today, force=args.force, log=_log
             )
@@ -115,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
             if failed:
                 _log(f"{len(failed)} days could not be downloaded; run the same command again.")
                 return 1
-            return 0
+            return 1 if unreadable else 0
 
         if args.command == "crosscheck":
             end = args.end or today

@@ -96,6 +96,8 @@ class IngestResult:
     status: str
     rows: int = 0
     actions: int = 0
+    # Set when the prices were stored but the corporate actions file could not be read.
+    problem: str | None = None
 
 
 def ingest_day(session: Session, archive: NseArchive, day: date, today: date) -> IngestResult:
@@ -153,7 +155,21 @@ def ingest_day(session: Session, archive: NseArchive, day: date, today: date) ->
         if pr is None:
             store.record_source_file(session, store.NSE_PR, day, "not_published", url=pr_url(day))
         else:
-            records = parse_pr_corporate_actions(pr)
+            try:
+                records = parse_pr_corporate_actions(pr)
+            except BhavcopyError as exc:
+                # Keep the day's prices; the bad file is recorded and the day is
+                # re-read on the next run (from the cache, so a parser fix applies).
+                store.record_source_file(
+                    session,
+                    store.NSE_PR,
+                    day,
+                    "unreadable",
+                    url=pr_url(day),
+                    sha256=hashlib.sha256(pr).hexdigest(),
+                    details={"error": str(exc)},
+                )
+                return IngestResult(day, "ok", len(parsed.bars), problem=str(exc))
             actions = store.save_actions(session, store.NSE_ACTIONS, records)
             store.record_source_file(
                 session,
@@ -199,9 +215,23 @@ def ingest_range(
             )
             result = IngestResult(day, "not_fetched")
             log(f"{day}: could not read the bhavcopy: {exc}")
+        except Exception as exc:  # noqa: BLE001 - one bad day must not stop a backfill
+            session.rollback()
+            store.record_source_file(
+                session,
+                store.NSE_BARS,
+                day,
+                "not_fetched",
+                url=bhavcopy_url(day),
+                details={"error": f"{type(exc).__name__}: {exc}"},
+            )
+            result = IngestResult(day, "not_fetched")
+            log(f"{day}: failed: {type(exc).__name__}: {exc}")
         session.commit()
         results.append(result)
-        if result.status == "ok":
+        if result.problem:
+            log(f"{day}: {result.rows} stocks; corporate actions file unreadable: {result.problem}")
+        elif result.status == "ok":
             log(f"{day}: {result.rows} stocks, {result.actions} corporate-action rows")
         elif result.status != "pending":
             log(f"{day}: {result.status}")

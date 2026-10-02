@@ -146,6 +146,63 @@ def test_parse_pr_corporate_actions_both_date_formats_and_dedupes():
     ]
 
 
+def test_parse_pr_corporate_actions_2016_dashed_dates():
+    # PR290416.zip writes dates as dd-mm-yyyy.
+    content = pr_zip(
+        date(2016, 4, 29),
+        ["EQ,DISHMAN,Dishman Pharma &Chem Ltd,03-05-2016, , ,02-05-2016, , ,BONUS 1:1     "],
+    )
+    actions = parse_pr_corporate_actions(content)
+    assert [(a.symbol, a.ex_date, a.action_type) for a in actions] == [
+        ("DISHMAN", date(2016, 5, 2), CorporateActionType.BONUS),
+    ]
+
+
+def test_parse_legacy_bhavcopy_two_digit_year():
+    # cm13JUL2020bhav.csv writes TIMESTAMP as "13-Jul-20".
+    text = "\n".join(
+        [
+            LEGACY_HEADER,
+            "20MICRONS,EQ,32.85,33.85,31.85,33.45,33.85,32.3,187303,6187285.7,"
+            "13-Jul-20,1382,INE144J01027,",
+        ]
+    )
+    parsed = parse_bhavcopy(zipped("cm13JUL2020bhav.csv", text + "\n"), date(2020, 7, 13))
+    assert [(b.symbol, b.trade_date, b.close) for b in parsed.bars] == [
+        ("20MICRONS", date(2020, 7, 13), Decimal("33.45"))
+    ]
+
+
+def test_parse_pr_corporate_actions_unquoted_commas():
+    content = pr_zip(
+        date(2016, 5, 2),
+        [
+            # A comma in the purpose (like TCS in PR111019.zip).
+            "EQ,ABC,Abc Ltd,10/05/2016, , ,09/05/2016, , ,BONUS 1:2, DIV RS 2 PER SHARE",
+            # A decimal comma split across two fields (PR210824.zip).
+            "EQ,SURYAROSNI,Surya Roshni Ltd,23/08/2024, , ,23/08/2024, , ,DIV - RS 2,50 PER SH  ",
+            # A comma in the security name.
+            "EQ,XYZ,Xyz Industries, Ltd,11/05/2016, , ,10/05/2016, , ,DIVIDEND RS 3 PER SHARE",
+            # Extra fields on a series that is skipped anyway.
+            "N1,BOND,Some, Bond, Name,garbage,x,y,z,w,v,u,t",
+        ],
+    )
+    actions = parse_pr_corporate_actions(content)
+    got = [(a.symbol, a.ex_date, a.action_type, a.amount) for a in actions]
+    assert got == [
+        ("ABC", date(2016, 5, 9), CorporateActionType.BONUS, None),
+        ("ABC", date(2016, 5, 9), CorporateActionType.DIVIDEND, Decimal(2)),
+        ("SURYAROSNI", date(2024, 8, 23), CorporateActionType.DIVIDEND, Decimal("2.50")),
+        ("XYZ", date(2016, 5, 10), CorporateActionType.DIVIDEND, Decimal(3)),
+    ]
+
+
+def test_parse_pr_corporate_actions_unplaceable_extra_fields_raise():
+    content = pr_zip(date(2016, 5, 2), ["EQ,ABC,Abc, Ltd,soon, , ,09/05/2016, , ,X, Y"])
+    with pytest.raises(BhavcopyError, match="extra fields"):
+        parse_pr_corporate_actions(content)
+
+
 class FakeFetcher:
     def __init__(self, responses):
         self.responses = responses

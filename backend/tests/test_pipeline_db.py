@@ -157,6 +157,42 @@ def test_ingest_crosscheck_and_quality(session):
     assert [i["symbol"] for i in last["big_moves"].items] == ["JUMP"]
 
 
+class BadFilesArchive(FakeArchive):
+    """DAYS[1] has an unreadable corporate actions file; DAYS[2] blows up."""
+
+    def bhavcopy(self, day, today):
+        if day == DAYS[2]:
+            raise RuntimeError("boom")
+        return super().bhavcopy(day, today)
+
+    def pr_bundle(self, day, today):
+        if day == DAYS[1]:
+            return pr_zip(day, ["EQ,RELIANCE,Reliance, Ltd,soon, , ,28/10/2024, , ,X, Y"])
+        return super().pr_bundle(day, today)
+
+
+@requires_db
+def test_one_bad_day_does_not_stop_the_backfill(session):
+    calendar = TradingCalendar.default()
+    results = pipeline.ingest_range(session, BadFilesArchive(), calendar, DAYS[0], DAYS[-1], TODAY)
+    by_day = {r.day: r for r in results}
+    assert by_day[DAYS[1]].status == "ok"  # prices kept
+    assert by_day[DAYS[1]].rows == 2
+    assert "extra fields" in (by_day[DAYS[1]].problem or "")
+    assert by_day[DAYS[2]].status == "not_fetched"
+    assert all(by_day[d].status == "ok" for d in DAYS[3:])
+    pr = store.source_statuses(session, store.NSE_PR, DAYS[0], DAYS[-1])
+    assert pr[DAYS[1]] == "unreadable"
+    bars = store.source_statuses(session, store.NSE_BARS, DAYS[0], DAYS[-1])
+    assert bars[DAYS[1]] == "ok"
+    assert bars[DAYS[2]] == "not_fetched"
+
+    # The next run re-reads both days.
+    results = pipeline.ingest_range(session, FakeArchive(), calendar, DAYS[0], DAYS[-1], TODAY)
+    assert {r.day: r.status for r in results} == {DAYS[1]: "ok", DAYS[2]: "ok"}
+    assert store.source_statuses(session, store.NSE_PR, DAYS[1], DAYS[1]) == {DAYS[1]: "ok"}
+
+
 @requires_db
 def test_api(session):
     run_all(session)

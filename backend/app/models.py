@@ -145,8 +145,9 @@ class IndexMembership(Base):
 class SourceFile(Base):
     """What happened when a source's data for one day was fetched.
 
-    status: "ok", "not_published" (the source has no file: a holiday) or
-    "not_fetched" (the download failed; retried on the next run).
+    status: "ok", "not_published" (the source has no file: a holiday),
+    "not_fetched" (the download failed; retried on the next run) or "unreadable"
+    (downloaded but the parser could not read it; re-read on the next run).
     """
 
     __tablename__ = "source_files"
