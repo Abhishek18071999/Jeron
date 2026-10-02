@@ -117,13 +117,24 @@ def _keep(parsed: ParsedBhavcopy, bar: Bar) -> None:
         parsed.bars.append(bar)
 
 
+def _legacy_date(value: str) -> date:
+    # Usually "13-JUL-2020"; some files (e.g. cm13JUL2020bhav.csv) write "13-Jul-20".
+    value = value.strip()
+    for fmt in ("%d-%b-%Y", "%d-%b-%y"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    raise BhavcopyError(f"unknown date format in bhavcopy: {value!r}")
+
+
 def _parse_legacy(text: str, expected_date: date) -> ParsedBhavcopy:
     parsed = ParsedBhavcopy(expected_date)
     for row in csv.DictReader(io.StringIO(text)):
         series = row["SERIES"].strip()
         if series not in EQUITY_SERIES:
             continue
-        row_date = datetime.strptime(row["TIMESTAMP"].strip(), "%d-%b-%Y").date()
+        row_date = _legacy_date(row["TIMESTAMP"])
         if row_date != expected_date:
             raise BhavcopyError(f"file for {expected_date} contains rows dated {row_date}")
         symbol = row["SYMBOL"].strip()
@@ -196,6 +207,7 @@ _RIGHTS = re.compile(r"(?:RIGHTS|RGHTS|RGTS)\s*(\d+)\s*:\s*(\d+)")
 # Dividend wording varies: "DIV - RS 2 PER SH", "INTDVSPDVRS 7.50 & 86.50",
 # "FIN DIV RS 6+SPL DIV RS 4", "DIV/SPDV - RS 2 & 1".
 _DIVIDEND_WORD = re.compile(r"DIV|(?<![A-Z])DV|SPDV|INTDV")
+_DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d{1,2}(?!\d))")
 _NUMBER = re.compile(r"(\d+(?:\.\d+)?)(?!\s*%)(?![\d.])")
 _OTHER_PRICE_EVENTS = (
     "DEMERGER",
@@ -214,7 +226,8 @@ def parse_purpose(symbol: str, ex_date: date, purpose: str) -> list[CorporateAct
     that can't be parsed into numbers is returned as OTHER so it shows in the
     adjustment log instead of being silently dropped.
     """
-    text = " ".join(purpose.upper().split())
+    # A decimal comma ("DIV - RS 2,50 PER SH") is a decimal point.
+    text = _DECIMAL_COMMA.sub(".", " ".join(purpose.upper().split()))
     raw = purpose.strip()
     found: list[CorporateActionRecord] = []
 
@@ -282,12 +295,44 @@ def _parse_bc_date(value: str) -> date | None:
     value = value.strip()
     if not value:
         return None
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%b-%Y", "%d-%b-%y"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d-%b-%Y", "%d-%b-%y"):
         try:
             return datetime.strptime(value, fmt).date()
         except ValueError:
             continue
     raise BhavcopyError(f"unknown date format in corporate actions file: {value!r}")
+
+
+_BC_DATE_COLUMNS = ("RECORD_DT", "BC_STRT_DT", "BC_END_DT", "EX_DT", "ND_STRT_DT", "ND_END_DT")
+_DATE_LIKE = re.compile(r"^(?:\d{1,4}[-/][0-9A-Za-z]{1,3}[-/]\d{2,4})?$")
+
+
+def _bc_row(header: list[str], fields: list[str]) -> dict[str, str]:
+    """One row of the corporate actions file as a dict.
+
+    Older files don't quote text, so a comma inside the security name or the purpose
+    gives the row extra fields. The extra fields are put back where the date columns
+    line up: into the purpose when the dates follow the security name, otherwise into
+    the security name. The comma is kept as it was, since it is sometimes a decimal
+    comma ("DIV - RS 2,50 PER SH").
+    """
+    extra = len(fields) - len(header)
+    merged = fields
+    if extra > 0 and "SECURITY" in header and header[-1] == "PURPOSE":
+        sec = header.index("SECURITY")
+        dates = [header.index(c) for c in _BC_DATE_COLUMNS if c in header]
+
+        def dates_fit(shift: int) -> bool:
+            return all(_DATE_LIKE.match(fields[i + shift].strip()) for i in dates)
+
+        if dates_fit(0):  # comma in the purpose
+            merged = fields[: len(header) - 1] + [",".join(fields[len(header) - 1 :])]
+        elif dates_fit(extra):  # comma in the security name
+            merged = fields[:sec] + [",".join(fields[sec : sec + extra + 1])]
+            merged += fields[sec + extra + 1 :]
+    if len(merged) > len(header):
+        raise BhavcopyError(f"corporate actions row has extra fields: {','.join(fields)!r}")
+    return {k: v.strip() for k, v in zip(header, merged, strict=False)}
 
 
 def parse_pr_corporate_actions(content: bytes) -> list[CorporateActionRecord]:
@@ -299,18 +344,21 @@ def parse_pr_corporate_actions(content: bytes) -> list[CorporateActionRecord]:
         text = zf.read(names[0]).decode("latin-1")
     actions: list[CorporateActionRecord] = []
     seen: set[tuple[str, date, str]] = set()
-    for row in csv.DictReader(io.StringIO(text)):
-        row = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
-        if row.get("SERIES") not in EQUITY_SERIES:
+    reader = csv.reader(io.StringIO(text))
+    header = [h.strip() for h in next(reader, [])]
+    series = header.index("SERIES") if "SERIES" in header else 0
+    for fields in reader:
+        if len(fields) <= series or fields[series].strip() not in EQUITY_SERIES:
             continue
+        row = _bc_row(header, fields)
         ex_date = _parse_bc_date(row.get("EX_DT", ""))
         if ex_date is None:
             continue
-        key = (row["SYMBOL"], ex_date, row["PURPOSE"])
+        key = (row.get("SYMBOL", ""), ex_date, row.get("PURPOSE", ""))
         if key in seen:
             continue
         seen.add(key)
-        actions.extend(parse_purpose(row["SYMBOL"], ex_date, row["PURPOSE"]))
+        actions.extend(parse_purpose(*key))
     return actions
 
 
