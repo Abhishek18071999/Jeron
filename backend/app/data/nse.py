@@ -62,16 +62,6 @@ def pr_url(day: date) -> str:
     return f"{ARCHIVE}/archives/equities/bhavcopy/pr/PR{day:%d%m%y}.zip"
 
 
-def index_closes_url(day: date) -> str:
-    """All NSE indices' closes for one day (parsed in `nse_lists`)."""
-    return f"{ARCHIVE}/content/indices/ind_close_all_{day:%d%m%Y}.csv"
-
-
-def security_list_url(day: date) -> str:
-    """Price bands and surveillance remarks for one day (parsed in `nse_lists`)."""
-    return f"{ARCHIVE}/content/equities/sec_list_{day:%d%m%Y}.csv"
-
-
 @dataclass
 class ParsedBhavcopy:
     trade_date: date
@@ -183,14 +173,12 @@ def _parse_udiff(text: str, expected_date: date) -> ParsedBhavcopy:
 
 _BC_NAME = re.compile(r"^bc\d+\.csv$", re.IGNORECASE)
 _AMOUNT = r"(?:RS|RE|INR)\.?\s*([\d]+(?:\.\d+)?)"
-# The new face value sometimes has no currency word: "FV SPLT FRM RS 10 TO 1".
-_TO_AMOUNT = r"(?:(?:RS|RE|INR)\.?\s*)?([\d]+(?:\.\d+)?)"
 _BONUS = re.compile(r"BONUS\s*(\d+)\s*:\s*(\d+)")
 _SPLIT = re.compile(
     r"(?:SPLT|SPLIT|SUB[- ]?DIVISION|CONSOLIDATION|CONSOL)\D*?"
     + _AMOUNT
     + r"\D*?(?:TO|-)\s*"
-    + _TO_AMOUNT
+    + _AMOUNT
 )
 _RIGHTS = re.compile(r"(?:RIGHTS|RGHTS|RGTS)\s*(\d+)\s*:\s*(\d+)")
 # Dividend wording varies: "DIV - RS 2 PER SH", "INTDVSPDVRS 7.50 & 86.50",
@@ -282,7 +270,7 @@ def _parse_bc_date(value: str) -> date | None:
     value = value.strip()
     if not value:
         return None
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d-%b-%Y", "%d-%b-%y"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%b-%Y", "%d-%b-%y"):
         try:
             return datetime.strptime(value, fmt).date()
         except ValueError:
@@ -299,12 +287,8 @@ def parse_pr_corporate_actions(content: bytes) -> list[CorporateActionRecord]:
         text = zf.read(names[0]).decode("latin-1")
     actions: list[CorporateActionRecord] = []
     seen: set[tuple[str, date, str]] = set()
-    for raw in csv.DictReader(io.StringIO(text)):
-        # A purpose containing a comma spills into extra fields; join it back.
-        extra = raw.pop(None, None) or []
-        row = {(k or "").strip(): (v or "").strip() for k, v in raw.items()}
-        if extra:
-            row["PURPOSE"] = ",".join([row.get("PURPOSE", ""), *extra]).strip()
+    for row in csv.DictReader(io.StringIO(text)):
+        row = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
         if row.get("SERIES") not in EQUITY_SERIES:
             continue
         ex_date = _parse_bc_date(row.get("EX_DT", ""))
@@ -359,17 +343,3 @@ class NseArchive:
 
     def pr_bundle(self, day: date, today: date) -> bytes | None:
         return self._get("pr", pr_url(day), day, today)
-
-    def index_closes(self, day: date, today: date) -> bytes | None:
-        return self._get("indices", index_closes_url(day), day, today)
-
-    def security_list(self, day: date, today: date) -> bytes | None:
-        return self._get("sec_list", security_list_url(day), day, today)
-
-    def current_list(self, url: str, today: date) -> bytes:
-        """Download an undated list (always fresh) and keep a dated copy."""
-        content = self.fetcher.get(url)
-        path = self.cache_dir / "nse" / "lists" / today.isoformat() / url.rsplit("/", 1)[1]
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
-        return content

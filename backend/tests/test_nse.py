@@ -87,7 +87,6 @@ def test_impossible_rows_are_rejected_not_stored():
         ("BONUS 1:2", [("bonus", "3", "2", None)]),
         ("BONUS 2:1", [("bonus", "3", "1", None)]),
         ("FV SPLT FRM RS 5 TO RE 1", [("split", "5", "1", None)]),
-        ("FV SPLT FRM RS 10 TO 1", [("split", "10", "1", None)]),  # V2RETAIL 2026
         ("FVSPLT FRM RS 10 TO RS 2", [("split", "10", "2", None)]),
         (
             "FACE VALUE SPLIT (SUB-DIVISION) - FROM RS 10/- PER SHARE TO RE 1/- PER SHARE",
@@ -144,26 +143,6 @@ def test_parse_pr_corporate_actions_both_date_formats_and_dedupes():
         ("RELIANCE", date(2024, 10, 28), CorporateActionType.BONUS),
         ("INFY", date(2024, 10, 29), CorporateActionType.DIVIDEND),
     ]
-
-
-def test_parse_pr_corporate_actions_day_month_year_with_dashes():
-    # NSE's 29 April 2016 file wrote dates as 02-05-2016.
-    content = pr_zip(
-        date(2016, 4, 29),
-        ["EQ,ITC,ITC Ltd,02-05-2016, , ,02-05-2016, , ,DIVIDEND RS 2.50 PER SHARE"],
-    )
-    (action,) = parse_pr_corporate_actions(content)
-    assert (action.ex_date, action.amount) == (date(2016, 5, 2), Decimal("2.50"))
-
-
-def test_parse_pr_corporate_actions_purpose_with_a_comma():
-    # NSE's 11 October 2019 file: "INT DIV-RS 5, SPL DIV-RS 40" split into two fields.
-    row = "EQ,TCS,Tata Consultancy Serv Ltd,18/10/2019, , ,17/10/2019, , ,"
-    content = pr_zip(date(2019, 10, 11), [row + "INT DIV-RS 5, SPL DIV-RS 40"])
-    actions = parse_pr_corporate_actions(content)
-    assert {a.symbol for a in actions} == {"TCS"}
-    assert all(a.action_type == CorporateActionType.DIVIDEND for a in actions)
-    assert "SPL DIV" in (actions[0].raw_text or "")
 
 
 class FakeFetcher:
