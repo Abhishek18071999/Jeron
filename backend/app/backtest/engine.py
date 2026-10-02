@@ -15,7 +15,8 @@ One pass over the sessions. Each day, in this order:
 3. Close: stop to breakeven once a close is +1R; after T1, the rest trails at
    2 x ATR(14) below the highest close and is sold at the next open after a close
    below the trail; the tier's time stop sells at the next open if +1R hasn't been
-   reached. Dividends are paid on ex-dates. Equity is marked to the close.
+   reached. Equity is marked to the close. A position held into an ex-date gets
+   the dividend, even if it is sold that day.
 4. New entries from today's signals, sized by the risk rules, become orders for
    tomorrow.
 
@@ -308,6 +309,12 @@ def simulate(
                 else:
                     still_open.append(trade)
                 continue
+            if m.dividend[s, t] > 0 and trade.entry_day < t:
+                # Held into the ex-date, so the dividend is ours even if we sell today.
+                amount = m.dividend[s, t] * trade.remaining
+                trade.dividends += amount
+                cash += amount
+                dividends.append((t, amount))
             o, h, lo, c = m.open[s, t], m.high[s, t], m.low[s, t], m.close[s, t]
             locked_down = _locked(m, s, t, last_close[s], down=True)
             if trade.pending_exit and trade.entry_day < t:
@@ -362,11 +369,6 @@ def simulate(
                 and trade.sessions >= tier_rules.time_stop_sessions
             ):
                 trade.pending_exit = f"time stop ({tier_rules.time_stop_sessions} sessions)"
-            if m.dividend[s, t] > 0:
-                amount = m.dividend[s, t] * trade.remaining
-                trade.dividends += amount
-                cash += amount
-                dividends.append((t, amount))
             last_close[s] = c
             still_open.append(trade)
         open_trades = still_open

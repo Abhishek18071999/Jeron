@@ -163,3 +163,16 @@ def test_drawdown_pause_blocks_new_entries():
     result = simulate(m, Tier.SWING, [(0, signal_on(m, 0, 3))], 0, 5, rules, NO_COSTS)
     assert len(result.trades) == 1
     assert result.brake_events and "paused" in result.brake_events[0][1]
+
+
+def test_dividend_is_paid_even_when_the_ex_date_gap_hits_the_stop():
+    """A huge special dividend: the price falls by the dividend on the ex-date and
+    the stop sells at the open, but the dividend is still paid."""
+    bars = [SIGNAL, (100.0, 101.0, 99.0, 100.0), (40.0, 41.0, 39.0, 40.0), FLAT]
+    m = one_stock_market(bars)
+    m.dividend[0, 2] = 60.0
+    result = simulate(m, Tier.SWING, [(0, signal_on(m, 0))], 0, 3, None, NO_COSTS)
+    (trade,) = result.trades
+    assert (trade.exit_day, trade.exit_price) == (2, 40.0)
+    assert trade.dividends == pytest.approx(60.0 * 1980)
+    assert trade.net_pnl == pytest.approx((40 - 100) * 1980 + 60 * 1980)
