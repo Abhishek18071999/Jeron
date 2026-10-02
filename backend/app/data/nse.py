@@ -183,12 +183,14 @@ def _parse_udiff(text: str, expected_date: date) -> ParsedBhavcopy:
 
 _BC_NAME = re.compile(r"^bc\d+\.csv$", re.IGNORECASE)
 _AMOUNT = r"(?:RS|RE|INR)\.?\s*([\d]+(?:\.\d+)?)"
+# The new face value sometimes has no currency word: "FV SPLT FRM RS 10 TO 1".
+_TO_AMOUNT = r"(?:(?:RS|RE|INR)\.?\s*)?([\d]+(?:\.\d+)?)"
 _BONUS = re.compile(r"BONUS\s*(\d+)\s*:\s*(\d+)")
 _SPLIT = re.compile(
     r"(?:SPLT|SPLIT|SUB[- ]?DIVISION|CONSOLIDATION|CONSOL)\D*?"
     + _AMOUNT
     + r"\D*?(?:TO|-)\s*"
-    + _AMOUNT
+    + _TO_AMOUNT
 )
 _RIGHTS = re.compile(r"(?:RIGHTS|RGHTS|RGTS)\s*(\d+)\s*:\s*(\d+)")
 # Dividend wording varies: "DIV - RS 2 PER SH", "INTDVSPDVRS 7.50 & 86.50",

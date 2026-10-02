@@ -39,10 +39,15 @@ With Jeron running, open a second terminal in the `Jeron` folder.
    docker compose exec backend python -m app.cli quality
    ```
 4. Download NSE's index closes, security lists (price bands, GSM) and the Nifty 500
-   list, which the scanner needs (about 15 minutes from mid-2024; use
+   list, which the scanner needs (about 20 minutes from mid-2024; use
    `--start 2016-01-01` later for full backtest history, about an hour):
    ```sh
    docker compose exec backend python -m app.cli lists --start 2024-06-01
+   ```
+   If you loaded prices before M2, re-read the saved NSE files once so splits written
+   as "FV SPLT FRM RS 10 TO 1" are picked up (uses the files already downloaded):
+   ```sh
+   docker compose exec backend python -m app.cli backfill --start 2016-01-01 --force
    ```
 5. Run the scan for the newest trading day (well under a minute):
    ```sh
