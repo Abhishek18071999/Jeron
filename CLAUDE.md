@@ -21,8 +21,14 @@ are part of done, never commit secrets.
   - `app/scan/` the daily scan: `universe.py` (rules), `score.py` (technical score,
     versioned as `SCORE_VERSION`), `job.py` (database job). Changing points or rules
     means a new score version.
+  - `app/backtest/` the backtester: `market.py` (aligned arrays, the scan's universe
+    and score for every day), `features.py`, `engine.py` (daily-bar simulation),
+    `costs.py` (Indian charges, slippage, tax estimate), `strategies.py` (versioned),
+    `walkforward.py` (folds, holdout, gates), `stats.py`, `job.py` (database).
+    Changing a strategy's rules means a new strategy version; runs are never
+    overwritten.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
-    `asm-import`, `daily`, `holidays`.
+    `asm-import`, `daily`, `holidays`, `backtest`.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the
@@ -53,6 +59,8 @@ Everything: `docker compose up --build` from the repo root.
   blocked run saying why) when the day's quality report FAILs or inputs are missing.
 - NSE's archive answers bursts with 403 "Access Denied"; keep requests at about one
   per second and retry (the `Fetcher` does this).
+- Backtests report out-of-sample, after-cost numbers only; `tests/test_backtest_engine.py`
+  holds golden trades. Keep them passing when touching the engine.
 - Settings come from env vars prefixed `JERON_` (`app/config.py`).
 - CI (`.github/workflows/ci.yml`) runs backend checks, web checks, and a Docker Compose
   smoke test. Keep it green.

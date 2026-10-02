@@ -265,3 +265,82 @@ class ScanResult(Base):
     sector: Mapped[str | None] = mapped_column(String(100))
     components: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     indicators: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+
+class BacktestRun(Base):
+    """One walk-forward evaluation of one strategy. Runs are never overwritten, so
+    every evaluation ever made stays on record."""
+
+    __tablename__ = "backtest_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    strategy_key: Mapped[str] = mapped_column(String(64), index=True)
+    strategy_version: Mapped[str] = mapped_column(String(64))
+    strategy_name: Mapped[str] = mapped_column(String(200))
+    tier: Mapped[str] = mapped_column(String(16))
+    data_start: Mapped[date] = mapped_column(Date)
+    data_end: Mapped[date] = mapped_column(Date)
+    oos_start: Mapped[date] = mapped_column(Date)
+    holdout_start: Mapped[date] = mapped_column(Date)
+    live_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Hash of the prices, universe and scores used; equal hashes mean equal inputs.
+    fingerprint: Mapped[str] = mapped_column(String(32))
+    duration_seconds: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    # Daily equity, drawdown and benchmark from the out-of-sample start.
+    equity: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BacktestTrade(Base):
+    """One out-of-sample or holdout trade of a backtest run. Prices are adjusted for
+    splits and bonuses as of the run's last data date; shares are raw at entry."""
+
+    __tablename__ = "backtest_trades"
+
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("backtest_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True)
+    segment: Mapped[str] = mapped_column(String(16))  # "oos" or "holdout"
+    symbol: Mapped[str] = mapped_column(String(32))
+    variant: Mapped[str] = mapped_column(String(200))
+    signal_date: Mapped[date] = mapped_column(Date)
+    entry_date: Mapped[date] = mapped_column(Date)
+    exit_date: Mapped[date] = mapped_column(Date)
+    entry_price: Mapped[Decimal] = mapped_column(Price)
+    stop_price: Mapped[Decimal] = mapped_column(Price)
+    target_price: Mapped[Decimal] = mapped_column(Price)
+    exit_price: Mapped[Decimal] = mapped_column(Price)
+    shares: Mapped[int] = mapped_column(Integer)
+    exit_reason: Mapped[str] = mapped_column(String(100))
+    gross_pnl: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    charges: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    dividends: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    net_pnl: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    r_multiple: Mapped[Decimal] = mapped_column(Numeric(10, 4))
+    regime: Mapped[str] = mapped_column(String(16))
+    score: Mapped[Decimal] = mapped_column(Numeric(5, 1))
+    sessions: Mapped[int] = mapped_column(Integer)
+    open_at_end: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class BacktestVariant(Base):
+    """Every grid point tried for every walk-forward window, with its training
+    numbers and whether it was chosen (spec: log every variant tried)."""
+
+    __tablename__ = "backtest_variants"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("backtest_runs.id", ondelete="CASCADE"), index=True
+    )
+    window: Mapped[str] = mapped_column(String(32))
+    label: Mapped[str] = mapped_column(String(200))
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    train_start: Mapped[date] = mapped_column(Date)
+    train_end: Mapped[date] = mapped_column(Date)
+    trades: Mapped[int] = mapped_column(Integer)
+    expectancy_r: Mapped[Decimal] = mapped_column(Numeric(10, 4))
+    sharpe: Mapped[Decimal] = mapped_column(Numeric(10, 4))
+    chosen: Mapped[bool] = mapped_column(Boolean, default=False)
