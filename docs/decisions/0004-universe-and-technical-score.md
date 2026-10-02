@@ -5,7 +5,8 @@ Date: 2026-10-02. Status: proposed (M2).
 **Decision.**
 1. The universe is rebuilt each day from rules on the bhavcopy (EQ series, ₹20 price,
    ₹5 crore 20-day median turnover, 200 sessions of history) plus GSM (NSE's
-   security list) and ASM (imported). Nifty 500 membership is a label, not a filter.
+   security list) and ASM (imported). Nifty 500 membership is a label, not a filter
+   (confirmed by Abhishek, 2026-10-02).
 2. Indicators are our own small pure-Python functions, checked against TA-Lib in
    tests. TA-Lib is a dev dependency only.
 3. The technical score is a sum of named components with fixed points, versioned
