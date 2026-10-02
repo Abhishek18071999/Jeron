@@ -15,7 +15,7 @@ from app.data.adjust import adjust_bars, build_adjustments, price_confirms, pric
 from app.data.crosscheck import ACTION_DATE_TOLERANCE_DAYS, CLOSE_TOLERANCE_PCT
 from app.db import get_session
 from app.enums import CorporateActionType, QualityStatus
-from app.indicators import atr, ema, rsi
+from app.indicators import adx, atr, ema, macd, rsi
 from app.models import CorporateAction, DailyBar, DataQualityReport, Instrument, SourceFile
 
 router = APIRouter(prefix="/data", tags=["data"])
@@ -135,6 +135,9 @@ class SpotRow(BaseModel):
     ema200: float | None
     rsi14: float | None
     atr14: float | None
+    macd: float | None
+    macd_signal: float | None
+    adx14: float | None
 
 
 class AdjustmentLogEntry(BaseModel):
@@ -186,6 +189,7 @@ def spot_check(
     lows = [float(a.low) for a in adjusted]
     ema20, ema50, ema200 = ema(closes, 20), ema(closes, 50), ema(closes, 200)
     rsi14, atr14 = rsi(closes), atr(highs, lows, closes)
+    macd_values, dmi = macd(closes), adx(highs, lows, closes)
 
     # Rows: `window` sessions either side of the requested date (or the nearest one).
     index = next((i for i, b in enumerate(bars) if b.trade_date >= trade_date), len(bars) - 1)
@@ -225,6 +229,9 @@ def spot_check(
                 ema200=_round(ema200[i]),
                 rsi14=_round(rsi14[i]),
                 atr14=_round(atr14[i]),
+                macd=_round(macd_values.macd[i]),
+                macd_signal=_round(macd_values.signal[i]),
+                adx14=_round(dmi.adx[i]),
             )
         )
 

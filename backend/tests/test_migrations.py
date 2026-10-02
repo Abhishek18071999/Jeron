@@ -40,6 +40,12 @@ def test_upgrade_and_downgrade(alembic_config):
         "data_quality_reports",
         "users",
         "source_files",
+        "index_bars",
+        "security_status",
+        "surveillance_flags",
+        "symbol_changes",
+        "scan_runs",
+        "scan_results",
     } <= tables
     command.downgrade(alembic_config, "base")
     command.upgrade(alembic_config, "head")

@@ -11,11 +11,18 @@ are part of done, never commit secrets.
     derived. Point-in-time tables (index membership, delisting dates) are never
     overwritten.
   - `app/data/provider.py` the `DataProvider` protocol every data source implements.
-  - `app/data/` market data: `nse.py` (bhavcopy + PR bundle), `yahoo.py` (second
+  - `app/data/` market data: `nse.py` (bhavcopy + PR bundle), `nse_lists.py` (index
+    closes, security list, Nifty 500 list, symbol changes), `yahoo.py` (second
     source), `adjust.py` (corporate-action factors), `crosscheck.py`, `quality.py`,
     `store.py` (database access), `pipeline.py` (jobs). Pure modules have no database
     imports; domain enums live in `app/enums.py` for that reason.
-  - `app/cli.py` data jobs: `backfill`, `crosscheck`, `quality`, `daily`, `holidays`.
+  - `app/indicators.py` indicators (pure functions, checked against TA-Lib in
+    `tests/test_indicators_reference.py`; TA-Lib is a dev dependency only).
+  - `app/scan/` the daily scan: `universe.py` (rules), `score.py` (technical score,
+    versioned as `SCORE_VERSION`), `job.py` (database job). Changing points or rules
+    means a new score version.
+  - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
+    `asm-import`, `daily`, `holidays`.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the
@@ -42,6 +49,8 @@ Everything: `docker compose up --build` from the repo root.
 - Times are IST for market logic; store timestamps with time zone.
 - Raw prices are never changed. Adjusted prices are computed on read from NSE
   corporate actions (`source = "nse"`); see `docs/decisions/0003`.
+- Indicators run on split/bonus-adjusted prices; the scan refuses to run (and stores a
+  blocked run saying why) when the day's quality report FAILs or inputs are missing.
 - NSE's archive answers bursts with 403 "Access Denied"; keep requests at about one
   per second and retry (the `Fetcher` does this).
 - Settings come from env vars prefixed `JERON_` (`app/config.py`).

@@ -20,6 +20,7 @@ export default function RootLayout({
             <Link href="/" className="font-semibold">
               Jeron
             </Link>
+            <Link href="/scanner">Scanner</Link>
             <Link href="/data">Data quality</Link>
             <Link href="/spot-check">Spot check</Link>
           </div>

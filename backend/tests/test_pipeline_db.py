@@ -13,6 +13,7 @@ from alembic import command
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.data import pipeline, store
+from app.data.http import FetchError, NotPublishedError
 from app.data.provider import CorporateActionRecord
 from app.data.yahoo import YahooHistory
 from app.db import get_engine
@@ -75,6 +76,15 @@ class FakeArchive:
             day,
             ["EQ,RELIANCE,Reliance Industries Ltd,28/10/2024, , ,28/10/2024, , ,BONUS 1:1"],
         )
+
+    def index_closes(self, day, today):
+        return None
+
+    def security_list(self, day, today):
+        return None
+
+    def current_list(self, url, today):
+        raise NotPublishedError(url)
 
 
 class FakeYahoo:
@@ -205,3 +215,57 @@ def test_daily_update(session):
     )
     assert report is not None
     assert report.trade_date == DAYS[-1]
+
+
+class ListArchive(FakeArchive):
+    """NSE's index, security and reference lists for the test days."""
+
+    def index_closes(self, day, today):
+        if day not in DAYS:
+            return None
+        return (
+            b"Index Name,Index Date,Open Index Value,High Index Value,Low Index Value,"
+            b"Closing Index Value\n"
+            + f"Nifty 500,{day:%d-%m-%Y},100,101,99,{100 + DAYS.index(day)}\n".encode()
+        )
+
+    def security_list(self, day, today):
+        if day == DAYS[1]:
+            raise FetchError("403 Access Denied")
+        return b'Symbol,Series,Security Name,Band,Remarks\nJUMP,EQ,JUMP LTD,5,"GSM STAGE - I"\n'
+
+    def current_list(self, url, today):
+        if url.endswith("ind_nifty500list.csv"):
+            return (
+                b"Company Name,Industry,Symbol,Series,ISIN Code\nReliance,Oil Gas,RELIANCE,EQ,X\n"
+            )
+        if url.endswith("EQUITY_L.csv"):
+            return (
+                b"SYMBOL,NAME OF COMPANY, SERIES, DATE OF LISTING, PAID UP VALUE, MARKET LOT,"
+                b" ISIN NUMBER, FACE VALUE\nRELIANCE,Reliance Industries,EQ,29-NOV-1995,10,1,X,10\n"
+            )
+        return b"Old Name,OLDREL,RELIANCE,01-JAN-2000\n"
+
+
+@requires_db
+def test_index_closes_security_lists_and_reference_lists(session):
+    archive = ListArchive()
+    pipeline.ingest_range(session, archive, TradingCalendar.default(), DAYS[0], DAYS[-1], TODAY)
+    failed = pipeline.ingest_lists_range(session, archive, DAYS[0], DAYS[-1], TODAY)
+    assert failed == {store.NSE_INDICES: [], store.NSE_SEC_LIST: [DAYS[1]]}
+    closes = store.index_closes(session, "Nifty 500", DAYS[0], DAYS[-1])
+    assert closes[DAYS[-1]] == Decimal(105)
+    assert store.gsm_symbols(session, DAYS[-1]) == (DAYS[-1], {"JUMP"})
+    assert store.gsm_symbols(session, DAYS[-1] + timedelta(days=30)) is None
+
+    assert pipeline.refresh_reference_lists(session, archive, DAYS[-1])
+    assert store.index_members(session, "Nifty 500", DAYS[-1]) == {"RELIANCE"}
+    assert store.index_members(session, "Nifty 500", DAYS[0]) == set()  # not known then
+    assert store.symbol_lineage(session, ["RELIANCE"]) == {
+        "RELIANCE": [("OLDREL", date(2000, 1, 1))]
+    }
+
+    # A stock that leaves the index keeps its membership history.
+    store.refresh_index_membership(session, "Nifty 500", [], DAYS[-1] + timedelta(days=7))
+    assert store.index_members(session, "Nifty 500", DAYS[-1]) == {"RELIANCE"}
+    assert store.index_members(session, "Nifty 500", DAYS[-1] + timedelta(days=7)) == set()

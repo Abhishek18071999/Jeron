@@ -62,6 +62,16 @@ def pr_url(day: date) -> str:
     return f"{ARCHIVE}/archives/equities/bhavcopy/pr/PR{day:%d%m%y}.zip"
 
 
+def index_closes_url(day: date) -> str:
+    """All NSE indices' closes for one day (parsed in `nse_lists`)."""
+    return f"{ARCHIVE}/content/indices/ind_close_all_{day:%d%m%Y}.csv"
+
+
+def security_list_url(day: date) -> str:
+    """Price bands and surveillance remarks for one day (parsed in `nse_lists`)."""
+    return f"{ARCHIVE}/content/equities/sec_list_{day:%d%m%Y}.csv"
+
+
 @dataclass
 class ParsedBhavcopy:
     trade_date: date
@@ -343,3 +353,17 @@ class NseArchive:
 
     def pr_bundle(self, day: date, today: date) -> bytes | None:
         return self._get("pr", pr_url(day), day, today)
+
+    def index_closes(self, day: date, today: date) -> bytes | None:
+        return self._get("indices", index_closes_url(day), day, today)
+
+    def security_list(self, day: date, today: date) -> bytes | None:
+        return self._get("sec_list", security_list_url(day), day, today)
+
+    def current_list(self, url: str, today: date) -> bytes:
+        """Download an undated list (always fresh) and keep a dated copy."""
+        content = self.fetcher.get(url)
+        path = self.cache_dir / "nse" / "lists" / today.isoformat() / url.rsplit("/", 1)[1]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return content
