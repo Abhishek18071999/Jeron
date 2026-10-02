@@ -87,6 +87,7 @@ def test_impossible_rows_are_rejected_not_stored():
         ("BONUS 1:2", [("bonus", "3", "2", None)]),
         ("BONUS 2:1", [("bonus", "3", "1", None)]),
         ("FV SPLT FRM RS 5 TO RE 1", [("split", "5", "1", None)]),
+        ("FV SPLT FRM RS 10 TO 1", [("split", "10", "1", None)]),  # V2RETAIL 2026
         ("FVSPLT FRM RS 10 TO RS 2", [("split", "10", "2", None)]),
         (
             "FACE VALUE SPLIT (SUB-DIVISION) - FROM RS 10/- PER SHARE TO RE 1/- PER SHARE",
