@@ -3,23 +3,46 @@
 from datetime import date, datetime
 from decimal import Decimal
 
+import pytest
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
+from alembic import command
 from app.alerts.channels import AlertError
 from app.alerts.job import run_alerts, send_test
 from app.backtest.job import run_backtests
-from app.config import Settings
+from app.config import Settings, get_settings
+from app.db import get_engine
 from app.main import app
 from app.models import Alert, SignalRecord
 from app.paper.job import run_paper
 from app.signals.build import IST
-from tests.conftest import requires_db
-from tests.test_backtest_db import DAYS
+from tests.conftest import TEST_DATABASE_URL, requires_db
+from tests.test_backtest_db import BACKEND_DIR, DAYS
 from tests.test_backtest_db import session as session  # noqa: F401 - the fixture
 from tests.test_paper_db import _scans
 
 pytestmark = requires_db
+
+
+@pytest.fixture
+def empty_session(monkeypatch):
+    """A migrated database with no data."""
+    monkeypatch.setenv("JERON_DATABASE_URL", TEST_DATABASE_URL or "")
+    get_settings.cache_clear()
+    get_engine.cache_clear()
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+    with Session(get_engine()) as s:
+        yield s
+    get_engine().dispose()
+    get_settings.cache_clear()
+    get_engine.cache_clear()
+
 
 START, END = DAYS[-120], DAYS[-1]
 NOW = datetime(2026, 1, 1, 19, 0, tzinfo=IST)
@@ -169,3 +192,12 @@ def test_research_only_signals_are_only_in_the_summary(session):
     )
     assert len(outcome.sent) == count
     assert all(t.startswith("RESEARCH ONLY") for _, t in telegram.sent[1:])
+
+
+def test_dashboard_and_alerts_before_any_data(empty_session):
+    client = TestClient(app)
+    board = client.get("/dashboard").json()
+    assert board["as_of"] is None and board["signals"] == [] and board["accounts"] == []
+    assert client.get("/journal").json() == {"entries": [], "pending": [], "stats": []}
+    outcome = run_alerts(empty_session, settings=Settings(), channels=[FakeChannel()])
+    assert outcome.status == "no_scan"
