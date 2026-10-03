@@ -32,6 +32,10 @@ are part of done, never commit secrets.
     overwritten. The engine is also the risk manager (spec section 5); the sector cap,
     correlation check and position-limit override are opt-in `PortfolioRules`, used by
     paper trading only.
+  - `app/news/` the news brain: `labels.py` (subject rules, the LLM's JSON schema and
+    prompt, news score, test-set accuracy; pure), `claude.py` (Anthropic API labeller,
+    batches; tests use a fake client, never the API) and `job.py` (database). Labels are
+    stored once per model and `PROMPT_VERSION`; changing the prompt means a new version.
   - `app/signals/` the spec section 4 signal: `schema.py` (Pydantic, every field
     required) and `build.py` (engine order -> signal).
   - `app/paper/job.py` paper trading: one account per strategy version, replayed by the
@@ -48,7 +52,8 @@ are part of done, never commit secrets.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
     `asm-import`, `daily`, `holidays`, `backtest`, `paper`, `alerts`, `telegram`,
     `events` (board-meeting and announcement history from the PR bundles),
-    `events-import` (a board-meeting CSV saved from nseindia.com).
+    `events-import` (a board-meeting CSV saved from nseindia.com), `news-label`,
+    `news-testset`, `news-eval` (news labels, see `app/news/`).
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the

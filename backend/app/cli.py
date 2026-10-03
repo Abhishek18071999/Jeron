@@ -8,6 +8,9 @@ python -m app.cli scan                          # the daily scan for the newest 
 python -m app.cli asm-import asm.csv            # load NSE's ASM list (saved from nseindia.com)
 python -m app.cli events --start 2016-01-01     # board meetings (results dates), history
 python -m app.cli events-import meetings.csv    # board meetings saved from nseindia.com
+python -m app.cli news-label --limit 100        # label announcements (Claude; needs a key)
+python -m app.cli news-testset                  # write headlines for you to label by hand
+python -m app.cli news-eval testset.csv         # Claude's accuracy on your labels
 python -m app.cli backtest                      # walk-forward test of every strategy
 python -m app.cli paper                         # signals and paper trades for the newest scan
 python -m app.cli alerts                        # send the newest day's signals and summary
@@ -39,6 +42,8 @@ from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
+from app.news.claude import ClaudeLabeller
+from app.news.job import evaluate_test_set, export_test_set, run_daily_news, run_news
 from app.paper.job import run_paper
 from app.scan.job import ASM, run_scan
 from app.scan.surveillance import read_asm_csv
@@ -152,6 +157,26 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser(
         "events-import", help="load board meetings from a CSV saved from NSE's website"
     )
+    p.add_argument("file", type=Path)
+
+    p = sub.add_parser(
+        "news-label",
+        help="label announcements: event type by subject (free), then Claude (needs a key)",
+    )
+    p.add_argument("--start", type=_date, help="first announcement day (default: all)")
+    p.add_argument("--end", type=_date)
+    p.add_argument("--limit", type=int, help="label at most this many (newest first)")
+    group = p.add_mutually_exclusive_group()
+    group.add_argument(
+        "--batch", action="store_true", help="send as a batch: half price, back within a day"
+    )
+    group.add_argument("--collect", action="store_true", help="only collect finished batches")
+
+    p = sub.add_parser("news-testset", help="write ~100 announcements for you to label by hand")
+    p.add_argument("--out", type=Path, default=Path("news-testset.csv"))
+    p.add_argument("--size", type=int, default=100)
+
+    p = sub.add_parser("news-eval", help="compare Claude's labels with your hand labels")
     p.add_argument("file", type=Path)
 
     p = sub.add_parser(
@@ -309,11 +334,56 @@ def main(argv: list[str] | None = None) -> int:
                 _log(f"  - {reason}")
             outcome = run_scan(session, report.trade_date, log=_log)
             ok = report.status != QualityStatus.FAIL and outcome.status == "ok"
+            settings = get_settings()
+            run_daily_news(
+                session, settings.anthropic_api_key, settings.news_model, report.trade_date, _log
+            )
             if ok:
                 ok = run_paper(session, report.trade_date, log=_log).status == "ok"
             # The summary goes out even when the day was blocked, saying why.
             sent = run_alerts(session, report.trade_date, log=_log)
             return 0 if ok and not sent.failed else 1
+
+        if args.command == "news-label":
+            settings = get_settings()
+            return run_news(
+                session,
+                settings.anthropic_api_key,
+                settings.news_model,
+                args.start,
+                args.end,
+                limit=0 if args.collect else args.limit,
+                batch=args.batch,
+                log=_log,
+            )
+
+        if args.command == "news-testset":
+            count = export_test_set(session, args.out, size=args.size)
+            _log(
+                f"Wrote {count} announcements to {args.out}. Fill in event_type and sentiment "
+                "(-2 to +2) for each, then run news-eval on the file."
+            )
+            return 0 if count else 1
+
+        if args.command == "news-eval":
+            settings = get_settings()
+            if not settings.news_ready:
+                _log("No JERON_ANTHROPIC_API_KEY in .env: Claude can't label the test set.")
+                return 1
+            labeller = ClaudeLabeller(settings.anthropic_api_key, settings.news_model)
+            result = evaluate_test_set(session, args.file, labeller, log=_log)
+            for name, acc in (("Claude", result.llm), ("Subject rules", result.rules)):
+                _log(
+                    f"{name}: event type right {acc.type_correct}/{acc.count} "
+                    f"({acc.type_accuracy:.0%}), good/bad/neutral right {acc.direction_correct}/"
+                    f"{acc.count} ({acc.direction_accuracy:.0%}), sentiment off by "
+                    f"{acc.sentiment_error:.2f} on average"
+                )
+            for kind, (right, total) in result.llm.per_type.items():
+                _log(f"  {kind}: {right}/{total}")
+            for problem in result.problems:
+                _log(f"  ! {problem}")
+            return 0
 
         if args.command == "holidays":
             start, end = date(args.year, 1, 1), date(args.year, 12, 31)

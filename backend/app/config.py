@@ -38,12 +38,19 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     alert_email_from: str = ""
     alert_email_to: str = ""
+    # News labels (M6). The key lives only in .env; without it the news brain is off.
+    anthropic_api_key: str = ""
+    news_model: str = "claude-opus-5-5"
     # Where the web app is, for links in alerts.
     web_url: str = "http://localhost:3000"
 
     @property
     def telegram_ready(self) -> bool:
         return bool(self.telegram_bot_token and self.telegram_chat_id)
+
+    @property
+    def news_ready(self) -> bool:
+        return bool(self.anthropic_api_key)
 
     @property
     def email_ready(self) -> bool:
