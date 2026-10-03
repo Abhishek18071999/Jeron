@@ -2,6 +2,7 @@
 
 One pass over the sessions. Each day, in this order:
 
+0. Idle cash earns a liquid-fund rate for the calendar days since the last session.
 1. Open: yesterday's orders try to fill. A buy fills at the open if the open is
    within the entry zone (at or below the signal close + 0.5 x ATR), or at the top of
    the zone if the day trades down to it; it is skipped if the stock opens below the
@@ -57,6 +58,8 @@ class PortfolioRules:
     trail_atr: float = 2.0
     min_stop_atr: float = 1.0
     min_reward_risk_t2: float = 2.0
+    # Idle cash sits in a liquid fund: a yearly rate, accrued per calendar day.
+    cash_rate_pct: float = 6.5
 
 
 @dataclass(frozen=True)
@@ -167,6 +170,7 @@ class SimResult:
     skipped: list[Skip]
     brake_events: list[tuple[int, str]]
     dividends: list[tuple[int, float]]
+    interest: list[tuple[int, float]] = field(default_factory=list)
 
 
 def _locked(m: Market, s: int, t: int, prev_close: float, down: bool) -> bool:
@@ -205,6 +209,8 @@ def simulate(
     skipped: list[Skip] = []
     brakes: list[tuple[int, str]] = []
     dividends: list[tuple[int, float]] = []
+    interest: list[tuple[int, float]] = []
+    daily_rate = (1 + rules.cash_rate_pct / 100) ** (1 / 365) - 1
     equity = np.zeros(end - start + 1)
     last_close = np.full(len(m.symbols), math.nan)
     if start > 0:
@@ -234,6 +240,13 @@ def simulate(
         return active
 
     for t in range(start, end + 1):
+        # 0. Interest on the cash held since the last session.
+        if t > start and cash > 0 and daily_rate:
+            gap = (m.days[t] - m.days[t - 1]).days
+            earned = cash * ((1 + daily_rate) ** gap - 1)
+            cash += earned
+            interest.append((t, earned))
+
         # 1. Orders from yesterday's signals.
         for order in orders:
             s = order.s
@@ -473,4 +486,4 @@ def simulate(
         sell(trade, end, last_close[trade.s], trade.remaining, "open at the end (marked at close)")
         done.append(trade)
     done.sort(key=lambda tr: (tr.entry_day, tr.symbol))
-    return SimResult(start, end, equity, done, skipped, brakes, dividends)
+    return SimResult(start, end, equity, done, skipped, brakes, dividends, interest)
