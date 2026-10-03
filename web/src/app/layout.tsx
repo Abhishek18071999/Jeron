@@ -22,6 +22,7 @@ export default function RootLayout({
             </Link>
             <Link href="/scanner">Scanner</Link>
             <Link href="/backtests">Backtests</Link>
+            <Link href="/paper">Paper trading</Link>
             <Link href="/data">Data quality</Link>
             <Link href="/spot-check">Spot check</Link>
           </div>

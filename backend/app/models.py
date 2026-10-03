@@ -13,6 +13,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
@@ -29,6 +30,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -344,3 +346,98 @@ class BacktestVariant(Base):
     expectancy_r: Mapped[Decimal] = mapped_column(Numeric(10, 4))
     sharpe: Mapped[Decimal] = mapped_column(Numeric(10, 4))
     chosen: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class PaperAccount(Base):
+    """A strategy's paper-trading account (spec section 7, stage 2). It keeps the
+    grid point and portfolio settings it opened with; new ones mean a new account."""
+
+    __tablename__ = "paper_accounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    strategy_key: Mapped[str] = mapped_column(String(64), index=True)
+    strategy_version: Mapped[str] = mapped_column(String(64))
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    params_label: Mapped[str] = mapped_column(String(200))
+    # The backtest run the parameters and the signals' backtest record come from.
+    backtest_run_id: Mapped[int] = mapped_column(ForeignKey("backtest_runs.id"))
+    # False: the strategy failed section 6, so its signals are research only.
+    live_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
+    start_date: Mapped[date] = mapped_column(Date)
+    capital: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    rules: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="active")  # "active" / "closed"
+    last_date: Mapped[date | None] = mapped_column(Date)
+    # The latest update's numbers (equity, cash, heat, open positions, notes).
+    summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SignalRecord(Base):
+    """A signal as issued (spec section 4). Never changed once stored; a change would
+    be a new version."""
+
+    __tablename__ = "signals"
+    __table_args__ = (UniqueConstraint("account_id", "signal_date", "ticker", "version"),)
+
+    signal_id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    account_id: Mapped[int] = mapped_column(ForeignKey("paper_accounts.id"), index=True)
+    ticker: Mapped[str] = mapped_column(String(32))
+    signal_date: Mapped[date] = mapped_column(Date, index=True)
+    research_only: Mapped[bool] = mapped_column(Boolean)
+    # Recorded after the day it was for (the paper job was catching up).
+    late: Mapped[bool] = mapped_column(Boolean, default=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PaperTrade(Base):
+    """A paper trade, open or closed. Re-derived on every update by replaying the
+    account. Prices are raw rupees per share on the day they refer to."""
+
+    __tablename__ = "paper_trades"
+
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("paper_accounts.id", ondelete="CASCADE"), primary_key=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True)
+    signal_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    ticker: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16))  # "open" / "closed"
+    signal_date: Mapped[date] = mapped_column(Date)
+    entry_date: Mapped[date] = mapped_column(Date)
+    entry_price: Mapped[Decimal] = mapped_column(Price)
+    initial_stop: Mapped[Decimal] = mapped_column(Price)
+    target_t1: Mapped[Decimal] = mapped_column(Price)
+    shares: Mapped[int] = mapped_column(Integer)
+    # Open trades: today's stop, close and shares still held (raw, today's basis).
+    current_stop: Mapped[Decimal | None] = mapped_column(Price)
+    last_close: Mapped[Decimal | None] = mapped_column(Price)
+    shares_held: Mapped[int] = mapped_column(Integer, default=0)
+    exit_date: Mapped[date | None] = mapped_column(Date)
+    exit_price: Mapped[Decimal | None] = mapped_column(Price)
+    exit_reason: Mapped[str | None] = mapped_column(String(100))
+    charges: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    dividends: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    # Closed: realised after costs. Open: realised part plus the rest marked at the
+    # close, before the costs of selling it.
+    net_pnl: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    r_multiple: Mapped[Decimal] = mapped_column(Numeric(10, 4))
+    sessions: Mapped[int] = mapped_column(Integer)
+    exits: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+
+
+class PaperDay(Base):
+    """A paper account's state at one close. Re-derived on every update."""
+
+    __tablename__ = "paper_days"
+
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("paper_accounts.id", ondelete="CASCADE"), primary_key=True
+    )
+    trade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    equity: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    drawdown_pct: Mapped[Decimal] = mapped_column(Numeric(8, 3))
+    heat_pct: Mapped[Decimal] = mapped_column(Numeric(8, 3))
+    open_positions: Mapped[int] = mapped_column(Integer)

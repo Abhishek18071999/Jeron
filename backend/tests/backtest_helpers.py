@@ -88,3 +88,57 @@ def signal_on(market: Market, *days: int, stop_atr: float = 2.0) -> Variant:
     for d in days:
         entries[0, d] = True
     return Variant("test", {"stop_atr": stop_atr}, entries)
+
+
+def market_of(
+    stocks: dict[str, list[tuple[float, float, float, float]]],
+    *,
+    sectors: dict[str, str | None] | None = None,
+    atr: float = 2.0,
+) -> Market:
+    """Several stocks on the same days, each like `one_stock_market`'s (constant ATR,
+    score 90, always in the universe). `sectors` maps symbol to sector."""
+    symbols = list(stocks)
+    first = one_stock_market(stocks[symbols[0]], atr=atr, symbol=symbols[0])
+    k, n = len(symbols), len(first.days)
+
+    def rows(i: int) -> np.ndarray:
+        return np.array([[b[i] for b in stocks[s]] for s in symbols], dtype=float)
+
+    def full(value: float) -> np.ndarray:
+        return np.full((k, n), value)
+
+    first.symbols = symbols
+    first.sectors = [(sectors or {}).get(s) for s in symbols]
+    first.open, first.high, first.low, first.close = rows(0), rows(1), rows(2), rows(3)
+    for name in (
+        "factor",
+        "volume",
+        "avg_volume20",
+        "median_turnover",
+        "band_pct",
+        "dividend",
+        "score",
+        "atr14",
+        "ema20",
+        "ema50",
+        "ema200",
+        "rsi14",
+        "adx14",
+        "plus_di",
+        "minus_di",
+        "volume_ratio",
+        "prior_high_52w",
+        "last_swing_low",
+    ):
+        setattr(first, name, full(float(getattr(first, name)[0, 0])))
+    first.universe = np.ones((k, n), dtype=bool)
+    first.last_day = np.full(k, n - 1)
+    return first
+
+
+def signals_on(market: Market, day: int, stop_atr: float = 2.0) -> Variant:
+    """Every stock signals on `day`."""
+    entries = np.zeros_like(market.universe)
+    entries[:, day] = True
+    return Variant("test", {"stop_atr": stop_atr}, entries)

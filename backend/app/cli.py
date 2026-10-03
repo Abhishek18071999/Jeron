@@ -7,7 +7,8 @@ python -m app.cli lists --start 2016-01-01      # index closes, bands/GSM, Nifty
 python -m app.cli scan                          # the daily scan for the newest day
 python -m app.cli asm-import asm.csv            # load NSE's ASM list (saved from nseindia.com)
 python -m app.cli backtest                      # walk-forward test of every strategy
-python -m app.cli daily                         # everything since the last run, then the scan
+python -m app.cli paper                         # signals and paper trades for the newest scan
+python -m app.cli daily                         # everything since the last run, scan, paper
 python -m app.cli holidays --year 2025          # holidays as NSE's files show them
 """
 
@@ -29,6 +30,7 @@ from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
+from app.paper.job import run_paper
 from app.scan.job import ASM, run_scan
 from app.scan.surveillance import read_asm_csv
 
@@ -100,8 +102,25 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--start", type=_date, help="first price date to use (default: all)")
     p.add_argument("--end", type=_date, help="last price date to use (default: newest)")
 
+    p = sub.add_parser(
+        "paper", help="paper-trade every strategy to the newest scanned day; record signals"
+    )
+    p.add_argument("--date", type=_date, help="day to update to (default: newest scan)")
+    p.add_argument(
+        "--strategy",
+        choices=sorted(STRATEGIES),
+        action="append",
+        help="strategy to update (repeatable; default: all)",
+    )
+    p.add_argument(
+        "--restart",
+        action="store_true",
+        help="close the active accounts and open new ones from this day",
+    )
+
     sub.add_parser(
-        "daily", help="update everything since the last run, then scan (run after 7 pm IST)"
+        "daily",
+        help="update everything since the last run, scan, paper-trade (run after 7 pm IST)",
     )
 
     p = sub.add_parser(
@@ -189,6 +208,10 @@ def main(argv: list[str] | None = None) -> int:
             run_backtests(session, args.strategy, args.start, args.end, log=_log)
             return 0
 
+        if args.command == "paper":
+            paper = run_paper(session, args.date, args.strategy, restart=args.restart, log=_log)
+            return 0 if paper.status == "ok" else 1
+
         if args.command == "daily":
             report = pipeline.daily_update(session, _archive(), _yahoo(), calendar, today, log=_log)
             if report is None:
@@ -199,7 +222,8 @@ def main(argv: list[str] | None = None) -> int:
             outcome = run_scan(session, report.trade_date, log=_log)
             if report.status == QualityStatus.FAIL or outcome.status != "ok":
                 return 1
-            return 0
+            paper = run_paper(session, report.trade_date, log=_log)
+            return 0 if paper.status == "ok" else 1
 
         if args.command == "holidays":
             start, end = date(args.year, 1, 1), date(args.year, 12, 31)

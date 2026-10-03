@@ -276,6 +276,138 @@ export type BacktestTrade = {
 
 export type SamplePick = { symbol: string; trade_date: string; reason: string };
 
+// --- Signals and paper trading (M4) ----------------------------------------------------
+
+export type PaperAccountSummary = {
+  as_of?: string;
+  equity?: number;
+  return_pct?: number;
+  drawdown_pct?: number;
+  max_drawdown_pct?: number;
+  heat_pct?: number;
+  open_positions?: number;
+  pending_orders?: number;
+  closed_trades?: TradeStats;
+  skipped_today?: Record<string, number>;
+  brake_events?: { date: string; event: string }[];
+  notes?: string[];
+};
+
+export type PaperAccount = {
+  id: number;
+  strategy_key: string;
+  strategy_version: string;
+  strategy_name: string;
+  tier: string;
+  params_label: string;
+  backtest_run_id: number;
+  live_eligible: boolean;
+  stage: "paper" | "research only";
+  start_date: string;
+  last_date: string | null;
+  capital: string;
+  status: string;
+  rules: Record<string, unknown>;
+  summary: PaperAccountSummary;
+};
+
+export type PaperTrade = {
+  seq: number;
+  signal_id: string | null;
+  ticker: string;
+  status: "open" | "closed";
+  signal_date: string;
+  entry_date: string;
+  entry_price: string;
+  initial_stop: string;
+  target_t1: string;
+  shares: number;
+  current_stop: string | null;
+  last_close: string | null;
+  shares_held: number;
+  exit_date: string | null;
+  exit_price: string | null;
+  exit_reason: string | null;
+  charges: string;
+  dividends: string;
+  net_pnl: string;
+  r_multiple: string;
+  sessions: number;
+  exits: { date: string; price: string; shares: number; reason: string }[];
+};
+
+export type PaperDay = {
+  trade_date: string;
+  equity: string;
+  drawdown_pct: string;
+  heat_pct: string;
+  open_positions: number;
+};
+
+// The spec's section 4 schema, as the backend stores it (prices as strings).
+export type SignalPayload = {
+  signal_id: string;
+  created_at: string;
+  data_as_of: string;
+  ticker: string;
+  setup_name: string;
+  strategy_version: string;
+  tier: string;
+  direction: "long";
+  why: string[];
+  entry_zone: { low: string; high: string; valid_until: string };
+  stop: { price: string; type: string; reason: string };
+  targets: { t1: string; t2: string; basis: string };
+  risk_reward_t1: string;
+  risk_reward_t2: string;
+  expected_holding: { min_days: number; max_days: number };
+  shares: number;
+  capital_at_risk: string;
+  exit_plan: string;
+  time_stop_days: number;
+  invalidation: string;
+  event_risk: string;
+  conviction: number;
+  brains_breakdown: {
+    technical: string;
+    fundamental: string | null;
+    news: string | null;
+    combined: string;
+  };
+  backtest_stats: {
+    trades: number;
+    win_rate: string;
+    avg_R: string;
+    expectancy_R: string;
+    profit_factor: string | null;
+    max_drawdown_pct: string;
+    period: string;
+  };
+  research_only: boolean;
+  notes: string[];
+};
+
+export type SignalView = {
+  signal_id: string;
+  version: number;
+  account_id: number;
+  strategy_key: string;
+  ticker: string;
+  signal_date: string;
+  research_only: boolean;
+  late: boolean;
+  created_at: string;
+  payload: SignalPayload;
+};
+
+export type PaperAccountView = {
+  account: PaperAccount;
+  open_trades: PaperTrade[];
+  closed_trades: PaperTrade[];
+  days: PaperDay[];
+  signals: SignalView[];
+};
+
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export async function getJson<T>(path: string): Promise<ApiResult<T>> {

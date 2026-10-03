@@ -60,6 +60,18 @@ class PortfolioRules:
     min_reward_risk_t2: float = 2.0
     # Idle cash sits in a liquid fund: a yearly rate, accrued per calendar day.
     cash_rate_pct: float = 6.5
+    heat_warn_pct: float = 5.0
+    # Overrides the tier's maximum number of open positions.
+    max_positions: int | None = None
+    # Opt-in portfolio rules (spec section 5), off in backtests: NSE's archive has no
+    # point-in-time sectors. A sector may hold at most this % of equity; stocks
+    # without a sector are not capped.
+    sector_cap_pct: float | None = None
+    # Skip a stock whose daily returns over `correlation_sessions` correlate at least
+    # `correlation_min` with `max_correlated` stocks already held or ordered.
+    max_correlated: int | None = None
+    correlation_min: float = 0.7
+    correlation_sessions: int = 120
 
 
 @dataclass(frozen=True)
@@ -171,6 +183,14 @@ class SimResult:
     brake_events: list[tuple[int, str]]
     dividends: list[tuple[int, float]]
     interest: list[tuple[int, float]] = field(default_factory=list)
+    # Every order placed (signal at a close, to fill the next session).
+    orders: list[Order] = field(default_factory=list)
+    # Orders placed at the last close (only with `orders_on_last_day`).
+    pending: list[Order] = field(default_factory=list)
+    # Positions still open at the end (only without `close_at_end`).
+    open_trades: list[Trade] = field(default_factory=list)
+    # Open risk (entry - stop) x shares as % of equity, per session from start to end.
+    heat_pct: Array = field(default_factory=lambda: np.zeros(0))
 
 
 def _locked(m: Market, s: int, t: int, prev_close: float, down: bool) -> bool:
@@ -184,6 +204,21 @@ def _locked(m: Market, s: int, t: int, prev_close: float, down: bool) -> bool:
     return bool(move <= -limit) if down else bool(move >= limit)
 
 
+def correlation(m: Market, a: int, b: int, t: int, sessions: int) -> float:
+    """Correlation of two stocks' daily returns over the `sessions` up to day t, on
+    the days both traded (NaN with fewer than half of them)."""
+    lo = max(0, t - sessions)
+    ca, cb = m.close[a, lo : t + 1], m.close[b, lo : t + 1]
+    ra, rb = ca[1:] / ca[:-1] - 1, cb[1:] / cb[:-1] - 1
+    both = ~np.isnan(ra) & ~np.isnan(rb)
+    if both.sum() < max(sessions // 2, 3):
+        return math.nan
+    x, y = ra[both], rb[both]
+    if x.std() == 0 or y.std() == 0:
+        return math.nan
+    return float(np.corrcoef(x, y)[0, 1])
+
+
 def simulate(
     market: Market,
     tier: Tier,
@@ -192,12 +227,20 @@ def simulate(
     end: int,
     rules: PortfolioRules | None = None,
     costs: CostModel | None = None,
+    *,
+    close_at_end: bool = True,
+    orders_on_last_day: bool = False,
 ) -> SimResult:
     """Run from session `start` to `end` (inclusive). `schedule` is (first session,
-    variant) pairs, oldest first: the variant whose signals are traded from that day."""
+    variant) pairs, oldest first: the variant whose signals are traded from that day.
+
+    A backtest sells what is still open at the last close. Paper trading keeps it
+    open (`close_at_end=False`) and places orders at the last close for the next
+    session (`orders_on_last_day=True`)."""
     rules = rules or PortfolioRules()
     costs = costs or CostModel()
     tier_rules = TIERS[tier]
+    max_positions = rules.max_positions or tier_rules.max_positions
     m = market
     cash = rules.capital
     peak = rules.capital
@@ -210,6 +253,8 @@ def simulate(
     brakes: list[tuple[int, str]] = []
     dividends: list[tuple[int, float]] = []
     interest: list[tuple[int, float]] = []
+    placed: list[Order] = []
+    heat_pct = np.zeros(end - start + 1)
     daily_rate = (1 + rules.cash_rate_pct / 100) ** (1 / 365) - 1
     equity = np.zeros(end - start + 1)
     last_close = np.full(len(m.symbols), math.nan)
@@ -391,6 +436,8 @@ def simulate(
         # Mark to market.
         value = cash + sum(tr.remaining * last_close[tr.s] for tr in open_trades)
         equity[t - start] = value
+        open_risk = sum(max(0.0, tr.entry - tr.stop) * tr.remaining for tr in open_trades)
+        heat_pct[t - start] = open_risk / value * 100 if value > 0 else 0.0
         if value > peak:
             peak = value
         drawdown = (1 - value / peak) * 100
@@ -404,7 +451,7 @@ def simulate(
             brakes.append((t, f"drawdown {drawdown:.1f}%: new entries paused"))
 
         # 4. New signals at today's close, filled tomorrow.
-        if t == end or m.quality_fail[t] or t < paused_until:
+        if (t == end and not orders_on_last_day) or m.quality_fail[t] or t < paused_until:
             continue
         variant = variant_for(t)
         if variant is None:
@@ -423,7 +470,16 @@ def simulate(
         if drawdown >= rules.drawdown_halve_pct:
             risk_mult *= 0.5
         heat = sum(max(0.0, tr.entry - tr.stop) * tr.remaining for tr in open_trades)
-        slots = tier_rules.max_positions - len(open_trades)
+        slots = max_positions - len(open_trades)
+        sector_value: dict[str, float] = {}
+        if rules.sector_cap_pct is not None:
+            for tr in open_trades:
+                sector = m.sectors[tr.s]
+                if sector:
+                    sector_value[sector] = (
+                        sector_value.get(sector, 0.0) + tr.remaining * last_close[tr.s]
+                    )
+        holding = [tr.s for tr in open_trades]
         for s in ranked:
             if slots <= 0:
                 skipped.append(Skip(s, t, "no free position slot"))
@@ -464,26 +520,72 @@ def simulate(
                 continue
             new_risk = (zone_high - stop) * shares
             if (heat + new_risk) / value * 100 > rules.heat_block_pct:
-                skipped.append(Skip(s, t, "portfolio heat above 6%"))
+                skipped.append(Skip(s, t, f"portfolio heat above {rules.heat_block_pct:g}%"))
                 continue
+            sector = m.sectors[s]
+            if rules.sector_cap_pct is not None and sector:
+                after = sector_value.get(sector, 0.0) + zone_high * shares
+                if after / value * 100 > rules.sector_cap_pct:
+                    skipped.append(
+                        Skip(s, t, f"sector {sector} above {rules.sector_cap_pct:g}% of equity")
+                    )
+                    continue
+            if rules.max_correlated is not None:
+                together = [
+                    h
+                    for h in holding
+                    if correlation(m, s, h, t, rules.correlation_sessions) >= rules.correlation_min
+                ]
+                if len(together) >= rules.max_correlated:
+                    names = ", ".join(sorted(m.symbols[h] for h in together))
+                    skipped.append(
+                        Skip(s, t, f"moves with {names} (correlation >= {rules.correlation_min:g})")
+                    )
+                    continue
             heat += new_risk
             slots -= 1
-            orders.append(
-                Order(
-                    s,
-                    variant.label,
-                    t,
-                    stop,
-                    zone_high,
-                    raw,
-                    float(np.nan_to_num(m.score[s, t], nan=0.0)),
-                    slip,
-                )
+            if sector:
+                sector_value[sector] = sector_value.get(sector, 0.0) + zone_high * shares
+            holding.append(s)
+            order = Order(
+                s,
+                variant.label,
+                t,
+                stop,
+                zone_high,
+                raw,
+                float(np.nan_to_num(m.score[s, t], nan=0.0)),
+                slip,
             )
+            orders.append(order)
+            placed.append(order)
 
+    still: list[Trade] = []
     for trade in open_trades:
         trade.open_at_end = True
-        sell(trade, end, last_close[trade.s], trade.remaining, "open at the end (marked at close)")
-        done.append(trade)
+        if close_at_end:
+            sell(
+                trade,
+                end,
+                last_close[trade.s],
+                trade.remaining,
+                "open at the end (marked at close)",
+            )
+            done.append(trade)
+        else:
+            still.append(trade)
     done.sort(key=lambda tr: (tr.entry_day, tr.symbol))
-    return SimResult(start, end, equity, done, skipped, brakes, dividends, interest)
+    return SimResult(
+        start,
+        end,
+        equity,
+        done,
+        skipped,
+        brakes,
+        dividends,
+        interest,
+        orders=placed,
+        pending=orders if orders_on_last_day else [],
+        open_trades=still,
+        heat_pct=heat_pct,
+    )

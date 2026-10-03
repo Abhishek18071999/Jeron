@@ -195,3 +195,42 @@ def test_idle_cash_earns_the_liquid_fund_rate_per_calendar_day():
     # Over a Friday-to-Monday gap, three days' interest.
     friday_to_monday = result.equity[5] / result.equity[4]
     assert friday_to_monday == pytest.approx(1.065 ** (3 / 365))
+
+
+def test_paper_options_keep_positions_open_and_order_on_the_last_day():
+    bars = [SIGNAL, (100.0, 101.0, 99.0, 100.0), FLAT, SIGNAL]
+    m = one_stock_market(bars)
+    backtest = simulate(m, Tier.SWING, [(0, signal_on(m, 0, 3))], 0, 3, NO_INTEREST, NO_COSTS)
+    paper = simulate(
+        m,
+        Tier.SWING,
+        [(0, signal_on(m, 0, 3))],
+        0,
+        3,
+        NO_INTEREST,
+        NO_COSTS,
+        close_at_end=False,
+        orders_on_last_day=True,
+    )
+    # A backtest sells at the end and places no order on the last day.
+    (sold,) = backtest.trades
+    assert sold.open_at_end and backtest.pending == []
+    # Paper trading keeps the position; the day-3 signal is held already, so no order.
+    assert paper.trades == [] and len(paper.open_trades) == 1
+    assert paper.open_trades[0].remaining == sold.shares
+    assert list(paper.equity) == list(backtest.equity)
+    assert [o.signal_day for o in paper.orders] == [0]
+    # Without the position, the last day's signal becomes a pending order.
+    fresh = simulate(
+        m,
+        Tier.SWING,
+        [(3, signal_on(m, 3))],
+        3,
+        3,
+        NO_INTEREST,
+        NO_COSTS,
+        close_at_end=False,
+        orders_on_last_day=True,
+    )
+    assert [(o.signal_day, o.raw_shares) for o in fresh.pending] == [(3, 1980)]
+    assert paper.heat_pct[1] == pytest.approx(4 * 1980 / paper.equity[1] * 100)
