@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { StockSearch } from "@/components/stock-search";
 import { getJson, type SamplePick, type SpotCheck } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -33,12 +34,13 @@ export default async function SpotCheckPage({ searchParams }: { searchParams: Pr
       <form className="mt-6 flex flex-wrap items-end gap-3" action="/spot-check">
         <label className="flex flex-col text-sm">
           NSE symbol
-          <input
+          <StockSearch
             name="symbol"
             defaultValue={symbol ?? ""}
-            placeholder="RELIANCE"
+            placeholder="RELIANCE or RIL"
             required
-            className="mt-1 rounded border border-neutral-300 bg-transparent px-2 py-1 uppercase dark:border-neutral-700"
+            className="mt-1 w-56"
+            inputClassName="w-full rounded border border-neutral-300 bg-transparent px-2 py-1 dark:border-neutral-700"
           />
         </label>
         <label className="flex flex-col text-sm">

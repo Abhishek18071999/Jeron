@@ -1,0 +1,23 @@
+# Common short names for NSE stocks, used by the search box. alias,symbol
+# Symbol renames (ZOMATO -> ETERNAL) come from NSE's symbol-change list, and initials
+# (RIL, HUL, SBI) are worked out from company names; list here only what neither covers
+# or where initials would pick the wrong company.
+alias,symbol
+RIL,RELIANCE
+HUL,HINDUNILVR
+SBI,SBIN
+LNT,LT
+L AND T,LT
+BOB,BANKBARODA
+BOI,BANKINDIA
+IOCL,IOC
+HPCL,HINDPETRO
+AIRTEL,BHARTIARTL
+VI,IDEA
+LIC,LICI
+POLICYBAZAAR,POLICYBZR
+P&G,PGHH
+NALCO,NATIONALUM
+ROYAL ENFIELD,EICHERMOT
+LTIMINDTREE,LTM
+MAHINDRA FINANCE,M&MFIN

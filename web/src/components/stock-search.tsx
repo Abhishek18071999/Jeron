@@ -3,13 +3,32 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
-type Match = { symbol: string; name: string | null; series: string };
+type Match = { symbol: string; name: string | null; series: string; alias: string | null };
 
-// Type a symbol or a company name ("tata steel"); suggestions appear as you type.
-export function StockSearch({ className = "" }: { className?: string }) {
+type Props = {
+  className?: string;
+  inputClassName?: string;
+  placeholder?: string;
+  // Form field mode: the input carries this name and picking a suggestion fills in the
+  // symbol. Without it, picking opens the stock page.
+  name?: string;
+  defaultValue?: string;
+  required?: boolean;
+};
+
+// Type a symbol, a company name ("tata steel"), a short name ("RIL") or an old symbol
+// ("ZOMATO"); suggestions appear as you type.
+export function StockSearch({
+  className = "",
+  inputClassName = "w-full rounded border border-neutral-300 bg-transparent px-2 py-1 text-sm dark:border-neutral-700",
+  placeholder = "Search: tata steel, RIL",
+  name,
+  defaultValue = "",
+  required,
+}: Props) {
   const router = useRouter();
   const listId = useId();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(defaultValue);
   const [matches, setMatches] = useState<Match[]>([]);
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
@@ -44,16 +63,22 @@ export function StockSearch({ className = "" }: { className?: string }) {
 
   const go = (symbol: string) => {
     setOpen(false);
-    setQuery("");
     setMatches([]);
+    if (name) {
+      setQuery(symbol);
+      return;
+    }
+    setQuery("");
     router.push(`/stocks/${encodeURIComponent(symbol)}`);
   };
 
-  const shown = query.trim() ? matches : [];
+  const shown = open && query.trim() ? matches : [];
 
   return (
     <div ref={box} className={`relative ${className}`}>
       <input
+        name={name}
+        required={required}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -69,6 +94,8 @@ export function StockSearch({ className = "" }: { className?: string }) {
             e.preventDefault();
             setActive((i) => Math.max(i - 1, 0));
           } else if (e.key === "Enter") {
+            // In a form, Enter with no suggestion showing submits the form as usual.
+            if (name && !shown[active]) return;
             e.preventDefault();
             const pick = shown[active]?.symbol ?? query.trim().toUpperCase().replace(/\s+/g, "");
             if (pick) go(pick);
@@ -76,15 +103,15 @@ export function StockSearch({ className = "" }: { className?: string }) {
             setOpen(false);
           }
         }}
-        placeholder="Search a stock, e.g. tata steel"
-        aria-label="Search a stock"
+        placeholder={placeholder}
+        aria-label={placeholder}
         role="combobox"
-        aria-expanded={open && shown.length > 0}
+        aria-expanded={shown.length > 0}
         aria-controls={listId}
         autoComplete="off"
-        className="w-full rounded border border-neutral-300 bg-transparent px-2 py-1 text-sm dark:border-neutral-700"
+        className={inputClassName}
       />
-      {open && shown.length > 0 && (
+      {shown.length > 0 && (
         <ul
           id={listId}
           role="listbox"
@@ -104,6 +131,7 @@ export function StockSearch({ className = "" }: { className?: string }) {
             >
               <span className="font-medium">{m.symbol}</span>
               {m.series !== "EQ" && <span className="ml-1 text-xs text-neutral-500">{m.series}</span>}
+              {m.alias && <span className="ml-2 text-xs text-neutral-500">{m.alias}</span>}
               {m.name && <span className="block truncate text-xs text-neutral-500">{m.name}</span>}
             </li>
           ))}
