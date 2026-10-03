@@ -26,9 +26,16 @@ are part of done, never commit secrets.
     `costs.py` (Indian charges, slippage, tax estimate), `strategies.py` (versioned),
     `walkforward.py` (folds, holdout, gates), `stats.py`, `job.py` (database).
     Changing a strategy's rules means a new strategy version; runs are never
-    overwritten.
+    overwritten. The engine is also the risk manager (spec section 5); the sector cap,
+    correlation check and position-limit override are opt-in `PortfolioRules`, used by
+    paper trading only.
+  - `app/signals/` the spec section 4 signal: `schema.py` (Pydantic, every field
+    required) and `build.py` (engine order -> signal).
+  - `app/paper/job.py` paper trading: one account per strategy version, replayed by the
+    engine each day; new orders become signals, stored once and never changed. Signals of
+    strategies that failed section 6 are research only. See `docs/decisions/0006`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
-    `asm-import`, `daily`, `holidays`, `backtest`.
+    `asm-import`, `daily`, `holidays`, `backtest`, `paper`.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the
@@ -61,6 +68,8 @@ Everything: `docker compose up --build` from the repo root.
   per second and retry (the `Fetcher` does this).
 - Backtests report out-of-sample, after-cost numbers only; `tests/test_backtest_engine.py`
   holds golden trades. Keep them passing when touching the engine.
-- Settings come from env vars prefixed `JERON_` (`app/config.py`).
+- Settings come from env vars prefixed `JERON_` (`app/config.py`), including the risk
+  settings (capital, risk %, position limits, sector cap). Every spec section 5 rule has
+  a test listed in `tests/test_risk_rules.py`.
 - CI (`.github/workflows/ci.yml`) runs backend checks, web checks, and a Docker Compose
   smoke test. Keep it green.

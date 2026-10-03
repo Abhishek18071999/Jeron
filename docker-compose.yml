@@ -23,6 +23,11 @@ services:
       JERON_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jeron}:${POSTGRES_PASSWORD:-jeron}@db:5432/${POSTGRES_DB:-jeron}
       JERON_CORS_ORIGINS: http://localhost:3000
       JERON_DATA_DIR: /data
+      JERON_CAPITAL: ${JERON_CAPITAL:-1000000}
+      JERON_RISK_PCT: ${JERON_RISK_PCT:-1}
+      JERON_MAX_POSITIONS_SWING: ${JERON_MAX_POSITIONS_SWING:-5}
+      JERON_MAX_POSITIONS_POSITIONAL: ${JERON_MAX_POSITIONS_POSITIONAL:-8}
+      JERON_SECTOR_CAP_PCT: ${JERON_SECTOR_CAP_PCT:-30}
     volumes:
       # Downloaded NSE files, kept so history can be re-read without downloading again.
       - marketdata:/data
