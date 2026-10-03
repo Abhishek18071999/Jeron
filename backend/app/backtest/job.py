@@ -31,6 +31,7 @@ from app.backtest.walkforward import Evaluation, evaluate
 from app.data import store
 from app.data.adjust import adjust_bars, build_adjustments
 from app.data.nse_lists import INDIA_VIX, NIFTY_50, NIFTY_500
+from app.data.pipeline import BOARD_MEETINGS_SOURCE
 from app.data.provider import Bar, CorporateActionRecord
 from app.enums import CorporateActionType, QualityStatus
 from app.models import (
@@ -259,6 +260,12 @@ def load_inputs(
         security_status=statuses,
         asm=asm,
         quality_fail_days=fails,
+        results=(
+            store.results_dates(session, [s.symbol for s in stocks])
+            if store.board_meetings_loaded(session)
+            else None
+        ),
+        results_updated=store.board_meetings_updated(session, BOARD_MEETINGS_SOURCE),
     )
 
 

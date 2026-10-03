@@ -221,6 +221,25 @@ class SurveillanceFlag(Base):
     source: Mapped[str] = mapped_column(String(32))
 
 
+class BoardMeeting(Base):
+    """A board meeting NSE announced (results, dividend, fund raising...). Rows are
+    added, never changed: `announced_at` is when NSE published it and `first_seen` when
+    Jeron first stored it, so a backtest only knows a date from the day it was public."""
+
+    __tablename__ = "board_meetings"
+    __table_args__ = (UniqueConstraint("symbol", "meeting_date", "purpose"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    meeting_date: Mapped[date] = mapped_column(Date, index=True)
+    purpose: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(String(2000), default="")
+    is_results: Mapped[bool] = mapped_column(Boolean, default=False)
+    announced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    source: Mapped[str] = mapped_column(String(32))
+
+
 class SymbolChange(Base):
     """NSE symbol renames, used to join a company's history across its symbols."""
 

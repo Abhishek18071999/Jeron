@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
 from app.data import store
 from app.data.crosscheck import CloseComparison, compare_closes, compare_share_actions
+from app.data.events import parse_board_meetings_json
 from app.data.http import FetchError, NotPublishedError
 from app.data.nse import (
     BhavcopyError,
@@ -46,6 +47,7 @@ from app.data.nse_lists import (
     parse_security_list,
     parse_symbol_changes,
 )
+from app.data.nse_site import NseSite
 from app.data.quality import STALE_SESSIONS, DayData, QualityReportData, build_report
 from app.data.yahoo import YahooClient
 from app.models import DataQualityReport, SourceFile
@@ -543,3 +545,45 @@ def daily_update(
     crosscheck_range(session, yahoo, new_days[0] - timedelta(days=7), today, log=log)
     reports = quality_range(session, calendar, new_days[0], today, log=log)
     return reports[-1] if reports else None
+
+
+# --- Board meetings (M6) --------------------------------------------------------------
+
+BOARD_MEETINGS_SOURCE = "nse_board_meetings"
+BOARD_MEETINGS_IMPORT = "nse_board_meetings_import"
+# Days of meetings asked for in one request.
+BOARD_MEETINGS_CHUNK_DAYS = 31
+
+
+def fetch_board_meetings(
+    session: Session,
+    site: NseSite,
+    start: date,
+    end: date,
+    today: date,
+    log: Callable[[str], None] = _quiet,
+) -> tuple[int, int, list[tuple[date, date]]]:
+    """Download board meetings with a meeting date from `start` to `end`, a month at a
+    time. Returns (meetings seen, new ones stored, ranges that failed). A complete
+    download that covers `today` marks the calendar as up to date on `today`."""
+    seen = new = 0
+    failed: list[tuple[date, date]] = []
+    chunk_start = start
+    while chunk_start <= end:
+        chunk_end = min(chunk_start + timedelta(days=BOARD_MEETINGS_CHUNK_DAYS - 1), end)
+        try:
+            meetings = parse_board_meetings_json(site.board_meetings(chunk_start, chunk_end))
+        except (FetchError, NotPublishedError, ValueError) as exc:
+            log(f"  {chunk_start} to {chunk_end}: not fetched ({exc})")
+            failed.append((chunk_start, chunk_end))
+        else:
+            added = store.save_board_meetings(session, meetings, BOARD_MEETINGS_SOURCE)
+            session.commit()
+            seen += len(meetings)
+            new += added
+            log(f"  {chunk_start} to {chunk_end}: {len(meetings)} meetings, {added} new")
+        chunk_start = chunk_end + timedelta(days=1)
+    if not failed and start <= today <= end:
+        store.record_source_file(session, BOARD_MEETINGS_SOURCE, today, "ok", rows=seen)
+        session.commit()
+    return seen, new, failed

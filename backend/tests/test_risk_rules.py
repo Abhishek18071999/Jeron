@@ -20,6 +20,7 @@
 | time stop: swing 15 sessions | test_swing_time_stop |
 | time stop: positional review at 60 | test_positional_review_at_60 |
 | all Indian costs in P&L and R | test_costs_in_pnl_and_r |
+| no entry from 3 sessions before results until the day after | test_results_blackout |
 | pre-open job (08:30 IST) | M7 (spec milestone list: "Exit engine: pre-open checks") |
 
 Scenarios use the golden-test conventions: signal close 100, ATR 2, stop 96, entry
@@ -127,6 +128,30 @@ def test_sector_cap():
     # Off in backtests: all four are ordered.
     plain = simulate(m, Tier.SWING, [(0, signals_on(m, 0))], 0, 2, NO_INTEREST, NO_COSTS)
     assert len(plain.orders) == 4
+
+
+def test_results_blackout():
+    from dataclasses import replace
+
+    from app.backtest.market import results_blackout
+    from app.data.events import ResultsDate
+
+    m = one_stock_market([SIGNAL, FILL, FLAT, FLAT, FLAT, FLAT])
+    # Results on day 4: fills on days 1-4 are blocked, so signals on days 0-3 are skipped.
+    results = {"AAA": [ResultsDate(m.days[4], known_from=None)]}
+    m = replace(m, results_blackout=results_blackout(m.days, m.symbols, results))
+    on = PortfolioRules(cash_rate_pct=0, results_blackout=True)
+    blocked = simulate(m, Tier.SWING, [(0, signal_on(m, 0))], 0, 5, on, NO_COSTS)
+    assert blocked.orders == []
+    assert [s.reason for s in blocked.skipped] == ["results due: no new entry around results"]
+    # Off by default (earlier strategy versions keep their results).
+    plain = simulate(m, Tier.SWING, [(0, signal_on(m, 0))], 0, 5, NO_INTEREST, NO_COSTS)
+    assert len(plain.orders) == 1
+    # A date announced after the signal day doesn't count yet.
+    late = {"AAA": [ResultsDate(m.days[4], known_from=m.days[1])]}
+    m = replace(m, results_blackout=results_blackout(m.days, m.symbols, late))
+    early = simulate(m, Tier.SWING, [(0, signal_on(m, 0))], 0, 5, on, NO_COSTS)
+    assert len(early.orders) == 1
 
 
 def _walk(rng: np.random.Generator, returns: np.ndarray) -> list[tuple[float, float, float, float]]:

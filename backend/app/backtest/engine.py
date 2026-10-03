@@ -72,6 +72,9 @@ class PortfolioRules:
     max_correlated: int | None = None
     correlation_min: float = 0.7
     correlation_sessions: int = 120
+    # No entry fills from 3 sessions before a results board meeting through the meeting
+    # day (spec section 2). Opt-in so earlier strategy versions keep their results.
+    results_blackout: bool = False
 
 
 @dataclass(frozen=True)
@@ -481,6 +484,13 @@ def simulate(
                     )
         holding = [tr.s for tr in open_trades]
         for s in ranked:
+            if (
+                rules.results_blackout
+                and m.results_blackout is not None
+                and m.results_blackout[s, t]
+            ):
+                skipped.append(Skip(s, t, "results due: no new entry around results"))
+                continue
             if slots <= 0:
                 skipped.append(Skip(s, t, "no free position slot"))
                 continue
