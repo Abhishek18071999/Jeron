@@ -31,6 +31,7 @@ from app.backtest.stats import (
     CurveStats,
     GateRules,
     curve_stats,
+    daily_rate,
     daily_returns,
     deflated_sharpe,
     drawdown_series,
@@ -42,7 +43,7 @@ from app.backtest.stats import (
 )
 from app.backtest.strategies import Params, Strategy, params_label
 
-ENGINE_VERSION = "engine-v1"
+ENGINE_VERSION = "engine-v2"
 WARMUP_SESSIONS = 252
 MIN_TRAIN_YEARS = 2
 HOLDOUT_MONTHS = 12
@@ -145,6 +146,7 @@ def _choose(
     window: str,
     variants: dict[str, Variant],
     default: str,
+    risk_free_pct: float,
 ) -> tuple[str, list[VariantLog]]:
     logs = []
     best_label, best_sharpe = default, -math.inf
@@ -152,7 +154,7 @@ def _choose(
         curve = sim.equity[: until - sim.start]
         closed = [t for t in sim.trades if t.exit_day < until and not t.open_at_end]
         stats = trade_stats(closed)
-        sharpe = curve_stats(curve).sharpe if len(curve) > 1 else 0.0
+        sharpe = curve_stats(curve, risk_free_pct).sharpe if len(curve) > 1 else 0.0
         logs.append(
             VariantLog(
                 window,
@@ -208,7 +210,14 @@ def evaluate(
     for start in [*folds.test_starts, folds.holdout_start]:
         window = "holdout" if start == folds.holdout_start else f"test {days[start]}"
         label, window_logs = _choose(
-            training, folds.first_tradable, start, days, window, variants, default
+            training,
+            folds.first_tradable,
+            start,
+            days,
+            window,
+            variants,
+            default,
+            rules.cash_rate_pct,
         )
         logs.extend(window_logs)
         schedule.append((start, label, variants[label].params))
@@ -231,18 +240,19 @@ def evaluate(
     oos_days = days[oos_start : folds.holdout_start]
 
     def bench(a: int, b: int) -> CurveStats:
-        return curve_stats(m.nifty500[a : b + 1])
+        return curve_stats(m.nifty500[a : b + 1], rules.cash_rate_pct)
 
     oos_stats = trade_stats(oos_trades)
-    oos_curve_stats = curve_stats(oos_curve)
+    oos_curve_stats = curve_stats(oos_curve, rules.cash_rate_pct)
     holdout_stats = trade_stats(holdout_trades)
     by_regime = grouped(oos_trades, lambda t: t.regime.value)
     benchmark = bench(oos_start, folds.holdout_start - 1)
     gate_list = gates(oos_stats, oos_curve_stats, by_regime, benchmark, holdout_stats, gate_rules)
-    trial_sharpes = [per_period_sharpe(s.equity) for s in training.values()]
-    dsr = deflated_sharpe(daily_returns(oos_curve), trial_sharpes)
+    trial_sharpes = [per_period_sharpe(s.equity, rules.cash_rate_pct) for s in training.values()]
+    excess = daily_returns(oos_curve) - daily_rate(rules.cash_rate_pct)
+    dsr = deflated_sharpe(excess, trial_sharpes)
 
-    def tax_view(trades: list[Trade]) -> dict[str, Any]:
+    def tax_view(trades: list[Trade], first: int, last: int) -> dict[str, Any]:
         sales = [
             Realised(
                 days[t.exit_day],
@@ -252,10 +262,13 @@ def evaluate(
             for t in trades
         ]
         divs = [(days[t.exit_day], t.dividends) for t in trades if t.dividends]
-        estimate = estimate_tax(sales, divs, tax_rules)
-        pre_tax = sum(t.net_pnl for t in trades)
+        interest = [(days[t], a) for t, a in sim.interest if first <= t <= last]
+        estimate = estimate_tax(sales, divs, tax_rules, interest)
+        earned = sum(a for _, a in interest)
+        pre_tax = sum(t.net_pnl for t in trades) + earned
         return {
             "pre_tax_pnl": round(pre_tax, 2),
+            "interest": round(earned, 2),
             "estimated_tax": round(estimate.total, 2),
             "post_tax_pnl": round(pre_tax - estimate.total, 2),
             "years": [
@@ -264,6 +277,7 @@ def evaluate(
                     "stcg": round(y.stcg, 2),
                     "ltcg": round(y.ltcg, 2),
                     "dividends": round(y.dividends, 2),
+                    "interest": round(y.interest, 2),
                     "tax": round(y.tax, 2),
                     "loss_carried": round(y.loss_carried, 2),
                 }
@@ -292,8 +306,10 @@ def evaluate(
     if fail_days:
         notes.append(f"No new entries on {fail_days} days whose data-quality report failed.")
     notes.append(
-        "Benchmark is the Nifty 500 price index (dividends not included); the strategy "
-        "earns nothing on idle cash."
+        "Benchmark is the Nifty 500 price index (dividends not included). Idle cash "
+        f"earns {rules.cash_rate_pct:g}% a year (a liquid fund), taxed at the 30% slab "
+        "in the tax estimate; Sharpe ratios, for the strategy and the benchmark, "
+        "count only returns above that rate."
     )
 
     summary: dict[str, Any] = {
@@ -319,11 +335,11 @@ def evaluate(
             ),
             "deflated_sharpe": round(dsr, 4),
             "variants_tried": len(variants),
-            "tax": tax_view(oos_trades),
+            "tax": tax_view(oos_trades, oos_start, folds.holdout_start - 1),
         },
         "holdout": {
             "trades": holdout_stats.to_dict(),
-            "curve": curve_stats(holdout_curve).to_dict(),
+            "curve": curve_stats(holdout_curve, rules.cash_rate_pct).to_dict(),
             "benchmark": bench(folds.holdout_start - 1, folds.end).to_dict(),
         },
         "gates": [g.to_dict() for g in gate_list],

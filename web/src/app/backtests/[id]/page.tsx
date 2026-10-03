@@ -321,11 +321,12 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
         <div>
           <h3 className="font-medium">Estimated tax (test period)</h3>
           <p className="mt-1 text-sm">
-            Pre-tax {rupees(oos.tax.pre_tax_pnl)}, tax about {rupees(oos.tax.estimated_tax)}, post-tax{" "}
+            Pre-tax {rupees(oos.tax.pre_tax_pnl)}
+            {oos.tax.interest !== undefined && <> (including {rupees(oos.tax.interest)} interest on idle cash)</>}, tax about {rupees(oos.tax.estimated_tax)}, post-tax{" "}
             <span className={signClass(oos.tax.post_tax_pnl)}>{rupees(oos.tax.post_tax_pnl)}</span>.
           </p>
           <p className="mt-1 text-xs text-neutral-500">
-            STCG 15% (20% from 23 July 2024), LTCG 10%/12.5% above the exemption, dividends at a 30% slab; surcharge
+            STCG 15% (20% from 23 July 2024), LTCG 10%/12.5% above the exemption, dividends and interest on idle cash at a 30% slab; surcharge
             and cess left out.
           </p>
         </div>

@@ -106,7 +106,8 @@ class TaxRules:
     ltcg_new_pct: float = 12.5
     ltcg_exempt_old: float = 100_000.0
     ltcg_exempt_new: float = 125_000.0
-    # Dividends are taxed at your income slab; 30% is assumed.
+    # Dividends, and liquid-fund gains (since April 2023), are taxed at your income
+    # slab; 30% is assumed.
     dividend_slab_pct: float = 30.0
     long_term_days: int = 365
 
@@ -131,6 +132,7 @@ class TaxYear:
     stcg: float = 0.0
     ltcg: float = 0.0
     dividends: float = 0.0
+    interest: float = 0.0
     tax: float = 0.0
     loss_carried: float = 0.0
 
@@ -148,12 +150,14 @@ def estimate_tax(
     sales: Iterable[Realised],
     dividends: Iterable[tuple[date, float]] = (),
     rules: TaxRules | None = None,
+    interest: Iterable[tuple[date, float]] = (),
 ) -> TaxEstimate:
     """A simple estimate: per financial year, short-term losses offset short- then
     long-term gains, long-term losses offset long-term gains, net losses carry
     forward (eight years in law; here, until used). Each year's rate is the one in
     force at the year's last sale (the 2024 change applied from 23 July). Dividends
-    are taxed at the assumed slab rate. Surcharge and cess are left out."""
+    and the interest on idle cash are taxed at the assumed slab rate. Surcharge and
+    cess are left out."""
     rules = rules or TaxRules()
     by_year: dict[int, TaxYear] = {}
     last_sale: dict[int, date] = {}
@@ -168,6 +172,9 @@ def estimate_tax(
     for day, amount in dividends:
         fy = financial_year(day)
         by_year.setdefault(fy, TaxYear(fy)).dividends += amount
+    for day, amount in interest:
+        fy = financial_year(day)
+        by_year.setdefault(fy, TaxYear(fy)).interest += amount
     carried: dict[str, float] = defaultdict(float)  # "st" / "lt" losses brought forward
     for fy in sorted(by_year):
         year = by_year[fy]
@@ -191,7 +198,7 @@ def estimate_tax(
         year.tax = (
             st * st_rate / 100
             + max(lt - exempt, 0.0) * lt_rate / 100
-            + max(year.dividends, 0.0) * rules.dividend_slab_pct / 100
+            + max(year.dividends + year.interest, 0.0) * rules.dividend_slab_pct / 100
         )
         year.loss_carried = st_loss + lt_loss
     return TaxEstimate([by_year[fy] for fy in sorted(by_year)])

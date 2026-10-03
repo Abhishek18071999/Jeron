@@ -66,3 +66,10 @@ def test_losses_carry_forward():
     assert years[0].tax == 0 and years[0].loss_carried == 40_000
     assert years[1].tax == 0 and years[1].loss_carried == 10_000
     assert years[2].tax == pytest.approx(20_000 * 0.15)  # sold before 23 July 2024
+
+
+def test_interest_on_idle_cash_is_taxed_at_the_slab():
+    est = estimate_tax([], interest=[(date(2024, 5, 1), 10_000.0), (date(2025, 3, 1), 5_000.0)])
+    (year,) = est.years
+    assert year.interest == 15_000.0
+    assert est.total == pytest.approx(4_500.0)

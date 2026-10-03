@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from app.backtest.market import MarketInputs, SecurityStatusDay, StockData, build_market
-from app.backtest.stats import deflated_sharpe, expected_max_sharpe
+from app.backtest.stats import curve_stats, daily_rate, deflated_sharpe, expected_max_sharpe
 from app.backtest.strategies import STRATEGIES
 from app.backtest.walkforward import evaluate, make_folds
 from tests.backtest_helpers import weekdays
@@ -142,3 +142,12 @@ def test_deflated_sharpe():
     noise = rng.normal(0.0, 0.01, 1500)
     assert deflated_sharpe(noise, [0.0, 0.05, -0.05, 0.08]) < 0.5
     assert math.isclose(deflated_sharpe(np.zeros(10), [0.1, 0.2]), 0.0)
+
+
+def test_sharpe_counts_only_returns_above_the_cash_rate():
+    # A curve that earns exactly the cash rate, with a little noise, has no excess.
+    rng = np.random.default_rng(1)
+    rate = daily_rate(6.5)
+    curve = 100 * np.cumprod(1 + rate + rng.normal(0, 0.001, 2000))
+    assert curve_stats(curve).sharpe > 3
+    assert abs(curve_stats(curve, 6.5).sharpe) < 0.5

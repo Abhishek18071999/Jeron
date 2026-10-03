@@ -2,6 +2,7 @@
 
 One pass over the sessions. Each day, in this order:
 
+0. Idle cash earns a liquid-fund rate for the calendar days since the last session.
 1. Open: yesterday's orders try to fill. A buy fills at the open if the open is
    within the entry zone (at or below the signal close + 0.5 x ATR), or at the top of
    the zone if the day trades down to it; it is skipped if the stock opens below the
@@ -15,7 +16,8 @@ One pass over the sessions. Each day, in this order:
 3. Close: stop to breakeven once a close is +1R; after T1, the rest trails at
    2 x ATR(14) below the highest close and is sold at the next open after a close
    below the trail; the tier's time stop sells at the next open if +1R hasn't been
-   reached. Dividends are paid on ex-dates. Equity is marked to the close.
+   reached. Equity is marked to the close. A position held into an ex-date gets
+   the dividend, even if it is sold that day.
 4. New entries from today's signals, sized by the risk rules, become orders for
    tomorrow.
 
@@ -56,6 +58,8 @@ class PortfolioRules:
     trail_atr: float = 2.0
     min_stop_atr: float = 1.0
     min_reward_risk_t2: float = 2.0
+    # Idle cash sits in a liquid fund: a yearly rate, accrued per calendar day.
+    cash_rate_pct: float = 6.5
 
 
 @dataclass(frozen=True)
@@ -166,6 +170,7 @@ class SimResult:
     skipped: list[Skip]
     brake_events: list[tuple[int, str]]
     dividends: list[tuple[int, float]]
+    interest: list[tuple[int, float]] = field(default_factory=list)
 
 
 def _locked(m: Market, s: int, t: int, prev_close: float, down: bool) -> bool:
@@ -204,6 +209,8 @@ def simulate(
     skipped: list[Skip] = []
     brakes: list[tuple[int, str]] = []
     dividends: list[tuple[int, float]] = []
+    interest: list[tuple[int, float]] = []
+    daily_rate = (1 + rules.cash_rate_pct / 100) ** (1 / 365) - 1
     equity = np.zeros(end - start + 1)
     last_close = np.full(len(m.symbols), math.nan)
     if start > 0:
@@ -233,6 +240,13 @@ def simulate(
         return active
 
     for t in range(start, end + 1):
+        # 0. Interest on the cash held since the last session.
+        if t > start and cash > 0 and daily_rate:
+            gap = (m.days[t] - m.days[t - 1]).days
+            earned = cash * ((1 + daily_rate) ** gap - 1)
+            cash += earned
+            interest.append((t, earned))
+
         # 1. Orders from yesterday's signals.
         for order in orders:
             s = order.s
@@ -308,6 +322,12 @@ def simulate(
                 else:
                     still_open.append(trade)
                 continue
+            if m.dividend[s, t] > 0 and trade.entry_day < t:
+                # Held into the ex-date, so the dividend is ours even if we sell today.
+                amount = m.dividend[s, t] * trade.remaining
+                trade.dividends += amount
+                cash += amount
+                dividends.append((t, amount))
             o, h, lo, c = m.open[s, t], m.high[s, t], m.low[s, t], m.close[s, t]
             locked_down = _locked(m, s, t, last_close[s], down=True)
             if trade.pending_exit and trade.entry_day < t:
@@ -362,11 +382,6 @@ def simulate(
                 and trade.sessions >= tier_rules.time_stop_sessions
             ):
                 trade.pending_exit = f"time stop ({tier_rules.time_stop_sessions} sessions)"
-            if m.dividend[s, t] > 0:
-                amount = m.dividend[s, t] * trade.remaining
-                trade.dividends += amount
-                cash += amount
-                dividends.append((t, amount))
             last_close[s] = c
             still_open.append(trade)
         open_trades = still_open
@@ -471,4 +486,4 @@ def simulate(
         sell(trade, end, last_close[trade.s], trade.remaining, "open at the end (marked at close)")
         done.append(trade)
     done.sort(key=lambda tr: (tr.entry_day, tr.symbol))
-    return SimResult(start, end, equity, done, skipped, brakes, dividends)
+    return SimResult(start, end, equity, done, skipped, brakes, dividends, interest)

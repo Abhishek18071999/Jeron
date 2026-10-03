@@ -196,9 +196,10 @@ export type BacktestRunSummary = {
 
 export type TaxView = {
   pre_tax_pnl: number;
+  interest?: number; // engine-v2 onwards: idle cash at a liquid-fund rate
   estimated_tax: number;
   post_tax_pnl: number;
-  years: { fy: string; stcg: number; ltcg: number; dividends: number; tax: number; loss_carried: number }[];
+  years: { fy: string; stcg: number; ltcg: number; dividends: number; interest?: number; tax: number; loss_carried: number }[];
 };
 
 export type BacktestSummary = {

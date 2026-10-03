@@ -2,21 +2,25 @@
 
 Every scenario starts from a signal on day 0: close 100, ATR 2, stop 2 x ATR = 96,
 entry zone up to 101. Capital ₹10,00,000 at 1% risk sizes 10,000 / (101 - 96) = 2,000
-shares, capped at 20% of capital: floor(2,00,000 / 101) = 1,980 shares.
+shares, capped at 20% of capital: floor(2,00,000 / 101) = 1,980 shares. Idle cash
+earns nothing in these scenarios unless a test says otherwise.
 """
+
+from datetime import date
 
 import pytest
 
 from app.backtest.costs import CostModel
 from app.backtest.engine import PortfolioRules, simulate
 from app.backtest.strategies import Tier
-from tests.backtest_helpers import NO_COSTS, one_stock_market, signal_on
+from tests.backtest_helpers import NO_COSTS, one_stock_market, signal_on, weekdays
 
 SIGNAL = (100.0, 100.5, 99.5, 100.0)
 FLAT = (101.0, 101.5, 99.5, 101.0)
+NO_INTEREST = PortfolioRules(cash_rate_pct=0.0)
 
 
-def run(bars, costs=NO_COSTS, tier=Tier.SWING, rules=None, **market_kw):
+def run(bars, costs=NO_COSTS, tier=Tier.SWING, rules=NO_INTEREST, **market_kw):
     m = one_stock_market(bars, **market_kw)
     return simulate(m, tier, [(0, signal_on(m, 0))], 0, len(bars) - 1, rules, costs)
 
@@ -163,3 +167,31 @@ def test_drawdown_pause_blocks_new_entries():
     result = simulate(m, Tier.SWING, [(0, signal_on(m, 0, 3))], 0, 5, rules, NO_COSTS)
     assert len(result.trades) == 1
     assert result.brake_events and "paused" in result.brake_events[0][1]
+
+
+def test_dividend_is_paid_even_when_the_ex_date_gap_hits_the_stop():
+    """A huge special dividend: the price falls by the dividend on the ex-date and
+    the stop sells at the open, but the dividend is still paid."""
+    bars = [SIGNAL, (100.0, 101.0, 99.0, 100.0), (40.0, 41.0, 39.0, 40.0), FLAT]
+    m = one_stock_market(bars)
+    m.dividend[0, 2] = 60.0
+    result = simulate(m, Tier.SWING, [(0, signal_on(m, 0))], 0, 3, None, NO_COSTS)
+    (trade,) = result.trades
+    assert (trade.exit_day, trade.exit_price) == (2, 40.0)
+    assert trade.dividends == pytest.approx(60.0 * 1980)
+    assert trade.net_pnl == pytest.approx((40 - 100) * 1980 + 60 * 1980)
+
+
+def test_idle_cash_earns_the_liquid_fund_rate_per_calendar_day():
+    bars = [FLAT] * 10
+    m = one_stock_market(bars)
+    result = simulate(m, Tier.SWING, [], 0, len(bars) - 1, None, NO_COSTS)
+    # Ten weekdays from Monday 1 January 2024: 11 calendar days, one weekend.
+    assert m.days == weekdays(date(2024, 1, 1), 10)
+    elapsed = (m.days[-1] - m.days[0]).days
+    assert elapsed == 11
+    assert result.equity[-1] == pytest.approx(1_000_000 * 1.065 ** (elapsed / 365))
+    assert sum(a for _, a in result.interest) == pytest.approx(result.equity[-1] - 1_000_000)
+    # Over a Friday-to-Monday gap, three days' interest.
+    friday_to_monday = result.equity[5] / result.equity[4]
+    assert friday_to_monday == pytest.approx(1.065 ** (3 / 365))

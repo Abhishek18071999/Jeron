@@ -78,7 +78,7 @@ class CurveStats:
     total_return: float
     cagr: float
     max_drawdown_pct: float
-    sharpe: float  # annualised, daily returns, no risk-free rate
+    sharpe: float  # annualised, daily returns above the risk-free (cash) rate
     volatility: float  # annualised
     sessions: int
 
@@ -99,7 +99,15 @@ def drawdown_series(curve: Array) -> Array:
     return np.asarray((1 - curve / peaks) * 100)
 
 
-def curve_stats(curve: Array) -> CurveStats:
+def daily_rate(rate_pct: float) -> float:
+    """A yearly rate as a per-session rate."""
+    return float((1 + rate_pct / 100) ** (1 / SESSIONS_PER_YEAR) - 1)
+
+
+def curve_stats(curve: Array, risk_free_pct: float = 0.0) -> CurveStats:
+    """Return and risk of an equity curve. The Sharpe ratio is of returns above
+    `risk_free_pct` a year, the rate idle cash earns, so a curve that is mostly cash
+    gets no credit for the cash's return."""
     curve = np.asarray(curve, dtype=float)
     n = len(curve)
     if n == 0 or curve[0] <= 0:
@@ -116,7 +124,9 @@ def curve_stats(curve: Array) -> CurveStats:
         total_return=float(total),
         cagr=float(cagr),
         max_drawdown_pct=float(np.max(drawdown_series(curve))),
-        sharpe=mean / sd * math.sqrt(SESSIONS_PER_YEAR) if sd > 0 else 0.0,
+        sharpe=(mean - daily_rate(risk_free_pct)) / sd * math.sqrt(SESSIONS_PER_YEAR)
+        if sd > 0
+        else 0.0,
         volatility=sd * math.sqrt(SESSIONS_PER_YEAR),
         sessions=n,
     )
@@ -180,8 +190,8 @@ def deflated_sharpe(returns: Array, trial_sharpes: Sequence[float]) -> float:
     return NormalDist().cdf((sr - sr0) * math.sqrt(t - 1) / math.sqrt(denom))
 
 
-def per_period_sharpe(curve: Array) -> float:
-    r = daily_returns(curve)
+def per_period_sharpe(curve: Array, risk_free_pct: float = 0.0) -> float:
+    r = daily_returns(curve) - daily_rate(risk_free_pct)
     if len(r) < 2:
         return 0.0
     sd = float(np.std(r, ddof=1))
