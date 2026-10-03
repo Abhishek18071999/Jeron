@@ -203,3 +203,14 @@ def test_breakout_reasons():
         "Above its 200-day EMA (₹90.00): long-term uptrend",
     ]
     assert not signal.research_only
+
+
+def test_next_session_without_the_years_holidays():
+    from app.calendar.nse import CalendarEntry, TradingCalendar
+    from app.paper.job import next_session
+
+    calendar = TradingCalendar([CalendarEntry(date(2025, 1, 26), "holiday", "Republic Day", True)])
+    assert next_session(calendar, date(2025, 1, 24)) == (date(2025, 1, 27), None)
+    day, note = next_session(calendar, date(2026, 10, 1))
+    assert day == date(2026, 10, 2)
+    assert note is not None and "2026 holiday list" in note

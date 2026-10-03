@@ -154,14 +154,19 @@ def open_account(
     return account
 
 
-def _next_session(calendar: TradingCalendar, day: date) -> date:
+def next_session(calendar: TradingCalendar, day: date) -> tuple[date, str | None]:
+    """The session after `day`, and a note when the holiday list doesn't cover it
+    (then the next weekday is assumed)."""
     try:
-        return calendar.next_trading_day(day)
+        return calendar.next_trading_day(day), None
     except UnknownCalendarYearError:
         nxt = day + timedelta(days=1)
         while nxt.weekday() >= 5:
             nxt += timedelta(days=1)
-        return nxt
+        return nxt, (
+            f"NSE's {nxt.year} holiday list isn't in the calendar, so the entry zone is dated "
+            f"the next weekday ({nxt}); if that is a holiday, it holds for the next session."
+        )
 
 
 def _raw(m: Market, s: int, t: int, value: float) -> Decimal:
@@ -293,6 +298,7 @@ def update_account(
         if key in recorded:
             continue
         signal_date = key[0]
+        valid_until, calendar_note = next_session(calendar, signal_date)
         ctx = SignalContext(
             strategy=strategy,
             params=params,
@@ -301,8 +307,8 @@ def update_account(
             backtest=stats,
             research_only=not account.live_eligible,
             created_at=now,
-            next_session=_next_session(calendar, signal_date),
-            notes=notes_for.get(id(order), []),
+            next_session=valid_until,
+            notes=notes_for.get(id(order), []) + ([calendar_note] if calendar_note else []),
         )
         try:
             signal = build_signal(m, order, ctx)
