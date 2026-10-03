@@ -8,7 +8,9 @@ python -m app.cli scan                          # the daily scan for the newest 
 python -m app.cli asm-import asm.csv            # load NSE's ASM list (saved from nseindia.com)
 python -m app.cli backtest                      # walk-forward test of every strategy
 python -m app.cli paper                         # signals and paper trades for the newest scan
-python -m app.cli daily                         # everything since the last run, scan, paper
+python -m app.cli alerts                        # send the newest day's signals and summary
+python -m app.cli telegram --setup              # find your chat id after messaging the bot
+python -m app.cli daily                         # update, scan, paper-trade, send alerts
 python -m app.cli holidays --year 2025          # holidays as NSE's files show them
 """
 
@@ -20,6 +22,8 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from app.alerts.channels import AlertError, TelegramChannel
+from app.alerts.job import NOT_SET_UP, run_alerts, send_test
 from app.backtest.job import run_backtests
 from app.backtest.strategies import STRATEGIES
 from app.calendar.nse import TradingCalendar
@@ -118,9 +122,20 @@ def main(argv: list[str] | None = None) -> int:
         help="close the active accounts and open new ones from this day",
     )
 
+    p = sub.add_parser("alerts", help="send due signal alerts and the daily summary")
+    p.add_argument("--date", type=_date, help="day to send for (default: newest scan)")
+
+    p = sub.add_parser("telegram", help="set up or test Telegram alerts")
+    group = p.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--setup", action="store_true", help="list chats that messaged the bot (your chat id)"
+    )
+    group.add_argument("--test", action="store_true", help="send a test message")
+
     sub.add_parser(
         "daily",
-        help="update everything since the last run, scan, paper-trade (run after 7 pm IST)",
+        help="update everything since the last run, scan, paper-trade, send alerts "
+        "(run after 7 pm IST)",
     )
 
     p = sub.add_parser(
@@ -212,6 +227,38 @@ def main(argv: list[str] | None = None) -> int:
             paper = run_paper(session, args.date, args.strategy, restart=args.restart, log=_log)
             return 0 if paper.status == "ok" else 1
 
+        if args.command == "alerts":
+            sent = run_alerts(session, args.date, log=_log)
+            return 0 if sent.status == "ok" and not sent.failed else 1
+
+        if args.command == "telegram":
+            settings = get_settings()
+            if args.setup:
+                if not settings.telegram_bot_token:
+                    _log("Set JERON_TELEGRAM_BOT_TOKEN in .env first (from @BotFather).")
+                    return 1
+                try:
+                    chats = TelegramChannel(settings.telegram_bot_token, "").chats()
+                except AlertError as e:
+                    _log(f"Telegram: {e}")
+                    return 1
+                if not chats:
+                    _log("No messages yet: send your bot any message in Telegram, then rerun.")
+                    return 1
+                for chat_id, name in chats:
+                    _log(f"chat id {chat_id} ({name}): set JERON_TELEGRAM_CHAT_ID={chat_id}")
+                return 0
+            alert = send_test(session)
+            if alert is None:
+                _log(NOT_SET_UP)
+                return 1
+            _log(
+                f"Test message sent by {alert.channel}."
+                if alert.status == "sent"
+                else f"Test message failed: {alert.error}"
+            )
+            return 0 if alert.status == "sent" else 1
+
         if args.command == "daily":
             report = pipeline.daily_update(session, _archive(), _yahoo(), calendar, today, log=_log)
             if report is None:
@@ -220,10 +267,12 @@ def main(argv: list[str] | None = None) -> int:
             for reason in report.reasons:
                 _log(f"  - {reason}")
             outcome = run_scan(session, report.trade_date, log=_log)
-            if report.status == QualityStatus.FAIL or outcome.status != "ok":
-                return 1
-            paper = run_paper(session, report.trade_date, log=_log)
-            return 0 if paper.status == "ok" else 1
+            ok = report.status != QualityStatus.FAIL and outcome.status == "ok"
+            if ok:
+                ok = run_paper(session, report.trade_date, log=_log).status == "ok"
+            # The summary goes out even when the day was blocked, saying why.
+            sent = run_alerts(session, report.trade_date, log=_log)
+            return 0 if ok and not sent.failed else 1
 
         if args.command == "holidays":
             start, end = date(args.year, 1, 1), date(args.year, 12, 31)

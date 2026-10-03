@@ -441,3 +441,67 @@ class PaperDay(Base):
     drawdown_pct: Mapped[Decimal] = mapped_column(Numeric(8, 3))
     heat_pct: Mapped[Decimal] = mapped_column(Numeric(8, 3))
     open_positions: Mapped[int] = mapped_column(Integer)
+
+
+class Alert(Base):
+    """A message sent (or tried) to me: one per key, so a re-run never sends twice.
+    Keys: "signal:<signal_id>", "digest:<date>", "test:<timestamp>"."""
+
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True)
+    kind: Mapped[str] = mapped_column(String(16))  # "signal" / "digest" / "test"
+    trade_date: Mapped[date | None] = mapped_column(Date, index=True)
+    signal_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(16))  # "sent" / "failed"
+    # The channel that delivered it ("telegram" / "email"), or the last one tried.
+    channel: Mapped[str | None] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(String)
+    error: Mapped[str | None] = mapped_column(String)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class JournalEntry(Base):
+    """What I did with a signal (spec section 8), or a trade I took without one. Every
+    signal without an entry counts as pending."""
+
+    __tablename__ = "journal_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Null for a trade taken without a signal.
+    signal_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("signals.signal_id"), unique=True
+    )
+    ticker: Mapped[str] = mapped_column(String(32), index=True)
+    strategy_key: Mapped[str | None] = mapped_column(String(64))
+    decision: Mapped[str] = mapped_column(String(16))  # "taken" / "skipped" / "modified"
+    reason: Mapped[str] = mapped_column(String, default="")
+    # My stop, when it differs from the signal's (raw rupees); R is measured against it.
+    stop: Mapped[Decimal | None] = mapped_column(Price)
+    followed_plan: Mapped[bool | None] = mapped_column(Boolean)
+    notes: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class JournalFill(Base):
+    """One buy or sell I made for a journal entry (raw rupees per share)."""
+
+    __tablename__ = "journal_fills"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entry_id: Mapped[int] = mapped_column(
+        ForeignKey("journal_entries.id", ondelete="CASCADE"), index=True
+    )
+    trade_date: Mapped[date] = mapped_column(Date)
+    side: Mapped[str] = mapped_column(String(4))  # "buy" / "sell"
+    shares: Mapped[int] = mapped_column(Integer)
+    price: Mapped[Decimal] = mapped_column(Price)
+    # Brokerage, taxes and fees for this fill, in rupees.
+    charges: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal(0))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

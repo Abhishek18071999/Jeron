@@ -363,3 +363,27 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         security_list_known=security_list_known,
         exclusions=exclusions,
     )
+
+
+@dataclass(frozen=True)
+class MarketState:
+    """The market regime on a day, as the backtests and paper trading see it."""
+
+    day: date
+    regime: Regime
+    # Spec section 3's regime filter is on: risk per trade is halved.
+    risk_off: bool
+
+
+def market_state(
+    days: Sequence[date],
+    nifty500: Mapping[date, float],
+    nifty50: Mapping[date, float],
+    vix: Mapping[date, float],
+) -> MarketState | None:
+    """The regime on the last of `days` (oldest first), from index closes."""
+    if not days:
+        return None
+    regime = _regimes(_index_series(days, nifty500))[-1]
+    risk_off = _risk_off(_index_series(days, nifty50), _index_series(days, vix))[-1]
+    return MarketState(days[-1], regime, bool(risk_off))
