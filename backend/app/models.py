@@ -240,6 +240,22 @@ class BoardMeeting(Base):
     source: Mapped[str] = mapped_column(String(32))
 
 
+class Announcement(Base):
+    """A company announcement from NSE's PR bundle (the `an` file), on the day NSE listed
+    it. Rows are added, never changed."""
+
+    __tablename__ = "announcements"
+    __table_args__ = (UniqueConstraint("symbol", "day", "digest"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    subject: Mapped[str | None] = mapped_column(String(200))
+    text: Mapped[str] = mapped_column(String(2000))
+    digest: Mapped[str] = mapped_column(String(32))
+    source: Mapped[str] = mapped_column(String(32))
+
+
 class SymbolChange(Base):
     """NSE symbol renames, used to join a company's history across its symbols."""
 

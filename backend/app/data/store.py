@@ -12,7 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.data import events, search
+from app.data import events, news, search
 from app.data.crosscheck import Neighbours
 from app.data.nse_lists import (
     IndexClose,
@@ -22,6 +22,7 @@ from app.data.nse_lists import (
 )
 from app.data.provider import Bar, CorporateActionRecord, InstrumentRecord
 from app.enums import Exchange
+from app.models import Announcement as AnnouncementRow
 from app.models import BoardMeeting as BoardMeetingRow
 from app.models import (
     CorporateAction,
@@ -772,6 +773,31 @@ def results_dates(
         for symbol, day, purpose, description, announced in session.execute(query)
     ]
     return events.results_dates(meetings)
+
+
+def save_announcements(session: Session, items: Sequence[news.Announcement], source: str) -> int:
+    """Store announcements not stored yet. Returns how many were new."""
+    new = 0
+    rows = [
+        {
+            "symbol": a.symbol[:32],
+            "day": a.day,
+            "subject": a.subject[:200] if a.subject else None,
+            "text": a.text,
+            "digest": a.digest,
+            "source": source,
+        }
+        for a in items
+    ]
+    for start in range(0, len(rows), _CHUNK):
+        result = session.execute(
+            pg_insert(AnnouncementRow)
+            .values(rows[start : start + _CHUNK])
+            .on_conflict_do_nothing()
+            .returning(AnnouncementRow.id)
+        )
+        new += len(result.all())
+    return new
 
 
 def board_meetings_loaded(session: Session) -> bool:

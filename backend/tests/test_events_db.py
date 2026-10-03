@@ -11,7 +11,7 @@ from app.data import pipeline, store
 from app.data.events import BoardMeeting, ResultsDate
 from app.data.http import FetchError
 from app.enums import Exchange
-from app.models import Instrument, SignalRecord, SymbolChange
+from app.models import Announcement, Instrument, SignalRecord, SymbolChange
 from tests.conftest import requires_db
 from tests.test_alerts_db import _signal_day
 from tests.test_alerts_db import empty_session as empty_session  # noqa: F401 - the fixture
@@ -71,7 +71,7 @@ def test_board_meetings_from_pr_bundles(empty_session):
     s = empty_session
     archive = FakeArchive({date(2025, 10, 2): _pr_zip(BM)})
     calendar = TradingCalendar.default()
-    new, missing = pipeline.board_meetings_range(
+    new, _, missing = pipeline.board_meetings_range(
         s, archive, calendar, date(2025, 10, 1), date(2025, 10, 3), date(2025, 10, 10)
     )
     assert new == 2 and missing == [date(2025, 10, 3)]
@@ -79,7 +79,7 @@ def test_board_meetings_from_pr_bundles(empty_session):
         "AAA": [ResultsDate(date(2025, 10, 14), date(2025, 10, 2))]
     }
     assert store.board_meetings_updated(s, pipeline.BOARD_MEETINGS_SOURCE) == date(2025, 10, 2)
-    again, _ = pipeline.board_meetings_range(
+    again, _, _ = pipeline.board_meetings_range(
         s, archive, calendar, date(2025, 10, 2), date(2025, 10, 2), date(2025, 10, 10)
     )
     assert again == 0
@@ -101,3 +101,25 @@ def test_signals_name_the_next_results_date(session):
     assert payloads
     for p in payloads:
         assert f"Results board meeting on {meeting_day:%d %b %Y}" in p["event_risk"]
+
+
+AN = """COMPANY NAME    SYMBOL    : ANNOUNCEMENTS
+Alpha Limited AAA : Credit Rating AAA : Alpha Limited has informed the Exchange about Credit Rating
+Alpha Limited AAA : Trading Window AAA : Alpha Limited informed the Exchange about Trading Window
+"""
+
+
+def test_announcements_from_pr_bundles(empty_session):
+    s = empty_session
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("Bm021025.txt", BM)
+        zf.writestr("An021025.txt", AN)
+    archive = FakeArchive({date(2025, 10, 2): buffer.getvalue()})
+    calendar = TradingCalendar.default()
+    _, items, _ = pipeline.board_meetings_range(
+        s, archive, calendar, date(2025, 10, 2), date(2025, 10, 2), date(2025, 10, 10)
+    )
+    assert items == 1  # the trading-window notice is routine
+    (row,) = s.scalars(select(Announcement)).all()
+    assert (row.symbol, row.day, row.subject) == ("AAA", date(2025, 10, 2), "Credit Rating")

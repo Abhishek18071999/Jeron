@@ -16,7 +16,8 @@ are part of done, never commit secrets.
     source), `adjust.py` (corporate-action factors), `crosscheck.py`, `quality.py`,
     `search.py` (stock search: names, initials, old symbols, short names in
     `stock_aliases.csv`), `events.py` (board meetings from the PR bundle's `bm` file,
-    results blackout, event risk), `store.py` (database access), `pipeline.py` (jobs). Pure modules have no database
+    results blackout, event risk), `news.py` (company announcements from the `an` file),
+    `store.py` (database access), `pipeline.py` (jobs). Pure modules have no database
     imports; domain enums live in `app/enums.py` for that reason.
   - `app/indicators.py` indicators (pure functions, checked against TA-Lib in
     `tests/test_indicators_reference.py`; TA-Lib is a dev dependency only).
@@ -46,8 +47,8 @@ are part of done, never commit secrets.
     company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
     `asm-import`, `daily`, `holidays`, `backtest`, `paper`, `alerts`, `telegram`,
-    `events` (board-meeting history from the PR bundles), `events-import` (a CSV saved
-    from nseindia.com).
+    `events` (board-meeting and announcement history from the PR bundles),
+    `events-import` (a board-meeting CSV saved from nseindia.com).
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the

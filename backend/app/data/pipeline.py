@@ -27,6 +27,7 @@ from app.data import store
 from app.data.crosscheck import CloseComparison, compare_closes, compare_share_actions
 from app.data.events import parse_pr_board_meetings
 from app.data.http import FetchError, NotPublishedError
+from app.data.news import parse_pr_announcements
 from app.data.nse import (
     BhavcopyError,
     NseArchive,
@@ -187,6 +188,7 @@ def ingest_day(session: Session, archive: NseArchive, day: date, today: date) ->
             # Board meetings are extra: the day's prices and actions stand without them.
             with contextlib.suppress(zipfile.BadZipFile, ValueError):
                 save_pr_board_meetings(session, pr, day)
+                save_pr_announcements(session, pr, day)
     return IngestResult(day, "ok", len(parsed.bars), actions)
 
 
@@ -557,7 +559,20 @@ def daily_update(
 # Board meetings from the PR bundle's `bm` file: each day's file lists the meetings
 # intimated that day, so the dates are point-in-time back to 2016.
 BOARD_MEETINGS_SOURCE = "nse_pr_bm"
+ANNOUNCEMENTS_SOURCE = "nse_pr_an"
 BOARD_MEETINGS_IMPORT = "nse_board_meetings_import"
+
+
+def save_pr_announcements(session: Session, pr: bytes, day: date) -> int | None:
+    """Store the company announcements in one day's PR bundle. Returns how many were
+    new, or None if the bundle has no announcements file."""
+    text = pr_member(pr, "an")
+    if text is None:
+        return None
+    items = parse_pr_announcements(text, day)
+    new = store.save_announcements(session, items, ANNOUNCEMENTS_SOURCE)
+    store.record_source_file(session, ANNOUNCEMENTS_SOURCE, day, "ok", rows=len(items))
+    return new
 
 
 def save_pr_board_meetings(session: Session, pr: bytes, day: date) -> int | None:
@@ -580,10 +595,11 @@ def board_meetings_range(
     end: date,
     today: date,
     log: Callable[[str], None] = _quiet,
-) -> tuple[int, list[date]]:
-    """Board meetings from the PR bundles of `start` to `end` (downloaded ones are read
-    from the cache). Returns (new meetings, days whose bundle couldn't be read)."""
-    new = 0
+) -> tuple[int, int, list[date]]:
+    """Board meetings and announcements from the PR bundles of `start` to `end`
+    (downloaded ones are read from the cache). Returns (new meetings, new announcements,
+    days whose bundle couldn't be read)."""
+    new = news_new = 0
     missing: list[date] = []
     for day in _candidate_days(start, end, calendar):
         try:
@@ -595,6 +611,7 @@ def board_meetings_range(
             continue
         try:
             added = save_pr_board_meetings(session, pr, day)
+            news_new += save_pr_announcements(session, pr, day) or 0
         except (zipfile.BadZipFile, ValueError) as exc:
             log(f"  {day}: board meetings unreadable ({exc})")
             missing.append(day)
@@ -602,5 +619,5 @@ def board_meetings_range(
         session.commit()
         new += added or 0
         if day.day == 1 or day == end:
-            log(f"  up to {day}: {new} new meetings")
-    return new, missing
+            log(f"  up to {day}: {new} new meetings, {news_new} new announcements")
+    return new, news_new, missing

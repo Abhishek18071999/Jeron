@@ -143,9 +143,11 @@ def main(argv: list[str] | None = None) -> int:
         "(run after 7 pm IST)",
     )
 
-    p = sub.add_parser("events", help="download board meetings (results dates) from nseindia.com")
-    p.add_argument("--start", type=_date, help="first meeting date (default: 7 days ago)")
-    p.add_argument("--end", type=_date, help="last meeting date (default: 90 days ahead)")
+    p = sub.add_parser(
+        "events", help="board meetings and announcements from NSE's daily files, for history"
+    )
+    p.add_argument("--start", type=_date, required=True)
+    p.add_argument("--end", type=_date)
 
     p = sub.add_parser(
         "events-import", help="load board meetings from a CSV saved from NSE's website"
@@ -235,11 +237,11 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "events":
             end = args.end or today
-            _log(f"Board meetings from NSE's daily files, {args.start} to {end}:")
-            stored, unread = pipeline.board_meetings_range(
+            _log(f"Board meetings and announcements, {args.start} to {end}:")
+            stored, items, unread = pipeline.board_meetings_range(
                 session, _archive(), calendar, args.start, end, today, log=_log
             )
-            _log(f"Done: {stored} new meetings.")
+            _log(f"Done: {stored} new meetings, {items} new announcements.")
             if unread:
                 _log(f"{len(unread)} days could not be read; run the same command again.")
                 return 1
