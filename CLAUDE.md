@@ -40,7 +40,8 @@ are part of done, never commit secrets.
     are only in the summary unless `JERON_ALERT_RESEARCH_SIGNALS` is on.
   - `app/journal/` the journal: `calc.py` (positions from fills, stats; pure) and
     `service.py` (database). Every signal without an entry is pending.
-  - `app/api/` routes; `dashboard.py` serves `/dashboard`, `/stocks/{symbol}`, `/alerts`.
+  - `app/api/` routes; `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
+    company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
     `asm-import`, `daily`, `holidays`, `backtest`, `paper`, `alerts`, `telegram`.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.

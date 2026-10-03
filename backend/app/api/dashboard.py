@@ -287,6 +287,25 @@ def _r(value: float | None) -> float | None:
     return None if value is None else round(value, 2)
 
 
+class StockMatch(BaseModel):
+    symbol: str
+    name: str | None
+    series: str
+
+
+@router.get("/stocks/search")
+def stock_search(
+    session: SessionDep,
+    q: Annotated[str, Query(min_length=1, max_length=64)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> list[StockMatch]:
+    """Stocks whose symbol or company name matches what is typed, best first."""
+    return [
+        StockMatch(symbol=symbol, name=name, series=series)
+        for symbol, name, series in store.stock_search(session, q, limit)
+    ]
+
+
 @router.get("/stocks/{symbol}")
 def stock(
     symbol: str, session: SessionDep, sessions: Annotated[int, Query(ge=20, le=5000)] = 500
