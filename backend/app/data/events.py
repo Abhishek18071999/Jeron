@@ -90,7 +90,15 @@ def parse_board_meetings(rows: Iterable[Mapping[str, object]]) -> list[BoardMeet
         purpose = _field(row, "bm_purpose", "purpose")
         description = _field(row, "bm_desc", "details", "description")
         announced = _datetime(
-            _field(row, "bm_timestamp", "broadcast date/time", "broadcast date", "intimation date")
+            _field(
+                row,
+                "bm_timestamp",
+                "broadcast date/time",
+                "broadcast date",
+                "intimation date",
+                "date of intimation",
+                "announcement date",
+            )
         )
         meeting = BoardMeeting(symbol, day, purpose, description, announced)
         key = (symbol, day, purpose)
