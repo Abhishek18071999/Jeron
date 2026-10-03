@@ -63,19 +63,7 @@ export default async function Home() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Today{d.as_of ? ` · ${d.as_of}` : ""}</h1>
-        <form action="/stocks" className="flex gap-2">
-          <input
-            name="symbol"
-            placeholder="Stock, e.g. RELIANCE"
-            className="w-48 rounded border border-neutral-300 bg-transparent px-2 py-1 text-sm uppercase dark:border-neutral-700"
-          />
-          <button className="rounded border border-neutral-300 px-3 py-1 text-sm dark:border-neutral-700">
-            Open
-          </button>
-        </form>
-      </div>
+      <h1 className="text-2xl font-semibold">Today{d.as_of ? ` · ${d.as_of}` : ""}</h1>
 
       <RegimeBanner regime={d.regime} />
 

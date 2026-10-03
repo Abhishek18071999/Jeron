@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -455,6 +455,45 @@ def symbol_search(session: Session, query: str, limit: int = 20) -> list[tuple[s
         .limit(limit)
     )
     return [(symbol, series) for symbol, series in rows]
+
+
+def _like(text: str) -> str:
+    """`text` with LIKE's wildcards escaped (backslash is the escape character)."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def stock_search(
+    session: Session, query: str, limit: int = 10
+) -> list[tuple[str, str | None, str]]:
+    """(symbol, company name, series) matching a symbol or a company name, best first:
+    exact symbol, symbol prefix (spaces ignored, so "tata steel" finds TATASTEEL), name
+    prefix, a word in the name starting with it, then anywhere."""
+    words = " ".join(query.split())
+    if not words:
+        return []
+    compact = _like(words.upper().replace(" ", ""))
+    lowered = _like(words.lower())
+    name = func.lower(Instrument.name)
+    rank = case(
+        (Instrument.symbol == words.upper().replace(" ", ""), 0),
+        (Instrument.symbol.like(f"{compact}%", escape="\\"), 1),
+        (name.like(f"{lowered}%", escape="\\"), 2),
+        (name.like(f"% {lowered}%", escape="\\"), 3),
+        else_=4,
+    )
+    rows = session.execute(
+        select(Instrument.symbol, Instrument.name, Instrument.series)
+        .where(
+            Instrument.exchange == Exchange.NSE,
+            or_(
+                Instrument.symbol.like(f"%{compact}%", escape="\\"),
+                name.like(f"%{lowered}%", escape="\\"),
+            ),
+        )
+        .order_by(rank, Instrument.symbol)
+        .limit(limit)
+    )
+    return [(symbol, company, series) for symbol, company, series in rows]
 
 
 # --- Indices, security list, reference lists (M2) -------------------------------------

@@ -15,8 +15,9 @@ from app.alerts.job import run_alerts, send_test
 from app.backtest.job import run_backtests
 from app.config import Settings, get_settings
 from app.db import get_engine
+from app.enums import Exchange
 from app.main import app
-from app.models import Alert, SignalRecord
+from app.models import Alert, Instrument, SignalRecord
 from app.paper.job import run_paper
 from app.signals.build import IST
 from tests.conftest import TEST_DATABASE_URL, requires_db
@@ -201,3 +202,30 @@ def test_dashboard_and_alerts_before_any_data(empty_session):
     assert client.get("/journal").json() == {"entries": [], "pending": [], "stats": []}
     outcome = run_alerts(empty_session, settings=Settings(), channels=[FakeChannel()])
     assert outcome.status == "no_scan"
+
+
+def test_stock_search_by_symbol_or_name(empty_session):
+    for symbol, name in [
+        ("TATASTEEL", "Tata Steel Limited"),
+        ("TATAPOWER", "Tata Power Company Limited"),
+        ("TATASTLBSL", None),
+        ("M&M", "Mahindra & Mahindra Limited"),
+        ("INFY", "Infosys Limited"),
+        ("SAIL", "Steel Authority of India Limited"),
+    ]:
+        empty_session.add(Instrument(exchange=Exchange.NSE, symbol=symbol, name=name))
+    empty_session.commit()
+    client = TestClient(app)
+
+    def search(q):
+        return [m["symbol"] for m in client.get("/stocks/search", params={"q": q}).json()]
+
+    assert search("tata steel") == ["TATASTEEL"]
+    assert search("tata st") == ["TATASTEEL", "TATASTLBSL"]
+    assert search("TATA")[:2] == ["TATAPOWER", "TATASTEEL"]
+    assert search("steel") == ["SAIL", "TATASTEEL"]  # name words, then anywhere
+    assert search("infos") == ["INFY"]
+    assert search("m&m") == ["M&M"]
+    assert search("100%") == [] and search("_") == []
+    first = client.get("/stocks/search", params={"q": "tata steel"}).json()[0]
+    assert first == {"symbol": "TATASTEEL", "name": "Tata Steel Limited", "series": "EQ"}
