@@ -178,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("news-eval", help="compare Claude's labels with your hand labels")
     p.add_argument("file", type=Path)
+    p.add_argument("--model", help="Claude model to test (default: JERON_NEWS_MODEL)")
 
     p = sub.add_parser(
         "holidays", help="print weekday holidays and weekend sessions seen in NSE files"
@@ -370,8 +371,11 @@ def main(argv: list[str] | None = None) -> int:
             if not settings.news_ready:
                 _log("No JERON_ANTHROPIC_API_KEY in .env: Claude can't label the test set.")
                 return 1
-            labeller = ClaudeLabeller(settings.anthropic_api_key, settings.news_model)
+            labeller = ClaudeLabeller(settings.anthropic_api_key, args.model or settings.news_model)
             result = evaluate_test_set(session, args.file, labeller, log=_log)
+            cost = labeller.usage.cost(labeller.name)
+            if cost:
+                _log(f"Labelling the test set with {labeller.name} cost about US${cost:.2f}.")
             for name, acc in (("Claude", result.llm), ("Subject rules", result.rules)):
                 _log(
                     f"{name}: event type right {acc.type_correct}/{acc.count} "
