@@ -1,10 +1,12 @@
 """Board meetings on a real Postgres: storing, renames, the download job, signals."""
 
-import json
+import io
+import zipfile
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 
+from app.calendar.nse import TradingCalendar
 from app.data import pipeline, store
 from app.data.events import BoardMeeting, ResultsDate
 from app.data.http import FetchError
@@ -41,31 +43,46 @@ def test_store_meetings_once_and_follow_renames(empty_session):
     assert store.board_meetings_loaded(s)
 
 
-class FakeSite:
-    def __init__(self, fail_from: date | None = None):
-        self.fail_from = fail_from
-        self.asked: list[tuple[date, date]] = []
+def _pr_zip(bm_text: str) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("Bm021025.txt", bm_text)
+    return buffer.getvalue()
 
-    def board_meetings(self, start, end):
-        self.asked.append((start, end))
-        if self.fail_from and start >= self.fail_from:
+
+class FakeArchive:
+    def __init__(self, bundles):
+        self.bundles = bundles
+
+    def pr_bundle(self, day, today):
+        if day == date(2025, 10, 3):
             raise FetchError("HTTP 403")
-        row = {"bm_symbol": "AAA", "bm_date": f"{start:%d-%b-%Y}", "bm_purpose": RESULTS}
-        return json.dumps([row]).encode()
+        return self.bundles.get(day)
 
 
-def test_download_job_marks_the_calendar_up_to_date(empty_session):
-    s, today = empty_session, date(2026, 10, 3)
-    site = FakeSite(fail_from=date(2026, 11, 1))
-    seen, new, failed = pipeline.fetch_board_meetings(
-        s, site, date(2026, 10, 1), date(2026, 11, 15), today
+BM = """COMPANY NAME    SYMBOL     : BM DATE    : BM PURPOSE
+Alpha Limited AAA : 14-Oct-2025 : Financial Results To consider the results
+for the quarter ended September 30, 2025
+Beta Limited BBB : 20-Oct-2025 : Fund Raising To consider fund raising
+"""
+
+
+def test_board_meetings_from_pr_bundles(empty_session):
+    s = empty_session
+    archive = FakeArchive({date(2025, 10, 2): _pr_zip(BM)})
+    calendar = TradingCalendar.default()
+    new, missing = pipeline.board_meetings_range(
+        s, archive, calendar, date(2025, 10, 1), date(2025, 10, 3), date(2025, 10, 10)
     )
-    assert (seen, new) == (1, 1) and failed == [(date(2026, 11, 1), date(2026, 11, 15))]
-    assert site.asked[0] == (date(2026, 10, 1), date(2026, 10, 31))
-    # Incomplete: not marked as up to date.
-    assert store.board_meetings_updated(s, pipeline.BOARD_MEETINGS_SOURCE) is None
-    pipeline.fetch_board_meetings(s, FakeSite(), date(2026, 10, 1), date(2026, 10, 31), today)
-    assert store.board_meetings_updated(s, pipeline.BOARD_MEETINGS_SOURCE) == today
+    assert new == 2 and missing == [date(2025, 10, 3)]
+    assert store.results_dates(s, ["AAA", "BBB"]) == {
+        "AAA": [ResultsDate(date(2025, 10, 14), date(2025, 10, 2))]
+    }
+    assert store.board_meetings_updated(s, pipeline.BOARD_MEETINGS_SOURCE) == date(2025, 10, 2)
+    again, _ = pipeline.board_meetings_range(
+        s, archive, calendar, date(2025, 10, 2), date(2025, 10, 2), date(2025, 10, 10)
+    )
+    assert again == 0
 
 
 def test_signals_name_the_next_results_date(session):

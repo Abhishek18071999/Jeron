@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 from datetime import date, datetime
 
@@ -9,6 +11,7 @@ from app.data.events import (
     next_results,
     parse_board_meetings,
     parse_board_meetings_json,
+    parse_pr_board_meetings,
     results_dates,
 )
 
@@ -105,3 +108,34 @@ def test_event_risk_lines():
     assert event_risk([], day, updated=day).startswith("No results meeting")
     assert "may be missing" in event_risk([], day, updated=date(2025, 1, 1))
     assert "never" in event_risk([], day, updated=None)
+
+
+PR_BM_2016 = """COMPANY NAME    SYMBOL     : BM DATE    : BM PURPOSE 
+Container Corporation Of India Limited    CONCOR : 15-Nov-2016 : To iResultsinter alia consider
+Bank of Baroda    BANKBARODA : 21-Oct-2016 : Others to consider the issue of Bonds
+1. Any other matter with the permission of the Chair.
+M&M Financial Services Limited    M&MFIN : 21-Oct-2016 : AGM voting results and postal ballot
+"""
+
+
+def test_parse_pr_bundle_board_meetings():
+    meetings = parse_pr_board_meetings(PR_BM_2016, date(2016, 10, 19))
+    by_symbol = {m.symbol: m for m in meetings}
+    assert sorted(by_symbol) == ["BANKBARODA", "CONCOR", "M&MFIN"]
+    assert by_symbol["CONCOR"].is_results and by_symbol["CONCOR"].meeting_date == date(2016, 11, 15)
+    assert not by_symbol["M&MFIN"].is_results
+    assert by_symbol["BANKBARODA"].purpose.endswith("permission of the Chair.")
+    assert by_symbol["BANKBARODA"].announced == datetime(2016, 10, 19, 18)
+
+
+def test_parse_the_website_csv():
+    # NSE's "Download (.csv)": headers carry a trailing space and newline.
+    text = (
+        '"SYMBOL \n","COMPANY NAME \n","PURPOSE \n","DETAILS \n","MEETING DATE \n",'
+        '"ATTACHMENT \n","BROADCAST DATE/TIME \n"\n'
+        '"DMART","Avenue Supermarts Limited","Financial Results","Financial Results",'
+        '"10-Oct-2026","https://example","01-Oct-2026 18:25:14"\n'
+    )
+    (m,) = parse_board_meetings(csv.DictReader(io.StringIO(text)))
+    assert (m.symbol, m.meeting_date, m.is_results) == ("DMART", date(2026, 10, 10), True)
+    assert m.announced == datetime(2026, 10, 1, 18, 25, 14)

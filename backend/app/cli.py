@@ -6,8 +6,8 @@ python -m app.cli quality --start 2016-01-01    # data-quality reports
 python -m app.cli lists --start 2016-01-01      # index closes, bands/GSM, Nifty 500 list
 python -m app.cli scan                          # the daily scan for the newest day
 python -m app.cli asm-import asm.csv            # load NSE's ASM list (saved from nseindia.com)
-python -m app.cli events                        # board meetings (results dates) from nseindia.com
-python -m app.cli events-import meetings.csv    # the same, from a file saved from nseindia.com
+python -m app.cli events --start 2016-01-01     # board meetings (results dates), history
+python -m app.cli events-import meetings.csv    # board meetings saved from nseindia.com
 python -m app.cli backtest                      # walk-forward test of every strategy
 python -m app.cli paper                         # signals and paper trades for the newest scan
 python -m app.cli alerts                        # send the newest day's signals and summary
@@ -36,7 +36,6 @@ from app.data import pipeline, store
 from app.data.events import parse_board_meetings, parse_board_meetings_json
 from app.data.http import Fetcher
 from app.data.nse import NseArchive
-from app.data.nse_site import NseSite
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
@@ -149,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--end", type=_date, help="last meeting date (default: 90 days ahead)")
 
     p = sub.add_parser(
-        "events-import", help="load board meetings from a CSV or JSON saved from NSE's site"
+        "events-import", help="load board meetings from a CSV saved from NSE's website"
     )
     p.add_argument("file", type=Path)
 
@@ -235,19 +234,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "events":
-            start = args.start or today - timedelta(days=7)
-            end = args.end or today + timedelta(days=90)
-            _log(f"Board meetings from {start} to {end}:")
-            site = NseSite(min_interval=get_settings().nse_request_interval)
-            seen, added, missed = pipeline.fetch_board_meetings(
-                session, site, start, end, today, log=_log
+            end = args.end or today
+            _log(f"Board meetings from NSE's daily files, {args.start} to {end}:")
+            stored, unread = pipeline.board_meetings_range(
+                session, _archive(), calendar, args.start, end, today, log=_log
             )
-            _log(f"Done: {seen} meetings, {added} new.")
-            if missed:
-                _log(
-                    f"{len(missed)} months could not be downloaded. Run the same command again; "
-                    "if it keeps failing, save the list from nseindia.com and use events-import."
-                )
+            _log(f"Done: {stored} new meetings.")
+            if unread:
+                _log(f"{len(unread)} days could not be read; run the same command again.")
                 return 1
             return 0
 
@@ -259,10 +253,6 @@ def main(argv: list[str] | None = None) -> int:
                 else parse_board_meetings(csv.DictReader(io.StringIO(content.decode("utf-8-sig"))))
             )
             stored = store.save_board_meetings(session, meetings, pipeline.BOARD_MEETINGS_IMPORT)
-            if meetings and max(m.meeting_date for m in meetings) >= today:
-                store.record_source_file(
-                    session, pipeline.BOARD_MEETINGS_SOURCE, today, "ok", rows=len(meetings)
-                )
             session.commit()
             for_results = sum(m.is_results for m in meetings)
             _log(f"{len(meetings)} meetings read ({for_results} for results), {stored} new.")
@@ -315,12 +305,6 @@ def main(argv: list[str] | None = None) -> int:
             _log(f"{report.trade_date}: data quality {report.status.value.upper()}")
             for reason in report.reasons:
                 _log(f"  - {reason}")
-            # Upcoming results dates, for the blackout and each signal's event risk. A
-            # failure here doesn't stop the day: signals then say what wasn't checked.
-            site = NseSite(min_interval=get_settings().nse_request_interval)
-            _log("Board meetings:")
-            ahead = today - timedelta(days=7), today + timedelta(days=90)
-            pipeline.fetch_board_meetings(session, site, *ahead, today, log=_log)
             outcome = run_scan(session, report.trade_date, log=_log)
             ok = report.status != QualityStatus.FAIL and outcome.status == "ok"
             if ok:

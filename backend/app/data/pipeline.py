@@ -11,7 +11,9 @@ Every job is safe to re-run; each day is committed on its own, so an interrupted
 backfill continues where it stopped.
 """
 
+import contextlib
 import hashlib
+import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -23,7 +25,7 @@ from sqlalchemy.orm import Session
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
 from app.data import store
 from app.data.crosscheck import CloseComparison, compare_closes, compare_share_actions
-from app.data.events import parse_board_meetings_json
+from app.data.events import parse_pr_board_meetings
 from app.data.http import FetchError, NotPublishedError
 from app.data.nse import (
     BhavcopyError,
@@ -32,6 +34,7 @@ from app.data.nse import (
     index_closes_url,
     parse_bhavcopy,
     parse_pr_corporate_actions,
+    pr_member,
     pr_url,
     security_list_url,
 )
@@ -47,7 +50,6 @@ from app.data.nse_lists import (
     parse_security_list,
     parse_symbol_changes,
 )
-from app.data.nse_site import NseSite
 from app.data.quality import STALE_SESSIONS, DayData, QualityReportData, build_report
 from app.data.yahoo import YahooClient
 from app.models import DataQualityReport, SourceFile
@@ -182,6 +184,9 @@ def ingest_day(session: Session, archive: NseArchive, day: date, today: date) ->
                 sha256=hashlib.sha256(pr).hexdigest(),
                 rows=actions,
             )
+            # Board meetings are extra: the day's prices and actions stand without them.
+            with contextlib.suppress(zipfile.BadZipFile, ValueError):
+                save_pr_board_meetings(session, pr, day)
     return IngestResult(day, "ok", len(parsed.bars), actions)
 
 
@@ -549,41 +554,53 @@ def daily_update(
 
 # --- Board meetings (M6) --------------------------------------------------------------
 
-BOARD_MEETINGS_SOURCE = "nse_board_meetings"
+# Board meetings from the PR bundle's `bm` file: each day's file lists the meetings
+# intimated that day, so the dates are point-in-time back to 2016.
+BOARD_MEETINGS_SOURCE = "nse_pr_bm"
 BOARD_MEETINGS_IMPORT = "nse_board_meetings_import"
-# Days of meetings asked for in one request.
-BOARD_MEETINGS_CHUNK_DAYS = 31
 
 
-def fetch_board_meetings(
+def save_pr_board_meetings(session: Session, pr: bytes, day: date) -> int | None:
+    """Store the board meetings in one day's PR bundle. Returns how many were new, or
+    None if the bundle has no board-meeting file."""
+    text = pr_member(pr, "bm")
+    if text is None:
+        return None
+    meetings = parse_pr_board_meetings(text, day)
+    new = store.save_board_meetings(session, meetings, BOARD_MEETINGS_SOURCE)
+    store.record_source_file(session, BOARD_MEETINGS_SOURCE, day, "ok", rows=len(meetings))
+    return new
+
+
+def board_meetings_range(
     session: Session,
-    site: NseSite,
+    archive: NseArchive,
+    calendar: TradingCalendar,
     start: date,
     end: date,
     today: date,
     log: Callable[[str], None] = _quiet,
-) -> tuple[int, int, list[tuple[date, date]]]:
-    """Download board meetings with a meeting date from `start` to `end`, a month at a
-    time. Returns (meetings seen, new ones stored, ranges that failed). A complete
-    download that covers `today` marks the calendar as up to date on `today`."""
-    seen = new = 0
-    failed: list[tuple[date, date]] = []
-    chunk_start = start
-    while chunk_start <= end:
-        chunk_end = min(chunk_start + timedelta(days=BOARD_MEETINGS_CHUNK_DAYS - 1), end)
+) -> tuple[int, list[date]]:
+    """Board meetings from the PR bundles of `start` to `end` (downloaded ones are read
+    from the cache). Returns (new meetings, days whose bundle couldn't be read)."""
+    new = 0
+    missing: list[date] = []
+    for day in _candidate_days(start, end, calendar):
         try:
-            meetings = parse_board_meetings_json(site.board_meetings(chunk_start, chunk_end))
-        except (FetchError, NotPublishedError, ValueError) as exc:
-            log(f"  {chunk_start} to {chunk_end}: not fetched ({exc})")
-            failed.append((chunk_start, chunk_end))
-        else:
-            added = store.save_board_meetings(session, meetings, BOARD_MEETINGS_SOURCE)
-            session.commit()
-            seen += len(meetings)
-            new += added
-            log(f"  {chunk_start} to {chunk_end}: {len(meetings)} meetings, {added} new")
-        chunk_start = chunk_end + timedelta(days=1)
-    if not failed and start <= today <= end:
-        store.record_source_file(session, BOARD_MEETINGS_SOURCE, today, "ok", rows=seen)
+            pr = archive.pr_bundle(day, today)
+        except FetchError:
+            missing.append(day)
+            continue
+        if pr is None:
+            continue
+        try:
+            added = save_pr_board_meetings(session, pr, day)
+        except (zipfile.BadZipFile, ValueError) as exc:
+            log(f"  {day}: board meetings unreadable ({exc})")
+            missing.append(day)
+            continue
         session.commit()
-    return seen, new, failed
+        new += added or 0
+        if day.day == 1 or day == end:
+            log(f"  up to {day}: {new} new meetings")
+    return new, missing

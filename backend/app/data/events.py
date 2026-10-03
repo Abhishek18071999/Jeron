@@ -21,7 +21,17 @@ EVENT_LOOKAHEAD_DAYS = 30
 # Upcoming meetings older than this can't rule out a results date.
 STALE_AFTER_DAYS = 7
 
-_RESULTS = re.compile(r"financial\s+result|quarterly\s+result|audited\s+result", re.I)
+# "Financial Results", and the PR bundle's labels spliced into the text ("To iResultsinter
+# alia consider..."). Board meetings don't vote, so "result" means financial results.
+_RESULTS = re.compile(r"result", re.I)
+_NOT_RESULTS = re.compile(r"voting\s+result|postal\s+ballot", re.I)
+# A board-meeting line in the PR bundle: "<company>  <SYMBOL> : 28-Oct-2016 : <purpose>".
+_BM_LINE = re.compile(
+    r"^(?P<name>.*?)\s+(?P<symbol>[A-Z0-9&_-]+)\s*:\s*(?P<day>\d{1,2}-[A-Za-z]{3}-\d{4})\s*:\s*"
+    r"(?P<purpose>.*)$"
+)
+# The bundle is published after the close: meetings in it are known from that evening.
+PR_PUBLISHED_HOUR = 18
 
 
 @dataclass(frozen=True)
@@ -45,7 +55,33 @@ class ResultsDate:
 
 
 def is_results(purpose: str, description: str = "") -> bool:
-    return bool(_RESULTS.search(f"{purpose} {description}"))
+    text = f"{purpose} {description}"
+    return bool(_RESULTS.search(text)) and not _NOT_RESULTS.search(text)
+
+
+def parse_pr_board_meetings(text: str, day: date) -> list[BoardMeeting]:
+    """Board meetings intimated on `day`, from the PR bundle's `bm` file. A purpose that
+    runs over several lines is joined into one."""
+    rows: list[dict[str, str]] = []
+    for line in text.splitlines()[1:]:
+        line = line.strip()
+        if not line:
+            continue
+        match = _BM_LINE.match(line)
+        if match:
+            rows.append(match.groupdict())
+        elif rows:
+            rows[-1]["purpose"] += " " + line
+    announced = datetime(day.year, day.month, day.day, PR_PUBLISHED_HOUR)
+    meetings: dict[tuple[str, date, str], BoardMeeting] = {}
+    for row in rows:
+        meeting_day = _date(row["day"])
+        if meeting_day is None:
+            continue
+        purpose = " ".join(row["purpose"].split())
+        key = (row["symbol"], meeting_day, purpose[:300])
+        meetings[key] = BoardMeeting(row["symbol"], meeting_day, purpose, purpose, announced)
+    return sorted(meetings.values(), key=lambda m: (m.meeting_date, m.symbol, m.purpose))
 
 
 def _date(text: str) -> date | None:
