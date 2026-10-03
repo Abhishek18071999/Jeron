@@ -27,3 +27,15 @@ Date: 2026-09-30. Status: accepted.
 check and the Yahoo split comparison catch splits and bonuses that slip through.
 When Kite Connect is added (M4–M5) it can replace or join Yahoo as a source through
 the same comparison.
+
+**Amendment (2026-10-03): Yahoo's scaling for later actions.** Yahoo scales its whole
+history for corporate actions its split events don't list (some bonuses, demergers,
+rights issues, ETF unit changes; for example BAJFINANCE's 2025 4:1 bonus), so
+un-scaling with its split events leaves old closes off from NSE's by a constant factor.
+On the full 2016-2026 history that made 1,498 of 2,664 days FAIL quality. Now a close
+that differs from NSE's by the same factor as the stock's median Yahoo/NSE ratio on the
+10 sessions before or after it (at least 3 sessions on that side) counts as scaled, not
+as a mismatch; it is listed in the report with the factor. A wrong close stands out
+from its neighbours and is still a mismatch. A stock whose Yahoo prices are wrong for
+weeks on end would also look scaled; NSE stays the source of truth, so this only
+weakens the second-source check for such a stock, it never changes a price.

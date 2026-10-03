@@ -276,12 +276,30 @@ def _check_crosscheck(day: DayData) -> Check:
             f"the second source had no price for {len(comparison.missing_in_secondary)} "
             f"of {expected} stocks"
         )
+    scaled = comparison.scaled
+    if scaled:
+        items += [
+            {
+                "symbol": d.symbol,
+                "nse_close": str(d.primary),
+                "second_source_close": str(d.secondary),
+                "diff_pct": str(d.diff_pct),
+                "second_source_factor": f"{d.factor:.4f}",
+            }
+            for d in scaled
+        ]
+    scaled_note = (
+        f"{len(scaled)} closes differ only by the factor the second source shows on the "
+        "surrounding sessions (its scaling for a later corporate action), so they count "
+        "as agreeing"
+    )
     if not notes:
-        return Check(
-            "cross_check",
-            QualityStatus.PASS,
-            f"All {comparison.checked} checked closes agree within 0.5%",
-        )
+        message = f"All {comparison.checked} checked closes agree within 0.5%"
+        if scaled:
+            message += f"; {scaled_note}"
+        return Check("cross_check", QualityStatus.PASS, message, items)
+    if scaled:
+        notes.append(scaled_note)
     message = "; ".join(notes)
     return Check("cross_check", status, message[0].upper() + message[1:], items)
 

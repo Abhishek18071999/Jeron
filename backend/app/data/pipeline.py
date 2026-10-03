@@ -287,6 +287,10 @@ def crosscheck_range(
     return unknown
 
 
+# Sessions on each side of a day used to recognise the second source's scaling.
+NEIGHBOUR_SESSIONS = 10
+
+
 def build_day_report(session: Session, calendar: TradingCalendar, day: date) -> QualityReportData:
     nse_file = store.source_file(session, store.NSE_BARS, day)
     try:
@@ -317,6 +321,17 @@ def build_day_report(session: Session, calendar: TradingCalendar, day: date) -> 
         primary = [b for b in bars if b.symbol in checked]
         secondary = store.day_bars(session, store.YAHOO, day, checked)
         comparison = compare_closes(primary, secondary)
+        if comparison.mismatches:
+            # Is the difference Yahoo's scaling for a later corporate action? Compare
+            # with the same stocks' ratios on the surrounding sessions.
+            neighbours = store.close_ratios(
+                session,
+                store.YAHOO,
+                day,
+                {d.symbol for d in comparison.mismatches},
+                NEIGHBOUR_SESSIONS,
+            )
+            comparison = compare_closes(primary, secondary, neighbours=neighbours)
         window = timedelta(days=5)
         disagreements = [
             d

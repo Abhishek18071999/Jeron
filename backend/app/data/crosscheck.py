@@ -1,6 +1,15 @@
-"""Compare two sources of raw daily prices, and two sources of corporate actions."""
+"""Compare two sources of raw daily prices, and two sources of corporate actions.
 
-from collections.abc import Iterable
+Yahoo's history is scaled for later corporate actions, and its list of splits misses
+some of them (bonuses, demergers, rights issues), so an old Yahoo close can differ from
+NSE's raw close by a constant factor for months or years. A close that differs from
+NSE's by the same factor as on the surrounding sessions is such a scaling, not a bad
+price: it is counted as `scaled`, not as a mismatch. A wrong close stands out from its
+neighbours, so it is still a mismatch.
+"""
+
+import statistics
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -9,6 +18,9 @@ from app.data.adjust import SHARE_COUNT_ACTIONS, price_factor
 from app.data.provider import Bar, CorporateActionRecord
 
 CLOSE_TOLERANCE_PCT = Decimal("0.5")
+# Sessions of second-source / NSE close ratios needed on one side of a day to treat a
+# constant factor as Yahoo's scaling.
+MIN_NEIGHBOUR_SESSIONS = 3
 ACTION_DATE_TOLERANCE_DAYS = 3
 ACTION_FACTOR_TOLERANCE = Decimal("0.01")
 
@@ -20,23 +32,55 @@ class CloseDiff:
     primary: Decimal
     secondary: Decimal
     diff_pct: Decimal
+    # For a scaled close: the second source's factor on the neighbouring sessions.
+    factor: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class Neighbours:
+    """A stock's second-source / NSE close ratios on the sessions before and after a
+    day (the day itself excluded)."""
+
+    before: Sequence[Decimal] = ()
+    after: Sequence[Decimal] = ()
 
 
 @dataclass
 class CloseComparison:
     checked: int = 0
     mismatches: list[CloseDiff] = field(default_factory=list)
+    # Closes that differ only by the factor the second source shows on the
+    # surrounding sessions (its scaling for a later corporate action).
+    scaled: list[CloseDiff] = field(default_factory=list)
     # Symbols the primary source has but the secondary doesn't, for that day.
     missing_in_secondary: list[str] = field(default_factory=list)
+
+
+def _scale(neighbours: Neighbours | None, ratio: Decimal, tolerance: Decimal) -> Decimal | None:
+    """The neighbouring sessions' factor that explains `ratio`, if any: a median ratio
+    away from 1 that today's ratio is within the tolerance of."""
+    if neighbours is None:
+        return None
+    for side in (neighbours.before, neighbours.after):
+        if len(side) < MIN_NEIGHBOUR_SESSIONS:
+            continue
+        factor = Decimal(statistics.median(side))
+        if abs(factor - 1) > tolerance and abs(ratio / factor - 1) <= tolerance:
+            return factor
+    return None
 
 
 def compare_closes(
     primary: Iterable[Bar],
     secondary: Iterable[Bar],
     tolerance_pct: Decimal = CLOSE_TOLERANCE_PCT,
+    neighbours: Mapping[str, Neighbours] | None = None,
 ) -> CloseComparison:
-    """Compare closes for the same (symbol, date). Only primary rows are checked."""
+    """Compare closes for the same (symbol, date). Only primary rows are checked.
+    With `neighbours`, a difference that matches the second source's factor on the
+    surrounding sessions is counted as scaled, not as a mismatch."""
     other = {(b.symbol, b.trade_date): b.close for b in secondary}
+    tolerance = tolerance_pct / 100
     result = CloseComparison()
     for bar in primary:
         second = other.get((bar.symbol, bar.trade_date))
@@ -45,10 +89,11 @@ def compare_closes(
             continue
         result.checked += 1
         diff_pct = (abs(second - bar.close) / bar.close * 100).quantize(Decimal("0.01"))
-        if diff_pct > tolerance_pct:
-            result.mismatches.append(
-                CloseDiff(bar.symbol, bar.trade_date, bar.close, second, diff_pct)
-            )
+        if diff_pct <= tolerance_pct:
+            continue
+        factor = _scale((neighbours or {}).get(bar.symbol), second / bar.close, tolerance)
+        diff = CloseDiff(bar.symbol, bar.trade_date, bar.close, second, diff_pct, factor)
+        (result.scaled if factor is not None else result.mismatches).append(diff)
     return result
 
 

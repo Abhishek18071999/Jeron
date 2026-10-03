@@ -115,6 +115,26 @@ def test_cross_check_mismatch_rates():
     )
 
 
+def test_scaled_closes_count_as_agreeing():
+    scaled = CloseComparison(
+        checked=2,
+        scaled=[CloseDiff("A", DAY, Decimal(500), Decimal(100), Decimal("80.00"), Decimal("0.2"))],
+    )
+    check = checks(build_report(clean_day(close_comparison=scaled)))["cross_check"]
+    assert check.status == QualityStatus.PASS
+    assert "1 closes differ only by the factor" in check.message
+    assert check.items[0]["second_source_factor"] == "0.2000"
+    # Scaled closes don't dilute or add to the mismatch rate.
+    many = CloseComparison(
+        checked=10,
+        mismatches=[CloseDiff("B", DAY, Decimal(100), Decimal(101), Decimal("1.00"))],
+        scaled=scaled.scaled,
+    )
+    check = checks(build_report(clean_day(close_comparison=many)))["cross_check"]
+    assert check.status == QualityStatus.FAIL
+    assert "factor" in check.message
+
+
 def test_rejected_and_zero_volume_rows_warn():
     report = build_report(
         clean_day(

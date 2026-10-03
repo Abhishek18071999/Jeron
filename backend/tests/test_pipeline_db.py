@@ -157,6 +157,40 @@ def test_ingest_crosscheck_and_quality(session):
     assert [i["symbol"] for i in last["big_moves"].items] == ["JUMP"]
 
 
+class ScaledYahoo(FakeYahoo):
+    """Yahoo's history scaled by 0.8 for a later corporate action its split list
+    misses (as for a demerger); the bad close on DAYS[2] stays bad."""
+
+    def history(self, symbol, start, end):
+        history = super().history(symbol, start, end)
+        scale = Decimal("0.8")
+        bars = [
+            bar(
+                b.symbol,
+                b.trade_date,
+                *(round(p * scale, 2) for p in (b.open, b.high, b.low, b.close)),
+            )
+            for b in history.bars
+        ]
+        return YahooHistory(symbol, bars, history.actions)
+
+
+@requires_db
+def test_scaled_second_source_is_not_a_mismatch(session):
+    calendar = TradingCalendar.default()
+    pipeline.ingest_range(session, FakeArchive(), calendar, DAYS[0], DAYS[-1], TODAY)
+    pipeline.crosscheck_range(session, ScaledYahoo(), DAYS[0], DAYS[-1])
+    ratios = store.close_ratios(session, store.YAHOO, DAYS[3], ["RELIANCE"], 2)
+    assert len(ratios["RELIANCE"].before) == 2 and len(ratios["RELIANCE"].after) == 2
+    reports = pipeline.quality_range(session, calendar, DAYS[0], DAYS[-1])
+    by_day = {r.trade_date: r for r in reports}
+    for day in (DAYS[0], DAYS[1], DAYS[3], DAYS[4], DAYS[5]):
+        check = {c.name: c for c in by_day[day].checks}["cross_check"]
+        assert check.status == QualityStatus.PASS, (day, check.message)
+        assert "1 closes differ only by the factor" in check.message
+    assert by_day[DAYS[2]].status == QualityStatus.FAIL  # 1% off the 0.8 factor
+
+
 class BadFilesArchive(FakeArchive):
     """DAYS[1] has an unreadable corporate actions file; DAYS[2] blows up."""
 
