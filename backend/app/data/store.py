@@ -10,6 +10,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.data.crosscheck import Neighbours
 from app.data.nse_lists import (
     IndexClose,
     IndexConstituent,
@@ -297,6 +298,57 @@ def recent_closes(
     for symbol, close in rows:
         closes.setdefault(symbol, []).append(close)
     return closes
+
+
+def close_ratios(
+    session: Session, source: str, day: date, symbols: Iterable[str], sessions: int
+) -> dict[str, Neighbours]:
+    """`source` close / NSE close for `symbols` on up to `sessions` NSE trading days
+    before and after `day` (the day itself excluded)."""
+    wanted = list(symbols)
+    if not wanted:
+        return {}
+    before = session.scalars(
+        select(SourceFile.trade_date)
+        .where(SourceFile.source == NSE_BARS, SourceFile.status == "ok")
+        .where(SourceFile.trade_date < day)
+        .order_by(SourceFile.trade_date.desc())
+        .limit(sessions)
+    ).all()
+    after = session.scalars(
+        select(SourceFile.trade_date)
+        .where(SourceFile.source == NSE_BARS, SourceFile.status == "ok")
+        .where(SourceFile.trade_date > day)
+        .order_by(SourceFile.trade_date)
+        .limit(sessions)
+    ).all()
+    days = [*before, *after]
+    if not days:
+        return {}
+    nse = DailyBar.__table__.alias("nse")
+    other = DailyBar.__table__.alias("other")
+    rows = session.execute(
+        select(Instrument.symbol, nse.c.trade_date, nse.c.close, other.c.close)
+        .join(nse, nse.c.instrument_id == Instrument.id)
+        .join(
+            other,
+            (other.c.instrument_id == nse.c.instrument_id)
+            & (other.c.trade_date == nse.c.trade_date),
+        )
+        .where(
+            nse.c.source == NSE_BARS,
+            other.c.source == source,
+            nse.c.trade_date.in_(days),
+            Instrument.symbol.in_(wanted),
+        )
+    )
+    split: dict[str, tuple[list[Decimal], list[Decimal]]] = {}
+    for symbol, trade_date, nse_close, other_close in rows:
+        if not nse_close:
+            continue
+        sides = split.setdefault(symbol, ([], []))
+        sides[0 if trade_date < day else 1].append(other_close / nse_close)
+    return {s: Neighbours(tuple(b), tuple(a)) for s, (b, a) in split.items()}
 
 
 @dataclass(frozen=True)
