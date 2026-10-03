@@ -1,11 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Jeron",
   description: "Personal research and decision support for Indian equities",
+  appleWebApp: { capable: true, title: "Jeron", statusBarStyle: "default" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
 };
+
+export const viewport: Viewport = { themeColor: "#172554" };
 
 export default function RootLayout({
   children,
@@ -16,10 +20,11 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <nav className="border-b border-neutral-200 dark:border-neutral-800">
-          <div className="mx-auto flex max-w-6xl gap-6 px-4 py-3 text-sm">
+          <div className="mx-auto flex max-w-6xl flex-wrap gap-x-6 gap-y-2 px-4 py-3 text-sm">
             <Link href="/" className="font-semibold">
               Jeron
             </Link>
+            <Link href="/journal">Journal</Link>
             <Link href="/scanner">Scanner</Link>
             <Link href="/backtests">Backtests</Link>
             <Link href="/paper">Paper trading</Link>

@@ -423,3 +423,234 @@ export async function getJson<T>(path: string): Promise<ApiResult<T>> {
     return { ok: false, error: "The backend is not reachable" };
   }
 }
+
+// --- Journal, dashboard, stock page and alerts (M5) --------------------------------
+
+export type SignalBrief = {
+  signal_id: string;
+  ticker: string;
+  signal_date: string;
+  strategy_key: string;
+  research_only: boolean;
+  setup_name: string;
+  conviction: number;
+  entry_low: string;
+  entry_high: string;
+  valid_until: string;
+  stop: string;
+  t1: string;
+  t2: string;
+  shares: number;
+  capital_at_risk: string;
+};
+
+export type JournalFill = {
+  id: number;
+  trade_date: string;
+  side: "buy" | "sell";
+  shares: number;
+  price: string;
+  charges: string;
+};
+
+export type JournalPosition = {
+  status: "no fills" | "open" | "closed";
+  bought: number;
+  sold: number;
+  held: number;
+  avg_entry: string | null;
+  avg_exit: string | null;
+  first_date: string | null;
+  last_date: string | null;
+  charges: string;
+  realised_pnl: string;
+  open_pnl: string | null;
+  initial_risk: string | null;
+  r_multiple: string | null;
+};
+
+export type JournalEntry = {
+  id: number;
+  ticker: string;
+  strategy_key: string | null;
+  decision: "taken" | "skipped" | "modified";
+  reason: string;
+  stop: string | null;
+  own_stop: boolean;
+  followed_plan: boolean | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  signal: SignalBrief | null;
+  fills: JournalFill[];
+  last_close: string | null;
+  last_close_date: string | null;
+  position: JournalPosition;
+};
+
+export type JournalStats = {
+  strategy_key: string | null;
+  signals: number;
+  pending: number;
+  taken: number;
+  skipped: number;
+  modified: number;
+  open: number;
+  closed: number;
+  wins: number;
+  win_rate: string | null;
+  avg_r: string | null;
+  profit_factor: string | null;
+  net_pnl: string;
+  avg_holding_days: string | null;
+  followed: number;
+  deviated: number;
+  followed_avg_r: string | null;
+  deviated_avg_r: string | null;
+};
+
+export type JournalView = {
+  entries: JournalEntry[];
+  pending: SignalBrief[];
+  stats: JournalStats[];
+};
+
+export type SignalJournal = {
+  signal: SignalBrief;
+  payload: SignalPayload;
+  entry: JournalEntry | null;
+};
+
+export type AlertRecord = {
+  id: number;
+  key: string;
+  kind: "signal" | "digest" | "test";
+  trade_date: string | null;
+  signal_id: string | null;
+  status: "sent" | "failed";
+  channel: string | null;
+  error: string | null;
+  attempts: number;
+  sent_at: string | null;
+  created_at: string;
+  text: string;
+};
+
+export type Dashboard = {
+  as_of: string | null;
+  quality: QualitySummary | null;
+  scan: {
+    trade_date: string;
+    status: string;
+    universe_size: number;
+    reasons: string[];
+    top: { symbol: string; score: string; close: string }[];
+  } | null;
+  regime: { regime: "bull" | "bear" | "sideways"; rule: string; risk_off: boolean } | null;
+  signals: SignalBrief[];
+  accounts: {
+    id: number;
+    strategy_key: string;
+    stage: "paper" | "research only";
+    equity: string;
+    return_pct: string;
+    open_positions: number;
+    heat_pct: string;
+    drawdown_pct: string;
+  }[];
+  paper_positions: {
+    account_id: number;
+    strategy_key: string;
+    research_only: boolean;
+    ticker: string;
+    entry_date: string;
+    entry_price: string;
+    current_stop: string | null;
+    last_close: string | null;
+    shares_held: number;
+    r_multiple: string;
+    net_pnl: string;
+  }[];
+  journal_positions: JournalEntry[];
+  pending: SignalBrief[];
+  alerts: { telegram: boolean; email: boolean; research_signals: boolean };
+  last_summary: AlertRecord | null;
+};
+
+export type Candle = {
+  time: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: number;
+  factor: string;
+  ema50: number | null;
+  ema200: number | null;
+};
+
+export type StockSignal = {
+  signal: SignalBrief;
+  chart: { entry_low: string; entry_high: string; stop: string; t1: string; t2: string };
+  payload: SignalPayload;
+};
+
+export type StockView = {
+  symbol: string;
+  name: string | null;
+  series: string;
+  sector: string | null;
+  industry: string | null;
+  candles: Candle[];
+  scores: { trade_date: string; score: string; rank: number }[];
+  latest_scan: {
+    trade_date: string;
+    score: string;
+    rank: number;
+    in_nifty500: boolean;
+    components: ScanComponent[];
+    indicators: Record<string, number | null>;
+  } | null;
+  signals: StockSignal[];
+  paper_trades: {
+    account_id: number;
+    strategy_key: string;
+    status: "open" | "closed";
+    entry_date: string;
+    entry_price: string;
+    exit_date: string | null;
+    exit_price: string | null;
+    exit_reason: string | null;
+    r_multiple: string;
+  }[];
+  journal: JournalEntry[];
+};
+
+// Writes go through Next.js server actions, so only the server calls these.
+export async function sendJson<T>(
+  method: "POST" | "PUT" | "DELETE",
+  path: string,
+  body?: unknown,
+): Promise<ApiResult<T>> {
+  try {
+    const res = await fetch(`${apiUrl()}${path}`, {
+      method,
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+      const detail =
+        typeof data?.detail === "string"
+          ? data.detail
+          : Array.isArray(data?.detail)
+            ? data.detail.map((d: { msg?: string }) => d.msg ?? "").join("; ")
+            : `HTTP ${res.status}`;
+      return { ok: false, error: detail };
+    }
+    return { ok: true, data: (await res.json()) as T };
+  } catch {
+    return { ok: false, error: "The backend is not reachable" };
+  }
+}

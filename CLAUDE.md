@@ -34,12 +34,22 @@ are part of done, never commit secrets.
   - `app/paper/job.py` paper trading: one account per strategy version, replayed by the
     engine each day; new orders become signals, stored once and never changed. Signals of
     strategies that failed section 6 are research only. See `docs/decisions/0006`.
+  - `app/alerts/` alerts: `format.py` (signal message, daily summary; pure),
+    `channels.py` (Telegram Bot API, SMTP email backup), `job.py` (what is due; every
+    alert stored once in `alerts`, so re-runs never send twice). Research-only signals
+    are only in the summary unless `JERON_ALERT_RESEARCH_SIGNALS` is on.
+  - `app/journal/` the journal: `calc.py` (positions from fills, stats; pure) and
+    `service.py` (database). Every signal without an entry is pending.
+  - `app/api/` routes; `dashboard.py` serves `/dashboard`, `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
-    `asm-import`, `daily`, `holidays`, `backtest`, `paper`.
+    `asm-import`, `daily`, `holidays`, `backtest`, `paper`, `alerts`, `telegram`.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the
-  backend at `JERON_API_URL`.
+  backend at `JERON_API_URL`; journal writes go through server actions
+  (`src/app/journal/actions.ts`), so the browser never calls the API. The stock chart
+  uses TradingView Lightweight Charts (client component). Installable PWA
+  (`src/app/manifest.ts`).
 
 ## Commands
 
@@ -69,7 +79,8 @@ Everything: `docker compose up --build` from the repo root.
 - Backtests report out-of-sample, after-cost numbers only; `tests/test_backtest_engine.py`
   holds golden trades. Keep them passing when touching the engine.
 - Settings come from env vars prefixed `JERON_` (`app/config.py`), including the risk
-  settings (capital, risk %, position limits, sector cap). Every spec section 5 rule has
+  settings (capital, risk %, position limits, sector cap) and the alert secrets (Telegram
+  token, SMTP password), which live only in `.env`. Every spec section 5 rule has
   a test listed in `tests/test_risk_rules.py`.
 - CI (`.github/workflows/ci.yml`) runs backend checks, web checks, and a Docker Compose
   smoke test. Keep it green.
