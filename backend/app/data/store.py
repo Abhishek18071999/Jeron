@@ -4,12 +4,14 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+from functools import cache
 from typing import Any
 
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.data import search
 from app.data.crosscheck import Neighbours
 from app.data.nse_lists import (
     IndexClose,
@@ -457,43 +459,38 @@ def symbol_search(session: Session, query: str, limit: int = 20) -> list[tuple[s
     return [(symbol, series) for symbol, series in rows]
 
 
-def _like(text: str) -> str:
-    """`text` with LIKE's wildcards escaped (backslash is the escape character)."""
-    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def stock_search(
-    session: Session, query: str, limit: int = 10
-) -> list[tuple[str, str | None, str]]:
-    """(symbol, company name, series) matching a symbol or a company name, best first:
-    exact symbol, symbol prefix (spaces ignored, so "tata steel" finds TATASTEEL), name
-    prefix, a word in the name starting with it, then anywhere."""
-    words = " ".join(query.split())
-    if not words:
-        return []
-    compact = _like(words.upper().replace(" ", ""))
-    lowered = _like(words.lower())
-    name = func.lower(Instrument.name)
-    rank = case(
-        (Instrument.symbol == words.upper().replace(" ", ""), 0),
-        (Instrument.symbol.like(f"{compact}%", escape="\\"), 1),
-        (name.like(f"{lowered}%", escape="\\"), 2),
-        (name.like(f"% {lowered}%", escape="\\"), 3),
-        else_=4,
-    )
-    rows = session.execute(
-        select(Instrument.symbol, Instrument.name, Instrument.series)
-        .where(
-            Instrument.exchange == Exchange.NSE,
-            or_(
-                Instrument.symbol.like(f"%{compact}%", escape="\\"),
-                name.like(f"%{lowered}%", escape="\\"),
-            ),
+def stock_search(session: Session, query: str, limit: int = 10) -> list[search.Match]:
+    """NSE stocks matching a symbol, company name, short name (RIL) or old symbol (ZOMATO),
+    best first; see `app.data.search`."""
+    listings = [
+        search.Listing(symbol, name, series)
+        for symbol, name, series in session.execute(
+            select(Instrument.symbol, Instrument.name, Instrument.series).where(
+                Instrument.exchange == Exchange.NSE
+            )
         )
-        .order_by(rank, Instrument.symbol)
-        .limit(limit)
+    ]
+    renames = search.latest_symbols(
+        (old, new)
+        for old, new in session.execute(
+            select(SymbolChange.old_symbol, SymbolChange.new_symbol).order_by(
+                SymbolChange.change_date
+            )
+        )
     )
-    return [(symbol, company, series) for symbol, company, series in rows]
+    prominent = set(
+        session.scalars(
+            select(Instrument.symbol)
+            .join(IndexMembership, IndexMembership.instrument_id == Instrument.id)
+            .where(IndexMembership.end_date.is_(None))
+        )
+    )
+    return search.search(query, listings, renames, _aliases(), limit, prominent)
+
+
+@cache
+def _aliases() -> dict[str, str]:
+    return search.load_aliases()
 
 
 # --- Indices, security list, reference lists (M2) -------------------------------------

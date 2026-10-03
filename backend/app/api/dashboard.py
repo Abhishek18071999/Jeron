@@ -291,6 +291,8 @@ class StockMatch(BaseModel):
     symbol: str
     name: str | None
     series: str
+    # The short name or old symbol that matched ("RIL", "was ZOMATO"), if any.
+    alias: str | None
 
 
 @router.get("/stocks/search")
@@ -299,10 +301,11 @@ def stock_search(
     q: Annotated[str, Query(min_length=1, max_length=64)],
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> list[StockMatch]:
-    """Stocks whose symbol or company name matches what is typed, best first."""
+    """Stocks whose symbol, company name, short name or old symbol matches what is
+    typed, best first."""
     return [
-        StockMatch(symbol=symbol, name=name, series=series)
-        for symbol, name, series in store.stock_search(session, q, limit)
+        StockMatch(symbol=m.symbol, name=m.name, series=m.series, alias=m.alias)
+        for m in store.stock_search(session, q, limit)
     ]
 
 

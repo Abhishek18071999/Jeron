@@ -11,6 +11,7 @@ import {
   inr,
   rMultiple,
 } from "@/components/ui";
+import { StockSearch } from "@/components/stock-search";
 import { type JournalEntry, type JournalView, getJson } from "@/lib/api";
 
 import { signClass } from "../backtests/format";
@@ -200,7 +201,7 @@ export default async function Journal({
 
       <Card title="Add a trade I took without a signal">
         <form action={addManual} className="grid gap-3 text-sm sm:grid-cols-4">
-          <input name="ticker" placeholder="Stock" required className={`${inputClass} uppercase`} />
+          <StockSearch name="ticker" placeholder="Stock, e.g. RIL" required inputClassName={`${inputClass} w-full`} />
           <input name="stop" placeholder="Stop ₹" inputMode="decimal" className={inputClass} />
           <input name="reason" placeholder="Why" className={inputClass} />
           <div>

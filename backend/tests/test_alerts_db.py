@@ -17,7 +17,7 @@ from app.config import Settings, get_settings
 from app.db import get_engine
 from app.enums import Exchange
 from app.main import app
-from app.models import Alert, Instrument, SignalRecord
+from app.models import Alert, Instrument, SignalRecord, SymbolChange
 from app.paper.job import run_paper
 from app.signals.build import IST
 from tests.conftest import TEST_DATABASE_URL, requires_db
@@ -212,8 +212,15 @@ def test_stock_search_by_symbol_or_name(empty_session):
         ("M&M", "Mahindra & Mahindra Limited"),
         ("INFY", "Infosys Limited"),
         ("SAIL", "Steel Authority of India Limited"),
+        ("RELIANCE", "Reliance Industries Limited"),
+        ("RALLIS", "Rallis India Limited"),
+        ("ZOMATO", None),
+        ("ETERNAL", "ETERNAL LIMITED"),
     ]:
         empty_session.add(Instrument(exchange=Exchange.NSE, symbol=symbol, name=name))
+    empty_session.add(
+        SymbolChange(old_symbol="ZOMATO", new_symbol="ETERNAL", change_date=date(2025, 4, 9))
+    )
     empty_session.commit()
     client = TestClient(app)
 
@@ -227,5 +234,14 @@ def test_stock_search_by_symbol_or_name(empty_session):
     assert search("infos") == ["INFY"]
     assert search("m&m") == ["M&M"]
     assert search("100%") == [] and search("_") == []
+    assert search("ril") == ["RELIANCE", "RALLIS"]  # short-name list, then initials
+    assert search("zomato") == ["ETERNAL"]
     first = client.get("/stocks/search", params={"q": "tata steel"}).json()[0]
-    assert first == {"symbol": "TATASTEEL", "name": "Tata Steel Limited", "series": "EQ"}
+    assert first == {
+        "symbol": "TATASTEEL",
+        "name": "Tata Steel Limited",
+        "series": "EQ",
+        "alias": None,
+    }
+    renamed = client.get("/stocks/search", params={"q": "zomato"}).json()[0]
+    assert renamed["alias"] == "was ZOMATO"

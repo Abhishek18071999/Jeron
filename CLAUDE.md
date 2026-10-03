@@ -14,7 +14,8 @@ are part of done, never commit secrets.
   - `app/data/` market data: `nse.py` (bhavcopy + PR bundle), `nse_lists.py` (index
     closes, security list, Nifty 500 list, symbol changes), `yahoo.py` (second
     source), `adjust.py` (corporate-action factors), `crosscheck.py`, `quality.py`,
-    `store.py` (database access), `pipeline.py` (jobs). Pure modules have no database
+    `search.py` (stock search: names, initials, old symbols, short names in
+    `stock_aliases.csv`), `store.py` (database access), `pipeline.py` (jobs). Pure modules have no database
     imports; domain enums live in `app/enums.py` for that reason.
   - `app/indicators.py` indicators (pure functions, checked against TA-Lib in
     `tests/test_indicators_reference.py`; TA-Lib is a dev dependency only).
