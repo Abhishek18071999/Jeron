@@ -436,7 +436,10 @@ class PaperAccount(Base):
     start_date: Mapped[date] = mapped_column(Date)
     capital: Mapped[Decimal] = mapped_column(Numeric(16, 2))
     rules: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    status: Mapped[str] = mapped_column(String(16), default="active")  # "active" / "closed"
+    # "active" / "closed" / "retired" (failed the weekly revalidation; no new signals)
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    retired_reason: Mapped[str | None] = mapped_column(String(300))
+    retired_on: Mapped[date | None] = mapped_column(Date)
     last_date: Mapped[date | None] = mapped_column(Date)
     # The latest update's numbers (equity, cash, heat, open positions, notes).
     summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

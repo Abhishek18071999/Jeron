@@ -80,7 +80,7 @@ def portfolio_rules(
 class AccountOutcome:
     strategy_key: str
     account_id: int | None
-    status: str  # "ok", "no_backtest"
+    status: str  # "ok", "no_backtest", "retired"
     new_signals: int = 0
     open_positions: int = 0
     equity: float = 0.0
@@ -129,6 +129,16 @@ def active_account(session: Session, strategy: Strategy) -> PaperAccount | None:
     return session.scalar(
         select(PaperAccount)
         .where(PaperAccount.strategy_version == strategy.version, PaperAccount.status == "active")
+        .order_by(PaperAccount.id.desc())
+        .limit(1)
+    )
+
+
+def retired_account(session: Session, strategy: Strategy) -> PaperAccount | None:
+    """The weekly revalidation retired this strategy version (spec section 6)."""
+    return session.scalar(
+        select(PaperAccount)
+        .where(PaperAccount.strategy_version == strategy.version, PaperAccount.status == "retired")
         .order_by(PaperAccount.id.desc())
         .limit(1)
     )
@@ -447,6 +457,15 @@ def run_paper(
             if account.start_date > day:
                 raise ValueError(f"{key}: the paper account starts on {account.start_date}")
             work.append((account, session.get_one(BacktestRun, account.backtest_run_id)))
+            continue
+        retired = retired_account(session, strategy)
+        if retired is not None and not restart:
+            message = (
+                f"Retired on {retired.retired_on} ({retired.retired_reason}); a new strategy "
+                "version is needed to paper-trade it again."
+            )
+            log(f"{key}: {message}")
+            outcome.accounts.append(AccountOutcome(key, retired.id, "retired", notes=[message]))
             continue
         run = latest_backtest(session, strategy)
         if run is None:

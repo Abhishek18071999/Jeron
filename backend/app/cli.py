@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.alerts.channels import AlertError, TelegramChannel
 from app.alerts.job import NOT_SET_UP, run_alerts, send_test
+from app.analytics.weekly import run_weekly
 from app.backtest.job import run_backtests
 from app.backtest.strategies import STRATEGIES
 from app.calendar.nse import TradingCalendar
@@ -151,6 +152,13 @@ def main(argv: list[str] | None = None) -> int:
         "preopen", help="pre-open check of open journal positions (08:30 IST), sent as an alert"
     )
     p.add_argument("--date", type=_date, help="session to check for (default: the next one)")
+    p.add_argument("--no-send", action="store_true", help="print the message only")
+
+    p = sub.add_parser(
+        "weekly",
+        help="weekly summary and revalidation (retires failing strategies), sent as an alert",
+    )
+    p.add_argument("--date", type=_date, help="last day of the week (default: today)")
     p.add_argument("--no-send", action="store_true", help="print the message only")
 
     p = sub.add_parser("tradebook", help="import a Zerodha tradebook CSV into the journal")
@@ -322,6 +330,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "preopen":
             _, check = run_preopen(session, args.date, send=not args.no_send, log=_log)
             return 0 if check.status in ("ok", "not_configured") and not check.failed else 1
+
+        if args.command == "weekly":
+            _, sent = run_weekly(session, args.date, send=not args.no_send, log=_log)
+            return 0 if sent.status in ("ok", "not_configured") and not sent.failed else 1
 
         if args.command == "tradebook":
             imported = import_tradebook(session, args.file.read_text(encoding="utf-8-sig"))

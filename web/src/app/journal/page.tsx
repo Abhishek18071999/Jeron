@@ -89,6 +89,7 @@ export default async function Journal({
     );
   }
   const j = result.data;
+  const weekly = await getJson<{ week_start: string; day: string; text: string }>("/analytics/weekly");
   const open = j.entries.filter((e) => e.position.status === "open");
   const closed = j.entries.filter((e) => e.position.status === "closed");
   const other = j.entries.filter((e) => e.position.status === "no fills");
@@ -202,6 +203,12 @@ export default async function Journal({
           Expectancy is the average R of closed trades.
         </p>
       </Card>
+
+      {weekly.ok && (
+        <Card title="This week so far">
+          <pre className="whitespace-pre-wrap font-sans text-sm">{weekly.data.text}</pre>
+        </Card>
+      )}
 
       <Card title="Import my Zerodha tradebook">
         <form action={importTradebook} className="flex flex-wrap items-center gap-3 text-sm">
