@@ -147,3 +147,27 @@ def test_test_set_round_trip(empty_session, tmp_path):
     # The free rules get the type right too, but call every item neutral.
     assert (result.rules.type_correct, result.rules.sentiment_error) == (1, 2)
     assert result.problems == []
+
+
+def test_api_errors_are_a_message_not_a_crash(empty_session):
+    import anthropic
+    import httpx2
+
+    s = empty_session
+    _setup(s)
+    error = anthropic.APIError(
+        "Error code: 400",
+        httpx2.Request("POST", "https://api.anthropic.com/v1/messages"),
+        body={"type": "error", "error": {"message": "Your credit balance is too low."}},
+    )
+
+    def no_credit(**params):
+        raise error
+
+    client = FakeClient()
+    client.messages.create = no_credit
+    logged: list[str] = []
+    labeller = ClaudeLabeller("key", MODEL, client=client)
+    assert job.run_news(s, "key", MODEL, log=logged.append, labeller=labeller) == 1
+    assert "Claude API error: Your credit balance is too low." in logged
+    assert _labels(s, RULES_LABELLER) == 5  # the free labels are kept

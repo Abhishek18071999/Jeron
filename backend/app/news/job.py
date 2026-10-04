@@ -16,6 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import anthropic
 from sqlalchemy import extract, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -432,6 +433,34 @@ def run_news(
         )
         return 0
     labeller = labeller or ClaudeLabeller(api_key, model)
+    try:
+        return _run_claude(session, labeller, start, end, limit, batch, log)
+    except anthropic.APIError as exc:
+        session.rollback()
+        log(f"Claude API error: {api_error_message(exc)}")
+        log("Labels made before the error are kept; run the same command again once fixed.")
+        return 1
+
+
+def api_error_message(exc: Exception) -> str:
+    """The API's own words ("Your credit balance is too low..."), not the raw response."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])
+    return str(getattr(exc, "message", None) or exc)
+
+
+def _run_claude(
+    session: Session,
+    labeller: ClaudeLabeller,
+    start: date | None,
+    end: date | None,
+    limit: int | None,
+    batch: bool,
+    log: Log,
+) -> int:
     stored, running = collect_batches(session, labeller, log)
     if stored or running:
         log(f"{stored} labels from finished batches; {running} batches still running.")
