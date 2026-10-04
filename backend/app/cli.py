@@ -43,6 +43,7 @@ from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
+from app.exits.job import run_preopen
 from app.news.deepseek import LabellerError
 from app.news.job import (
     api_error_message,
@@ -144,6 +145,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("alerts", help="send due signal alerts and the daily summary")
     p.add_argument("--date", type=_date, help="day to send for (default: newest scan)")
+
+    p = sub.add_parser(
+        "preopen", help="pre-open check of open journal positions (08:30 IST), sent as an alert"
+    )
+    p.add_argument("--date", type=_date, help="session to check for (default: the next one)")
+    p.add_argument("--no-send", action="store_true", help="print the message only")
 
     p = sub.add_parser("telegram", help="set up or test Telegram alerts")
     group = p.add_mutually_exclusive_group(required=True)
@@ -307,6 +314,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "alerts":
             sent = run_alerts(session, args.date, log=_log)
             return 0 if sent.status == "ok" and not sent.failed else 1
+
+        if args.command == "preopen":
+            _, outcome = run_preopen(session, args.date, send=not args.no_send, log=_log)
+            return 0 if outcome.status in ("ok", "not_configured") and not outcome.failed else 1
 
         if args.command == "telegram":
             settings = get_settings()
