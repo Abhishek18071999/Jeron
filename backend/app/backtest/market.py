@@ -126,6 +126,9 @@ class Market:
     quality_fail: Array  # bool per day
     security_list_known: Array  # bool per day
     exclusions: dict[str, int] = field(default_factory=dict)
+    # 6-month relative strength as a percentile (0-1) among the universe that day, the
+    # ranking behind tech-v1's RS points. NaN outside the universe.
+    rs6_rank: Array | None = None
     # bool (stocks, days): a signal that day would fill in a results blackout. None =
     # the results calendar isn't loaded.
     results_blackout: Array | None = None
@@ -138,6 +141,10 @@ class Market:
     @property
     def traded(self) -> Array:
         return ~np.isnan(self.close)
+
+    def regime_is(self, *regimes: Regime) -> Array:
+        """Bool per day, shaped (1, days) to broadcast over stocks."""
+        return np.array([[r in regimes for r in self.regime]], dtype=bool)
 
     def day_index(self, day: date) -> int:
         """Index of the first session on or after `day`."""
@@ -336,13 +343,16 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         eligible[s] = ok
 
     score = np.full((s_count, d_count), NAN)
+    rs6_rank = np.full((s_count, d_count), NAN)
     half = MAX_POINTS["rs_3m"]
     for t in range(d_count):
         members = np.flatnonzero(eligible[:, t])
         if len(members) == 0:
             continue
         p3 = np.nan_to_num(percentile_ranks(rs3[members, t]), nan=0.0)
-        p6 = np.nan_to_num(percentile_ranks(rs6[members, t]), nan=0.0)
+        ranks6 = percentile_ranks(rs6[members, t])
+        rs6_rank[members, t] = ranks6
+        p6 = np.nan_to_num(ranks6, nan=0.0)
         score[members, t] = np.round(base[members, t] + half * p3 + MAX_POINTS["rs_6m"] * p6, 1)
 
     return Market(
@@ -379,6 +389,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         quality_fail=np.array([d in inputs.quality_fail_days for d in days]),
         security_list_known=security_list_known,
         exclusions=exclusions,
+        rs6_rank=rs6_rank,
         results_blackout=results_blackout(days, [s.symbol for s in inputs.stocks], inputs.results),
         results=inputs.results,
         results_updated=inputs.results_updated,
