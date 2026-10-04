@@ -36,11 +36,15 @@ class LabellerError(RuntimeError):
 
 
 class DeepSeekLabeller:
+    provider = "DeepSeek"
+    path = "/chat/completions"
+    default_base_url = DEFAULT_BASE_URL
+
     def __init__(
         self,
         api_key: str,
         model: str = DEFAULT_MODEL,
-        base_url: str = DEFAULT_BASE_URL,
+        base_url: str | None = None,
         client: httpx.Client | None = None,
         workers: int = WORKERS,
         pause: float = 2.0,
@@ -48,7 +52,7 @@ class DeepSeekLabeller:
         self.client = client or httpx.Client(timeout=60)
         self.api_key = api_key
         self.name = model
-        self.url = base_url.rstrip("/") + "/chat/completions"
+        self.url = (base_url or self.default_base_url).rstrip("/") + self.path
         self.workers = workers
         self.pause = pause
         self.usage = Usage()
@@ -73,40 +77,44 @@ class DeepSeekLabeller:
                 response = self.client.post(self.url, json=body, headers=headers)
             except httpx.TransportError as exc:
                 if attempt == RETRIES - 1:
-                    raise LabellerError(f"DeepSeek could not be reached: {exc}") from exc
+                    raise LabellerError(f"{self.provider} could not be reached: {exc}") from exc
             else:
                 if response.status_code == 200:
                     data: dict[str, Any] = response.json()
                     return data
                 if response.status_code not in RETRY_STATUSES or attempt == RETRIES - 1:
-                    raise LabellerError(_error_text(response))
+                    raise LabellerError(_error_text(self.provider, response))
             time.sleep(self.pause * 2**attempt)
-        raise LabellerError("DeepSeek did not answer")  # not reached
+        raise LabellerError(f"{self.provider} did not answer")  # not reached
 
-    def _one(self, item: NewsItem) -> tuple[NewsLabel | None, dict[str, Any]]:
-        data = self._post(self.request_body(item))
+    def read(self, data: dict[str, Any]) -> tuple[NewsLabel | None, int, int]:
+        """(label, input tokens, output tokens) from one reply."""
+        usage = data.get("usage") or {}
+        tokens = int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
         choice = (data.get("choices") or [{}])[0]
         if choice.get("finish_reason") not in (None, "stop"):
-            return None, data
+            return None, *tokens
         content = (choice.get("message") or {}).get("content") or ""
-        return parse_label(content), data
+        return parse_label(content), *tokens
+
+    def _one(self, item: NewsItem) -> tuple[NewsLabel | None, int, int]:
+        return self.read(self._post(self.request_body(item)))
 
     def label(self, items: Sequence[NewsItem]) -> list[NewsLabel | None]:
         with ThreadPoolExecutor(max_workers=self.workers) as pool:
             results = list(pool.map(self._one, items))
-        for _, data in results:
-            usage = data.get("usage") or {}
+        for _, input_tokens, output_tokens in results:
             self.usage.requests += 1
-            self.usage.input_tokens += int(usage.get("prompt_tokens") or 0)
-            self.usage.output_tokens += int(usage.get("completion_tokens") or 0)
-        return [label for label, _ in results]
+            self.usage.input_tokens += input_tokens
+            self.usage.output_tokens += output_tokens
+        return [label for label, _, _ in results]
 
 
-def _error_text(response: httpx.Response) -> str:
-    """DeepSeek's own words ("Insufficient Balance", "Authentication Fails")."""
+def _error_text(provider: str, response: httpx.Response) -> str:
+    """The provider's own words ("Insufficient Balance", "unauthorized")."""
     try:
         error = response.json().get("error") or {}
-        message = error.get("message") if isinstance(error, dict) else None
+        message = error.get("message") if isinstance(error, dict) else str(error)
     except ValueError:
         message = None
-    return f"DeepSeek HTTP {response.status_code}: {message or response.text[:200]}"
+    return f"{provider} HTTP {response.status_code}: {message or response.text[:200]}"

@@ -233,3 +233,60 @@ def test_settings_pick_the_labeller():
     deep = Settings(news_provider="deepseek", deepseek_api_key="k")
     assert isinstance(job.make_labeller(deep), DeepSeekLabeller)
     assert "JERON_DEEPSEEK_API_KEY" in job.missing_key(Settings(news_provider="deepseek"))
+
+
+class FakeOllama:
+    """Answers like Ollama Cloud's chat API."""
+
+    def __init__(self, status=200, content=ORDER):
+        self.status, self.content, self.bodies = status, content, []
+
+    def post(self, url, json, headers):
+        import httpx
+
+        self.bodies.append(json)
+        assert url == "https://ollama.com/api/chat"
+        assert headers["Authorization"] == "Bearer secret"
+        if self.status != 200:
+            return httpx.Response(self.status, json={"error": "unauthorized"})
+        return httpx.Response(
+            200,
+            json={
+                "message": {"role": "assistant", "content": self.content},
+                "done": True,
+                "done_reason": "stop",
+                "prompt_eval_count": 550,
+                "eval_count": 30,
+            },
+        )
+
+
+def test_ollama_cloud_labels_the_same_way(empty_session):
+    from app.news.ollama import OllamaLabeller
+
+    s = empty_session
+    _setup(s)
+    http = FakeOllama()
+    labeller = OllamaLabeller("secret", "gemma4:31b", "https://ollama.com", client=http, pause=0)  # type: ignore[arg-type]
+    logged: list[str] = []
+    assert job.run_news(s, labeller, log=logged.append) == 0
+    body = http.bodies[0]
+    assert body["format"]["required"] == ["event_type", "sentiment", "reason"]
+    assert body["stream"] is False
+    assert _labels(s, "gemma4:31b") == 1
+    assert "550 input and 30 output tokens" in logged[-1]
+
+    broke = OllamaLabeller("secret", "other:1b", client=FakeOllama(status=401), pause=0)  # type: ignore[arg-type]
+    logged.clear()
+    assert job.run_news(s, broke, log=logged.append) == 1
+    assert "News API error: Ollama HTTP 401: unauthorized" in logged
+
+
+def test_settings_pick_ollama():
+    from app.config import Settings
+    from app.news.ollama import OllamaLabeller
+
+    cloud = Settings(news_provider="ollama", ollama_api_key="k")
+    labeller = job.make_labeller(cloud)
+    assert isinstance(labeller, OllamaLabeller) and labeller.name == "gemma4:31b"
+    assert "JERON_OLLAMA_API_KEY" in job.missing_key(Settings(news_provider="ollama"))

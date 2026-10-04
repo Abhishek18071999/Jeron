@@ -39,6 +39,7 @@ from app.news.labels import (
     needs_llm,
     rule_label,
 )
+from app.news.ollama import OllamaLabeller
 
 IST = ZoneInfo("Asia/Kolkata")
 RULES_VERSION = "rules-v1"
@@ -414,6 +415,12 @@ DAILY_LOOKBACK_DAYS = 7
 
 def make_labeller(settings: Settings, model: str | None = None) -> Labeller | None:
     """The labeller `.env` asks for (`JERON_NEWS_PROVIDER`); None without its key."""
+    if settings.news_provider == "ollama":
+        if not settings.ollama_api_key:
+            return None
+        return OllamaLabeller(
+            settings.ollama_api_key, model or settings.ollama_model, settings.ollama_base_url
+        )
     if settings.news_provider == "deepseek":
         if not settings.deepseek_api_key:
             return None
@@ -428,7 +435,7 @@ def make_labeller(settings: Settings, model: str | None = None) -> Labeller | No
 
 
 def missing_key(settings: Settings) -> str:
-    name = "DEEPSEEK" if settings.news_provider == "deepseek" else "ANTHROPIC"
+    name = {"deepseek": "DEEPSEEK", "ollama": "OLLAMA"}.get(settings.news_provider, "ANTHROPIC")
     return (
         f"No JERON_{name}_API_KEY in .env: the news brain is off; only the free "
         "subject labels were made."
