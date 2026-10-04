@@ -48,14 +48,26 @@ are part of done, never commit secrets.
     alert stored once in `alerts`, so re-runs never send twice). Research-only signals
     are only in the summary unless `JERON_ALERT_RESEARCH_SIGNALS` is on.
   - `app/journal/` the journal: `calc.py` (positions from fills, stats; pure) and
-    `service.py` (database). Every signal without an entry is pending.
-  - `app/api/` routes; `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
+    `service.py` (database). Every signal without an entry is pending. `tradebook.py`
+    reads Zerodha's tradebook CSV (pure); `importer.py` turns it into fills, stored with
+    the broker's trade id so a re-import adds nothing.
+  - `app/exits/` exits for my real positions: `rules.py` (the engine's section 5 exit
+    rules on one position; pure, checked against the engine) and `job.py` (the pre-open
+    check: action per open position, results and ex-dates ahead, stale-data guard).
+  - `app/analytics/` `compare.py` (backtest vs paper vs real: gates, expected ranges,
+    stages, causes of divergence; pure), `service.py` (database) and `weekly.py` (weekly
+    summary and revalidation, which retires failing strategies' paper accounts).
+  - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
+    days, `weekly` after the last session of the week. Runs as the `scheduler` service.
+  - `app/api/` routes; `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
+    `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
     company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
     `asm-import`, `daily`, `holidays`, `backtest`, `paper`, `alerts`, `telegram`,
     `events` (board-meeting and announcement history from the PR bundles),
     `events-import` (a board-meeting CSV saved from nseindia.com), `news-label`,
-    `news-testset`, `news-eval` (news labels, see `app/news/`).
+    `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
+    `tradebook FILE`.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the

@@ -74,7 +74,7 @@ class PreOpen:
         return self.data_as_of is None or self.data_as_of < self.expected
 
 
-def _is_session(calendar: TradingCalendar, day: date) -> bool:
+def is_session(calendar: TradingCalendar, day: date) -> bool:
     """A trading day; a weekday when NSE's holiday list doesn't cover the year."""
     try:
         return calendar.is_trading_day(day)
@@ -82,9 +82,9 @@ def _is_session(calendar: TradingCalendar, day: date) -> bool:
         return day.weekday() < 5
 
 
-def _next_session(calendar: TradingCalendar, day: date) -> date:
+def next_session(calendar: TradingCalendar, day: date) -> date:
     day += timedelta(days=1)
-    while not _is_session(calendar, day):
+    while not is_session(calendar, day):
         day += timedelta(days=1)
     return day
 
@@ -106,9 +106,9 @@ def check_day(calendar: TradingCalendar, now: datetime) -> date:
     """The session a check run at `now` is for: today if it trades and the market
     hasn't closed, else the next session."""
     today = now.astimezone(IST).date()
-    if _is_session(calendar, today) and now.astimezone(IST).hour < 16:
+    if is_session(calendar, today) and now.astimezone(IST).hour < 16:
         return today
-    return _next_session(calendar, today)
+    return next_session(calendar, today)
 
 
 def _tier(view: EntryView) -> tuple[Tier, bool]:
@@ -222,7 +222,7 @@ def build_preopen(session: Session, day: date, calendar: TradingCalendar | None 
     checks = [position_check(session, v, data_as_of) for v in views]
     last = day
     for _ in range(EVENT_SESSIONS - 1):
-        last = _next_session(calendar, last)
+        last = next_session(calendar, last)
     _events(session, checks, day, last)
     paper = session.execute(
         select(func.count(), func.count(func.distinct(PaperTrade.account_id))).where(
