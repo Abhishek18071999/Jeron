@@ -316,8 +316,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if sent.status == "ok" and not sent.failed else 1
 
         if args.command == "preopen":
-            _, outcome = run_preopen(session, args.date, send=not args.no_send, log=_log)
-            return 0 if outcome.status in ("ok", "not_configured") and not outcome.failed else 1
+            _, check = run_preopen(session, args.date, send=not args.no_send, log=_log)
+            return 0 if check.status in ("ok", "not_configured") and not check.failed else 1
 
         if args.command == "telegram":
             settings = get_settings()
