@@ -21,10 +21,12 @@ from sqlalchemy import extract, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.config import Settings
 from app.data.store import NSE_BARS
 from app.models import Announcement, DailyBar, Instrument, NewsBatch
 from app.models import NewsLabel as NewsLabelRow
-from app.news.claude import ClaudeLabeller, Labeller
+from app.news.claude import ClaudeLabeller, Labeller, Usage
+from app.news.deepseek import DeepSeekLabeller, LabellerError
 from app.news.labels import (
     PROMPT_VERSION,
     RULES_LABELLER,
@@ -410,34 +412,52 @@ SYNC_LIMIT = 2000
 DAILY_LOOKBACK_DAYS = 7
 
 
+def make_labeller(settings: Settings, model: str | None = None) -> Labeller | None:
+    """The labeller `.env` asks for (`JERON_NEWS_PROVIDER`); None without its key."""
+    if settings.news_provider == "deepseek":
+        if not settings.deepseek_api_key:
+            return None
+        return DeepSeekLabeller(
+            settings.deepseek_api_key,
+            model or settings.deepseek_model,
+            settings.deepseek_base_url,
+        )
+    if not settings.anthropic_api_key:
+        return None
+    return ClaudeLabeller(settings.anthropic_api_key, model or settings.news_model)
+
+
+def missing_key(settings: Settings) -> str:
+    name = "DEEPSEEK" if settings.news_provider == "deepseek" else "ANTHROPIC"
+    return (
+        f"No JERON_{name}_API_KEY in .env: the news brain is off; only the free "
+        "subject labels were made."
+    )
+
+
 def run_news(
     session: Session,
-    api_key: str,
-    model: str,
+    labeller: Labeller | None,
     start: date | None = None,
     end: date | None = None,
     limit: int | None = None,
     batch: bool = False,
     log: Log = _quiet,
-    labeller: ClaudeLabeller | None = None,
+    no_labeller: str = "No news API key in .env: only the free subject labels were made.",
 ) -> int:
-    """Label announcements: subject rules for all (free), then Claude for the material
+    """Label announcements: subject rules for all (free), then the LLM for the material
     ones of liquid stocks. Returns a process exit code."""
     new = label_rules(session)
     if new:
         log(f"{new} announcements labelled by subject (free).")
-    if not api_key and labeller is None:
-        log(
-            "No JERON_ANTHROPIC_API_KEY in .env: the news brain is off; only the free "
-            "subject labels were made."
-        )
+    if labeller is None:
+        log(no_labeller)
         return 0
-    labeller = labeller or ClaudeLabeller(api_key, model)
     try:
-        return _run_claude(session, labeller, start, end, limit, batch, log)
-    except anthropic.APIError as exc:
+        return _run_llm(session, labeller, start, end, limit, batch, log)
+    except (anthropic.APIError, LabellerError) as exc:
         session.rollback()
-        log(f"Claude API error: {api_error_message(exc)}")
+        log(f"News API error: {api_error_message(exc)}")
         log("Labels made before the error are kept; run the same command again once fixed.")
         return 1
 
@@ -452,30 +472,49 @@ def api_error_message(exc: Exception) -> str:
     return str(getattr(exc, "message", None) or exc)
 
 
-def _run_claude(
+def spent(labeller: Labeller) -> str:
+    """What a run used: US$ for Claude, tokens for others (see their own bill)."""
+    usage: Usage | None = getattr(labeller, "usage", None)
+    if usage is None:
+        return ""
+    cost = usage.cost(labeller.name)
+    if cost is not None:
+        return f"about US${cost:.2f}"
+    return (
+        f"{usage.input_tokens:,} input and {usage.output_tokens:,} output tokens "
+        "(the exact cost is on your provider's billing page)"
+    )
+
+
+def _run_llm(
     session: Session,
-    labeller: ClaudeLabeller,
+    labeller: Labeller,
     start: date | None,
     end: date | None,
     limit: int | None,
     batch: bool,
     log: Log,
 ) -> int:
-    stored, running = collect_batches(session, labeller, log)
-    if stored or running:
-        log(f"{stored} labels from finished batches; {running} batches still running.")
+    claude = labeller if isinstance(labeller, ClaudeLabeller) else None
+    if claude:
+        stored, running = collect_batches(session, claude, log)
+        if stored or running:
+            log(f"{stored} labels from finished batches; {running} batches still running.")
+    if batch and not claude:
+        log(f"Batches are for Claude only; {labeller.name} labels several at a time instead.")
+        batch = False
     items = pending_items(session, labeller.name, start, end, limit=limit)
     if not items:
         log("Nothing new to label.")
         return 0
-    if batch:
-        submit_batches(session, labeller, items, log)
+    if batch and claude:
+        submit_batches(session, claude, items, log)
         log(
             f"{len(items)} announcements sent as a batch (half price). Batches usually "
             "finish within an hour, at most a day: run `news-label --collect` later."
         )
         return 0
-    if len(items) > SYNC_LIMIT:
+    if claude and len(items) > SYNC_LIMIT:
         log(
             f"{len(items)} announcements to label: too many to send one by one. Use "
             "--batch (half price), or --limit or --start to label fewer."
@@ -483,20 +522,28 @@ def _run_claude(
         return 1
     log(f"Labelling {len(items)} announcements with {labeller.name}...")
     run = label_news(session, labeller, items, log)
-    cost = labeller.usage.cost(labeller.name)
-    spent = f", about US${cost:.2f}" if cost is not None else ""
-    log(f"Done: {run.labelled} labelled, {run.failed} without a valid label{spent}.")
+    used = spent(labeller)
+    log(
+        f"Done: {run.labelled} labelled, {run.failed} without a valid label"
+        + (f"; used {used}." if used else ".")
+    )
     return 0
 
 
-def run_daily_news(
-    session: Session, api_key: str, model: str, day: date, log: Log = _quiet
-) -> None:
+def run_daily_news(session: Session, settings: Settings, day: date, log: Log = _quiet) -> None:
     """The daily job's step: the last week's new announcements. A failure here (the API
     down, the key wrong) is logged and doesn't stop the scan or the alerts."""
     try:
         start = date.fromordinal(day.toordinal() - DAILY_LOOKBACK_DAYS)
-        run_news(session, api_key, model, start=start, end=day, limit=SYNC_LIMIT, log=log)
+        run_news(
+            session,
+            make_labeller(settings),
+            start=start,
+            end=day,
+            limit=SYNC_LIMIT,
+            log=log,
+            no_labeller=missing_key(settings),
+        )
     except Exception as exc:  # noqa: BLE001
         session.rollback()
         log(f"News labels skipped: {type(exc).__name__}: {exc}")

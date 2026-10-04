@@ -38,9 +38,14 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     alert_email_from: str = ""
     alert_email_to: str = ""
-    # News labels (M6). The key lives only in .env; without it the news brain is off.
+    # News labels (M6). Keys live only in .env; without one the news brain is off.
+    # news_provider: "claude" or "deepseek".
+    news_provider: str = "claude"
     anthropic_api_key: str = ""
     news_model: str = "claude-opus-5-5"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    deepseek_base_url: str = "https://api.deepseek.com"
     # Where the web app is, for links in alerts.
     web_url: str = "http://localhost:3000"
 
@@ -50,6 +55,8 @@ class Settings(BaseSettings):
 
     @property
     def news_ready(self) -> bool:
+        if self.news_provider == "deepseek":
+            return bool(self.deepseek_api_key)
         return bool(self.anthropic_api_key)
 
     @property

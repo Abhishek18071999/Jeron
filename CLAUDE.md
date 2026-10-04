@@ -34,7 +34,8 @@ are part of done, never commit secrets.
     paper trading only.
   - `app/news/` the news brain: `labels.py` (subject rules, the LLM's JSON schema and
     prompt, news score, test-set accuracy; pure), `claude.py` (Anthropic API labeller,
-    batches; tests use a fake client, never the API) and `job.py` (database). Labels are
+    batches; tests use a fake client, never the API), `deepseek.py` (DeepSeek's chat API in
+    JSON mode, the alternative labeller) and `job.py` (database). Labels are
     stored once per model and `PROMPT_VERSION`; changing the prompt means a new version.
   - `app/signals/` the spec section 4 signal: `schema.py` (Pydantic, every field
     required) and `build.py` (engine order -> signal).
