@@ -434,6 +434,25 @@ def make_labeller(settings: Settings, model: str | None = None) -> Labeller | No
     return ClaudeLabeller(settings.anthropic_api_key, model or settings.news_model)
 
 
+def labeller_name(settings: Settings) -> str:
+    """The model whose labels the news score reads (the provider in `.env`)."""
+    return {
+        "deepseek": settings.deepseek_model,
+        "ollama": settings.ollama_model,
+    }.get(settings.news_provider, settings.news_model)
+
+
+def labels_exist(session: Session, labeller: str) -> bool:
+    return (
+        session.scalar(
+            select(NewsLabelRow.id)
+            .where(NewsLabelRow.labeller == labeller, NewsLabelRow.prompt_version == PROMPT_VERSION)
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def missing_key(settings: Settings) -> str:
     name = {"deepseek": "DEEPSEEK", "ollama": "OLLAMA"}.get(settings.news_provider, "ANTHROPIC")
     return (

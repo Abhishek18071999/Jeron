@@ -208,7 +208,7 @@ def build_signal(
         brains_breakdown={
             "technical": _d(order.score, "0.1"),
             "fundamental": None,
-            "news": None,
+            "news": None if m.news_score is None else _d(float(m.news_score[s, t]), "0.1"),
             "combined": _d(order.score, "0.1"),
         },
         backtest_stats=ctx.backtest,

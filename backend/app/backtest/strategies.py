@@ -7,7 +7,7 @@ the entry condition, the stop distance and the tier (holding period).
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import product
 from typing import Any
@@ -61,6 +61,10 @@ class Strategy:
     default: Params
     describe: Callable[[Params], list[str]]
     condition: Callable[[Market, Params], Array]
+    # M6: no entry fills around results (spec section 2), and none while the stock's
+    # news score is below this (recent bad news). Off in the M3 versions.
+    results_blackout: bool = False
+    min_news_score: float | None = None
 
     @property
     def grid(self) -> list[Params]:
@@ -72,7 +76,10 @@ class Strategy:
     def entries(self, market: Market, params: Params) -> Array:
         """Bool (stocks, days): an entry signal at that day's close."""
         with np.errstate(invalid="ignore"):
-            return np.asarray(market.universe & self.condition(market, params), dtype=bool)
+            entries = market.universe & self.condition(market, params)
+            if self.min_news_score is not None and market.news_score is not None:
+                entries &= market.news_score >= self.min_news_score
+            return np.asarray(entries, dtype=bool)
 
     def rules(self, params: Params) -> list[str]:
         tier = TIERS[self.tier]
@@ -81,8 +88,23 @@ class Strategy:
             f"Stop {params['stop_atr']:g} x ATR(14) below the signal close; skip if that is "
             f"more than {tier.max_stop_pct:g}% away.",
             *COMMON_RULES,
+            *self.event_rules(),
             tier.time_stop_label + ".",
         ]
+
+    def event_rules(self) -> list[str]:
+        rules = []
+        if self.results_blackout:
+            rules.append(
+                "No entry from 3 sessions before a results board meeting through the "
+                "meeting day (where the results calendar has the date)."
+            )
+        if self.min_news_score is not None:
+            rules.append(
+                f"No entry while the stock's news score is below {self.min_news_score:g} "
+                "(recent bad news); no filter where news isn't labelled."
+            )
+        return rules
 
 
 COMMON_RULES = [
@@ -170,7 +192,35 @@ PULLBACK_TREND = Strategy(
     condition=_pullback_condition,
 )
 
-STRATEGIES = {s.key: s for s in (SCORE_SWING, BREAKOUT_52W, PULLBACK_TREND)}
+# Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
+# back above 40 after about 26 days.
+MIN_NEWS_SCORE = 40.0
+
+
+def with_events(base: Strategy) -> Strategy:
+    """The M3 strategy with M6's results blackout and news filter."""
+    return replace(
+        base,
+        key=f"{base.key}-events",
+        version=f"{base.key}-events-v1",
+        name=f"{base.name} + results blackout and news filter",
+        summary=f"{base.summary} Not around results or after bad news.",
+        results_blackout=True,
+        min_news_score=MIN_NEWS_SCORE,
+    )
+
+
+STRATEGIES = {
+    s.key: s
+    for s in (
+        SCORE_SWING,
+        BREAKOUT_52W,
+        PULLBACK_TREND,
+        with_events(SCORE_SWING),
+        with_events(BREAKOUT_52W),
+        with_events(PULLBACK_TREND),
+    )
+}
 
 
 def params_label(params: Params) -> str:
