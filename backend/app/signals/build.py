@@ -17,6 +17,7 @@ from app.backtest.costs import CostModel
 from app.backtest.engine import Order, PortfolioRules
 from app.backtest.market import Market
 from app.backtest.strategies import TIERS, Params, Strategy, Tier, params_label
+from app.data.events import event_risk
 from app.signals.schema import BacktestStats, Signal
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -198,12 +199,16 @@ def build_signal(
             f"exit at the next open if it hasn't closed at +{rules.breakeven_r:g}R within "
             f"{time_stop} sessions."
         ),
-        event_risk="Not checked: results dates and the event calendar arrive in M6.",
+        event_risk=event_risk(
+            None if m.results is None else m.results.get(m.symbols[s], ()),
+            m.days[t],
+            m.results_updated,
+        ),
         conviction=conviction(order.score),
         brains_breakdown={
             "technical": _d(order.score, "0.1"),
             "fundamental": None,
-            "news": None,
+            "news": None if m.news_score is None else _d(float(m.news_score[s, t]), "0.1"),
             "combined": _d(order.score, "0.1"),
         },
         backtest_stats=ctx.backtest,

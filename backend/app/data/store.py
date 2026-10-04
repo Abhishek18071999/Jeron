@@ -6,12 +6,13 @@ from datetime import date, timedelta
 from decimal import Decimal
 from functools import cache
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.data import search
+from app.data import events, news, search
 from app.data.crosscheck import Neighbours
 from app.data.nse_lists import (
     IndexClose,
@@ -21,6 +22,8 @@ from app.data.nse_lists import (
 )
 from app.data.provider import Bar, CorporateActionRecord, InstrumentRecord
 from app.enums import Exchange
+from app.models import Announcement as AnnouncementRow
+from app.models import BoardMeeting as BoardMeetingRow
 from app.models import (
     CorporateAction,
     DailyBar,
@@ -40,6 +43,7 @@ NSE_INDICES = "nse_indices"
 NSE_SEC_LIST = "nse_sec_list"
 YAHOO = "yahoo"
 ASM_IMPORT = "asm_import"
+IST = ZoneInfo("Asia/Kolkata")
 _CHUNK = 2000
 
 
@@ -710,6 +714,103 @@ def save_symbol_changes(session: Session, changes: Sequence[SymbolChangeRecord])
             pg_insert(SymbolChange).values(rows[start : start + _CHUNK]).on_conflict_do_nothing()
         )
     return len(rows)
+
+
+def save_board_meetings(
+    session: Session, meetings: Sequence[events.BoardMeeting], source: str
+) -> int:
+    """Store meetings not stored yet (existing rows are never changed). Returns how
+    many were new."""
+    new = 0
+    rows = [
+        {
+            "symbol": m.symbol[:32],
+            "meeting_date": m.meeting_date,
+            "purpose": m.purpose[:300],
+            "description": m.description[:2000],
+            "is_results": m.is_results,
+            "announced_at": m.announced.replace(tzinfo=IST) if m.announced else None,
+            "source": source,
+        }
+        for m in meetings
+    ]
+    for start in range(0, len(rows), _CHUNK):
+        result = session.execute(
+            pg_insert(BoardMeetingRow)
+            .values(rows[start : start + _CHUNK])
+            .on_conflict_do_nothing()
+            .returning(BoardMeetingRow.id)
+        )
+        new += len(result.all())
+    return new
+
+
+def results_dates(
+    session: Session, symbols: Iterable[str] | None = None
+) -> dict[str, list[events.ResultsDate]]:
+    """Results board meetings per symbol, oldest first. Meetings filed under a stock's
+    earlier symbols count for its current one."""
+    wanted = set(symbols) if symbols is not None else None
+    lineage = symbol_lineage(session, wanted) if wanted is not None else {}
+    current = {old: sym for sym, olds in lineage.items() for old, _ in olds}
+    query = select(
+        BoardMeetingRow.symbol,
+        BoardMeetingRow.meeting_date,
+        BoardMeetingRow.purpose,
+        BoardMeetingRow.description,
+        BoardMeetingRow.announced_at,
+    ).where(BoardMeetingRow.is_results)
+    if wanted is not None:
+        query = query.where(BoardMeetingRow.symbol.in_(wanted | set(current)))
+    meetings = [
+        events.BoardMeeting(
+            current.get(symbol, symbol),
+            day,
+            purpose,
+            description,
+            announced.astimezone(IST).replace(tzinfo=None) if announced else None,
+        )
+        for symbol, day, purpose, description, announced in session.execute(query)
+    ]
+    return events.results_dates(meetings)
+
+
+def save_announcements(session: Session, items: Sequence[news.Announcement], source: str) -> int:
+    """Store announcements not stored yet. Returns how many were new."""
+    new = 0
+    rows = [
+        {
+            "symbol": a.symbol[:32],
+            "day": a.day,
+            "subject": a.subject[:200] if a.subject else None,
+            "text": a.text,
+            "digest": a.digest,
+            "source": source,
+        }
+        for a in items
+    ]
+    for start in range(0, len(rows), _CHUNK):
+        result = session.execute(
+            pg_insert(AnnouncementRow)
+            .values(rows[start : start + _CHUNK])
+            .on_conflict_do_nothing()
+            .returning(AnnouncementRow.id)
+        )
+        new += len(result.all())
+    return new
+
+
+def board_meetings_loaded(session: Session) -> bool:
+    return session.scalar(select(BoardMeetingRow.id).limit(1)) is not None
+
+
+def board_meetings_updated(session: Session, source: str) -> date | None:
+    """The last day a download of upcoming board meetings completed."""
+    return session.scalar(
+        select(func.max(SourceFile.trade_date)).where(
+            SourceFile.source == source, SourceFile.status == "ok"
+        )
+    )
 
 
 def symbol_lineage(session: Session, symbols: Iterable[str]) -> dict[str, list[tuple[str, date]]]:

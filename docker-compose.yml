@@ -39,6 +39,13 @@ services:
       JERON_ALERT_EMAIL_FROM: ${JERON_ALERT_EMAIL_FROM:-}
       JERON_ALERT_EMAIL_TO: ${JERON_ALERT_EMAIL_TO:-}
       JERON_WEB_URL: ${JERON_WEB_URL:-http://localhost:3000}
+      JERON_ANTHROPIC_API_KEY: ${JERON_ANTHROPIC_API_KEY:-}
+      JERON_NEWS_PROVIDER: ${JERON_NEWS_PROVIDER:-claude}
+      JERON_NEWS_MODEL: ${JERON_NEWS_MODEL:-claude-opus-5-5}
+      JERON_DEEPSEEK_API_KEY: ${JERON_DEEPSEEK_API_KEY:-}
+      JERON_DEEPSEEK_MODEL: ${JERON_DEEPSEEK_MODEL:-deepseek-chat}
+      JERON_OLLAMA_API_KEY: ${JERON_OLLAMA_API_KEY:-}
+      JERON_OLLAMA_MODEL: ${JERON_OLLAMA_MODEL:-gemma4:31b}
     volumes:
       # Downloaded NSE files, kept so history can be re-read without downloading again.
       - marketdata:/data

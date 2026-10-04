@@ -18,7 +18,7 @@ it at a test window's start leaks nothing from the test window.
 import hashlib
 import math
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -135,7 +135,29 @@ def market_fingerprint(m: Market) -> str:
     h.update("|".join(m.symbols).encode())
     for arr in (m.open, m.high, m.low, m.close, m.universe, m.score):
         h.update(np.ascontiguousarray(np.nan_to_num(arr, nan=-1.0)).tobytes())
+    for extra in (m.results_blackout, m.news_score):  # M6 inputs, when loaded
+        if extra is not None:
+            h.update(np.ascontiguousarray(extra).tobytes())
     return h.hexdigest()[:16]
+
+
+def brains_summary(m: Market, strategy: Strategy) -> dict[str, Any]:
+    """Which M6 inputs a run used, and which years they cover."""
+    news_years: list[int] = []
+    if m.news_score is not None:
+        active = np.any(m.news_score != 50.0, axis=0)
+        news_years = sorted({m.days[t].year for t in np.flatnonzero(active)})
+    blackout_years: list[int] = []
+    if m.results_blackout is not None:
+        active = np.any(m.results_blackout, axis=0)
+        blackout_years = sorted({m.days[t].year for t in np.flatnonzero(active)})
+    return {
+        "results_blackout": strategy.results_blackout,
+        "results_calendar_years": blackout_years,
+        "min_news_score": strategy.min_news_score,
+        "news_labeller": m.news_labeller,
+        "news_years": news_years,
+    }
 
 
 def _choose(
@@ -184,6 +206,8 @@ def evaluate(
     tax_rules: TaxRules | None = None,
 ) -> Evaluation:
     rules = rules or PortfolioRules()
+    if strategy.results_blackout:
+        rules = replace(rules, results_blackout=True)
     costs = costs or CostModel()
     m = market
     days = m.days
@@ -314,6 +338,7 @@ def evaluate(
 
     summary: dict[str, Any] = {
         "engine_version": ENGINE_VERSION,
+        "brains": brains_summary(m, strategy),
         "periods": {
             "data": [str(days[0]), str(days[-1])],
             "first_tradable": str(days[folds.first_tradable]),

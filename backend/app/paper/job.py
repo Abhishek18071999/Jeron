@@ -59,7 +59,9 @@ def _quiet(_: str) -> None:
     pass
 
 
-def portfolio_rules(settings: Settings, tier: Tier) -> PortfolioRules:
+def portfolio_rules(
+    settings: Settings, tier: Tier, results_blackout: bool = False
+) -> PortfolioRules:
     max_positions = {
         Tier.SWING: settings.max_positions_swing,
         Tier.POSITIONAL: settings.max_positions_positional,
@@ -70,6 +72,7 @@ def portfolio_rules(settings: Settings, tier: Tier) -> PortfolioRules:
         max_positions=max_positions,
         sector_cap_pct=settings.sector_cap_pct,
         max_correlated=MAX_CORRELATED,
+        results_blackout=results_blackout,
     )
 
 
@@ -135,7 +138,7 @@ def open_account(
     session: Session, strategy: Strategy, run: BacktestRun, start: date, settings: Settings
 ) -> PaperAccount:
     params = {k: float(v) for k, v in run.summary["schedule"][-1]["params"].items()}
-    rules = portfolio_rules(settings, strategy.tier)
+    rules = portfolio_rules(settings, strategy.tier, strategy.results_blackout)
     account = PaperAccount(
         strategy_key=strategy.key,
         strategy_version=strategy.version,

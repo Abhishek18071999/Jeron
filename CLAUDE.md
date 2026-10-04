@@ -15,7 +15,9 @@ are part of done, never commit secrets.
     closes, security list, Nifty 500 list, symbol changes), `yahoo.py` (second
     source), `adjust.py` (corporate-action factors), `crosscheck.py`, `quality.py`,
     `search.py` (stock search: names, initials, old symbols, short names in
-    `stock_aliases.csv`), `store.py` (database access), `pipeline.py` (jobs). Pure modules have no database
+    `stock_aliases.csv`), `events.py` (board meetings from the PR bundle's `bm` file,
+    results blackout, event risk), `news.py` (company announcements from the `an` file),
+    `store.py` (database access), `pipeline.py` (jobs). Pure modules have no database
     imports; domain enums live in `app/enums.py` for that reason.
   - `app/indicators.py` indicators (pure functions, checked against TA-Lib in
     `tests/test_indicators_reference.py`; TA-Lib is a dev dependency only).
@@ -24,12 +26,18 @@ are part of done, never commit secrets.
     means a new score version.
   - `app/backtest/` the backtester: `market.py` (aligned arrays, the scan's universe
     and score for every day), `features.py`, `engine.py` (daily-bar simulation),
-    `costs.py` (Indian charges, slippage, tax estimate), `strategies.py` (versioned),
+    `costs.py` (Indian charges, slippage, tax estimate), `strategies.py` (versioned; the `-events` versions add M6's results blackout and news
+    filter),
     `walkforward.py` (folds, holdout, gates), `stats.py`, `job.py` (database).
     Changing a strategy's rules means a new strategy version; runs are never
     overwritten. The engine is also the risk manager (spec section 5); the sector cap,
     correlation check and position-limit override are opt-in `PortfolioRules`, used by
     paper trading only.
+  - `app/news/` the news brain: `labels.py` (subject rules, the LLM's JSON schema and
+    prompt, news score, test-set accuracy; pure), `claude.py` (Anthropic API labeller,
+    batches; tests use a fake client, never the API), `deepseek.py` (DeepSeek's chat API in
+    JSON mode) and `ollama.py` (Ollama Cloud), the alternative labellers, and `job.py` (database). Labels are
+    stored once per model and `PROMPT_VERSION`; changing the prompt means a new version.
   - `app/signals/` the spec section 4 signal: `schema.py` (Pydantic, every field
     required) and `build.py` (engine order -> signal).
   - `app/paper/job.py` paper trading: one account per strategy version, replayed by the
@@ -44,7 +52,10 @@ are part of done, never commit secrets.
   - `app/api/` routes; `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
     company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
-    `asm-import`, `daily`, `holidays`, `backtest`, `paper`, `alerts`, `telegram`.
+    `asm-import`, `daily`, `holidays`, `backtest`, `paper`, `alerts`, `telegram`,
+    `events` (board-meeting and announcement history from the PR bundles),
+    `events-import` (a board-meeting CSV saved from nseindia.com), `news-label`,
+    `news-testset`, `news-eval` (news labels, see `app/news/`).
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the

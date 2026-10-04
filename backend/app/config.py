@@ -38,12 +38,31 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     alert_email_from: str = ""
     alert_email_to: str = ""
+    # News labels (M6). Keys live only in .env; without one the news brain is off.
+    # news_provider: "claude", "deepseek" or "ollama" (Ollama Cloud).
+    news_provider: str = "claude"
+    anthropic_api_key: str = ""
+    news_model: str = "claude-opus-5-5"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    ollama_api_key: str = ""
+    ollama_model: str = "gemma4:31b"
+    ollama_base_url: str = "https://ollama.com"
     # Where the web app is, for links in alerts.
     web_url: str = "http://localhost:3000"
 
     @property
     def telegram_ready(self) -> bool:
         return bool(self.telegram_bot_token and self.telegram_chat_id)
+
+    @property
+    def news_ready(self) -> bool:
+        if self.news_provider == "deepseek":
+            return bool(self.deepseek_api_key)
+        if self.news_provider == "ollama":
+            return bool(self.ollama_api_key)
+        return bool(self.anthropic_api_key)
 
     @property
     def email_ready(self) -> bool:

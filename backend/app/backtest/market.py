@@ -18,6 +18,8 @@ import numpy as np
 
 from app import indicators as ind
 from app.backtest.features import NAN, Array, percentile_ranks, stock_features
+from app.data.events import ResultsDate, blackout_signal_days
+from app.news.labels import SCORE_HORIZON_HALF_LIVES, SCORE_SCALE, SCORE_WEIGHTS, DatedLabel
 from app.scan.score import MAX_POINTS
 from app.scan.universe import UniverseRules
 
@@ -80,6 +82,13 @@ class MarketInputs:
     # ASM periods per symbol: (start, end or None).
     asm: Mapping[str, Sequence[tuple[date, date | None]]] = field(default_factory=dict)
     quality_fail_days: frozenset[date] = frozenset()
+    # Results board meetings per symbol; None = the results calendar isn't loaded.
+    results: Mapping[str, Sequence[ResultsDate]] | None = None
+    # The last day upcoming meetings were downloaded.
+    results_updated: date | None = None
+    # News labels with a sentiment per symbol, from `news_labeller`; None = no labels.
+    news: Mapping[str, Sequence[DatedLabel]] | None = None
+    news_labeller: str | None = None
 
 
 @dataclass
@@ -117,6 +126,14 @@ class Market:
     quality_fail: Array  # bool per day
     security_list_known: Array  # bool per day
     exclusions: dict[str, int] = field(default_factory=dict)
+    # bool (stocks, days): a signal that day would fill in a results blackout. None =
+    # the results calendar isn't loaded.
+    results_blackout: Array | None = None
+    results: Mapping[str, Sequence[ResultsDate]] | None = None
+    results_updated: date | None = None
+    # News score 0-100 (50 = no news) per stock and day; None = no news labels.
+    news_score: Array | None = None
+    news_labeller: str | None = None
 
     @property
     def traded(self) -> Array:
@@ -362,7 +379,51 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         quality_fail=np.array([d in inputs.quality_fail_days for d in days]),
         security_list_known=security_list_known,
         exclusions=exclusions,
+        results_blackout=results_blackout(days, [s.symbol for s in inputs.stocks], inputs.results),
+        results=inputs.results,
+        results_updated=inputs.results_updated,
+        news_score=news_scores(days, [s.symbol for s in inputs.stocks], inputs.news),
+        news_labeller=inputs.news_labeller,
     )
+
+
+def news_scores(
+    days: Sequence[date],
+    symbols: Sequence[str],
+    news: Mapping[str, Sequence[DatedLabel]] | None,
+) -> Array | None:
+    """`app.news.labels.news_score` for every stock and day, at once."""
+    if news is None:
+        return None
+    ordinals = np.array([d.toordinal() for d in days])
+    total = np.zeros((len(symbols), len(days)))
+    for k, symbol in enumerate(symbols):
+        for label in news.get(symbol, ()):
+            if label.sentiment == 0:
+                continue
+            weight, half_life = SCORE_WEIGHTS[label.event_type]
+            day = label.day.toordinal()
+            first = int(np.searchsorted(ordinals, day))
+            last = int(
+                np.searchsorted(ordinals, day + half_life * SCORE_HORIZON_HALF_LIVES, "right")
+            )
+            ages = ordinals[first:last] - day
+            total[k, first:last] += label.sentiment * weight * np.power(0.5, ages / half_life)
+    return np.clip(50.0 + SCORE_SCALE * total, 0.0, 100.0)
+
+
+def results_blackout(
+    days: Sequence[date],
+    symbols: Sequence[str],
+    results: Mapping[str, Sequence[ResultsDate]] | None,
+) -> Array | None:
+    if results is None:
+        return None
+    blocked = np.zeros((len(symbols), len(days)), dtype=bool)
+    for k, symbol in enumerate(symbols):
+        for t in blackout_signal_days(days, results.get(symbol, ())):
+            blocked[k, t] = True
+    return blocked
 
 
 @dataclass(frozen=True)

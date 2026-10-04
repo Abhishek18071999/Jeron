@@ -28,9 +28,11 @@ from app.backtest.market import (
 )
 from app.backtest.strategies import STRATEGIES, Strategy
 from app.backtest.walkforward import Evaluation, evaluate
+from app.config import get_settings
 from app.data import store
 from app.data.adjust import adjust_bars, build_adjustments
 from app.data.nse_lists import INDIA_VIX, NIFTY_50, NIFTY_500
+from app.data.pipeline import BOARD_MEETINGS_SOURCE
 from app.data.provider import Bar, CorporateActionRecord
 from app.enums import CorporateActionType, QualityStatus
 from app.models import (
@@ -44,6 +46,7 @@ from app.models import (
     SecurityStatus,
     SurveillanceFlag,
 )
+from app.news import job as news_job
 from app.scan.job import ASM
 from app.scan.universe import UniverseRules
 
@@ -246,6 +249,8 @@ def load_inputs(
         )
     )
 
+    labeller = news_job.labeller_name(get_settings())
+
     def closes(name: str) -> dict[date, float]:
         return {d: float(c) for d, c in store.index_closes(session, name, first, last).items()}
 
@@ -259,7 +264,23 @@ def load_inputs(
         security_status=statuses,
         asm=asm,
         quality_fail_days=fails,
+        results=(
+            store.results_dates(session, [s.symbol for s in stocks])
+            if store.board_meetings_loaded(session)
+            else None
+        ),
+        results_updated=store.board_meetings_updated(session, BOARD_MEETINGS_SOURCE),
+        news=(
+            news_job.dated_labels(session, [s.symbol for s in stocks], labeller, end=last)
+            if news_job.labels_exist(session, labeller)
+            else None
+        ),
+        news_labeller=labeller if news_job.labels_exist(session, labeller) else None,
     )
+
+
+def _years(years: Sequence[int]) -> str:
+    return f"{years[0]}-{years[-1]}" if years else "none"
 
 
 def _money(value: float) -> Decimal:
@@ -371,6 +392,12 @@ def run_backtests(
             f"{'LIVE-ELIGIBLE' if ev.live_eligible else 'not eligible'} (run {run.id}, "
             f"data {ev.fingerprint})"
         )
+        brains = ev.summary["brains"]
+        if brains["results_blackout"] or brains["min_news_score"] is not None:
+            log(
+                f"  results calendar: {_years(brains['results_calendar_years'])}; news from "
+                f"{brains['news_labeller'] or 'no labeller'}: {_years(brains['news_years'])}"
+            )
         for gate in ev.summary["gates"]:
             log(f"  [{'pass' if gate['passed'] else 'FAIL'}] {gate['label']}: {gate['value']}")
         runs.append(run)

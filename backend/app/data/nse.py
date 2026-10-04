@@ -362,6 +362,16 @@ def parse_pr_corporate_actions(content: bytes) -> list[CorporateActionRecord]:
     return actions
 
 
+def pr_member(content: bytes, prefix: str) -> str | None:
+    """The text of the PR bundle's file whose name starts with `prefix` (case ignored):
+    "bm" board meetings, "an" announcements. None if the bundle has no such file."""
+    with zipfile.ZipFile(io.BytesIO(content)) as zf:
+        for name in zf.namelist():
+            if Path(name).name.lower().startswith(prefix) and name.lower().endswith(".txt"):
+                return zf.read(name).decode("latin-1")
+    return None
+
+
 # --- Download with an on-disk cache ---------------------------------------------------
 
 
