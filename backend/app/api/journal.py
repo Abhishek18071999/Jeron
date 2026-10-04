@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.journal import service
+from app.journal import importer, service
 from app.journal.calc import StrategyStats
 from app.journal.service import EntryView, JournalError, SignalInfo
 from app.models import JournalEntry, JournalFill
@@ -46,6 +46,8 @@ class FillOut(BaseModel):
     shares: int
     price: Decimal
     charges: Decimal
+    charges_estimated: bool
+    source: str
 
 
 class PositionOut(BaseModel):
@@ -248,6 +250,26 @@ def manual(body: ManualIn, session: SessionDep) -> EntryOut:
     except JournalError as e:
         raise HTTPException(422, str(e)) from None
     return _one(session, entry)
+
+
+class TradebookIn(BaseModel):
+    csv: str = Field(min_length=1, max_length=10_000_000)
+
+
+class ImportOut(BaseModel):
+    added: int
+    already: int
+    to_signals: int
+    new_entries: int
+    skipped: dict[str, int]
+    problems: list[str]
+
+
+@router.post("/import")
+def import_tradebook(body: TradebookIn, session: SessionDep) -> ImportOut:
+    """Fills from a Zerodha tradebook CSV; a re-import adds nothing."""
+    result = importer.import_tradebook(session, body.csv)
+    return ImportOut(**vars(result))
 
 
 @router.get("/{entry_id}")

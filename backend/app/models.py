@@ -574,4 +574,9 @@ class JournalFill(Base):
     price: Mapped[Decimal] = mapped_column(Price)
     # Brokerage, taxes and fees for this fill, in rupees.
     charges: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal(0))
+    # True when the charges are Jeron's estimate (tradebook imports), not the contract note.
+    charges_estimated: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    source: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual")
+    # "zerodha:<exchange>:<trade id>" for imported fills, so a re-import adds nothing.
+    broker_trade_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -105,7 +105,10 @@ export default async function EntryPage({
                   <td>{f.side}</td>
                   <td className="text-right">{f.shares}</td>
                   <td className="text-right">{inr(f.price)}</td>
-                  <td className="text-right">{inr(f.charges)}</td>
+                  <td className="text-right">
+                    {inr(f.charges)}
+                    {f.charges_estimated && <span className="text-xs text-neutral-500"> est.</span>}
+                  </td>
                   <td className="text-right">
                     <form action={deleteFill.bind(null, e.id, f.id)}>
                       <button className="text-xs text-red-600 underline">delete</button>

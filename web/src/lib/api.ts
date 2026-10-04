@@ -451,6 +451,17 @@ export type JournalFill = {
   shares: number;
   price: string;
   charges: string;
+  charges_estimated: boolean;
+  source: "manual" | "tradebook";
+};
+
+export type TradebookImport = {
+  added: number;
+  already: number;
+  to_signals: number;
+  new_entries: number;
+  skipped: Record<string, number>;
+  problems: string[];
 };
 
 export type JournalPosition = {

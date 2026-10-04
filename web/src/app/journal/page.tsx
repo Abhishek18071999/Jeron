@@ -15,7 +15,7 @@ import { StockSearch } from "@/components/stock-search";
 import { type JournalEntry, type JournalView, getJson } from "@/lib/api";
 
 import { signClass } from "../backtests/format";
-import { addManual } from "./actions";
+import { addManual, importTradebook } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -74,9 +74,9 @@ const fmt = (v: string | null, digits = 2) => (v === null ? "-" : Number(v).toFi
 export default async function Journal({
   searchParams,
 }: {
-  searchParams: Promise<{ signal?: string; error?: string; research?: string }>;
+  searchParams: Promise<{ signal?: string; error?: string | string[]; research?: string; imported?: string }>;
 }) {
-  const { signal, error, research } = await searchParams;
+  const { signal, error, research, imported } = await searchParams;
   if (signal) redirect(`/journal/signal/${encodeURIComponent(signal)}`);
   const showResearch = research === "1";
   const result = await getJson<JournalView>(`/journal?research=${showResearch}`);
@@ -96,6 +96,11 @@ export default async function Journal({
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
       <h1 className="text-2xl font-semibold">Journal</h1>
+      {imported && (
+        <p className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-800 dark:bg-green-950/40 dark:text-green-300">
+          Tradebook: {imported}.
+        </p>
+      )}
       <ErrorNote error={error} />
 
       <Card
@@ -194,8 +199,19 @@ export default async function Journal({
           </div>
         )}
         <p className="mt-2 text-xs text-neutral-500">
-          Expectancy is the average R of closed trades. Broker tradebook import and the weekly summary arrive
-          with M7.
+          Expectancy is the average R of closed trades.
+        </p>
+      </Card>
+
+      <Card title="Import my Zerodha tradebook">
+        <form action={importTradebook} className="flex flex-wrap items-center gap-3 text-sm">
+          <input name="file" type="file" accept=".csv,text/csv" required className="text-sm" />
+          <button className={buttonClass}>Import</button>
+        </form>
+        <p className="mt-2 text-xs text-neutral-500">
+          Console &gt; Reports &gt; Tradebook, segment Equity, download CSV. Each trade becomes a fill on the
+          matching signal or open position; importing the same file again adds nothing. Charges are estimated
+          at delivery rates and marked &ldquo;est.&rdquo;.
         </p>
       </Card>
 
