@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 
 from app.backtest.features import Array
-from app.backtest.market import Market
+from app.backtest.market import Market, Regime
 
 Params = dict[str, float]
 
@@ -145,6 +145,43 @@ def _pullback_condition(m: Market, p: Params) -> Array:
     )
 
 
+def _rs6_rank(m: Market) -> Array:
+    if m.rs6_rank is None:
+        raise ValueError("this strategy needs the market's rs6_rank")
+    return np.asarray(np.nan_to_num(m.rs6_rank, nan=-1.0), dtype=float)
+
+
+def _uptrend(m: Market) -> Array:
+    return np.asarray((m.close > m.ema50) & (m.ema50 > m.ema200), dtype=bool)
+
+
+# v2 research (docs/plans/strategies-v2.md): a 6-month RS leader is in the top fifth of
+# the universe.
+TREND_BREAKOUT_MIN_RS = 0.8
+
+
+def _trend_breakout_condition(m: Market, p: Params) -> Array:
+    return np.asarray(
+        (m.close > m.prior_high_52w)
+        & (m.volume_ratio >= p["volume_x"])
+        & _uptrend(m)
+        & (_rs6_rank(m) >= TREND_BREAKOUT_MIN_RS)
+        & m.regime_is(Regime.BULL),
+        dtype=bool,
+    )
+
+
+def _rs_pullback_condition(m: Market, p: Params) -> Array:
+    return np.asarray(
+        (_rs6_rank(m) >= p["min_rs"])
+        & _uptrend(m)
+        & (m.low <= m.ema20)
+        & (m.close > m.ema20)
+        & m.regime_is(Regime.BULL, Regime.SIDEWAYS),
+        dtype=bool,
+    )
+
+
 SCORE_SWING = Strategy(
     key="score-swing",
     version="score-swing-v1",
@@ -192,6 +229,41 @@ PULLBACK_TREND = Strategy(
     condition=_pullback_condition,
 )
 
+TREND_BREAKOUT = Strategy(
+    key="trend-breakout",
+    version="trend-breakout-v1",
+    name="52-week breakout by a relative-strength leader (positional)",
+    tier=Tier.POSITIONAL,
+    summary="Buy a 52-week-high breakout on volume by a top-fifth RS stock, in a bull market.",
+    grid_axes={"volume_x": (1.5, 2.0), "stop_atr": (2.5, 3.0)},
+    default={"volume_x": 1.5, "stop_atr": 3.0},
+    describe=lambda p: [
+        "Enter when the close is above the highest high of the previous 252 sessions, on "
+        f"volume at least {p['volume_x']:g}x the 20-day average, with the close above the "
+        "50-day EMA and the 50-day above the 200-day, the stock's 6-month relative "
+        f"strength in the top {100 - 100 * TREND_BREAKOUT_MIN_RS:g}% of the universe, and "
+        "the market regime bull (Nifty 500 above its rising 200-day EMA)."
+    ],
+    condition=_trend_breakout_condition,
+)
+
+RS_PULLBACK = Strategy(
+    key="rs-pullback",
+    version="rs-pullback-v1",
+    name="Pullback to the 20-day EMA by a relative-strength leader (positional)",
+    tier=Tier.POSITIONAL,
+    summary="Buy a dip to the 20-day EMA that holds, in a top RS stock, unless the market is bear.",
+    grid_axes={"min_rs": (0.8, 0.9), "stop_atr": (2.0, 3.0)},
+    default={"min_rs": 0.9, "stop_atr": 2.0},
+    describe=lambda p: [
+        "Enter when the stock's 6-month relative strength is in the top "
+        f"{100 - 100 * p['min_rs']:g}% of the universe, the close is above the 50-day EMA "
+        "and the 50-day above the 200-day, the day's low touched the 20-day EMA and the "
+        "close held above it, and the market regime is not bear."
+    ],
+    condition=_rs_pullback_condition,
+)
+
 # Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
 # back above 40 after about 26 days.
 MIN_NEWS_SCORE = 40.0
@@ -219,6 +291,8 @@ STRATEGIES = {
         with_events(SCORE_SWING),
         with_events(BREAKOUT_52W),
         with_events(PULLBACK_TREND),
+        TREND_BREAKOUT,
+        RS_PULLBACK,
     )
 }
 
