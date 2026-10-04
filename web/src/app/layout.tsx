@@ -30,6 +30,7 @@ export default function RootLayout({
             <Link href="/scanner">Scanner</Link>
             <Link href="/backtests">Backtests</Link>
             <Link href="/paper">Paper trading</Link>
+            <Link href="/compare">Compare</Link>
             <Link href="/data">Data quality</Link>
             <Link href="/spot-check">Spot check</Link>
             <StockSearch className="w-full sm:ml-auto sm:w-64" />

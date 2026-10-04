@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.alerts.channels import AlertError, TelegramChannel
 from app.alerts.job import NOT_SET_UP, run_alerts, send_test
+from app.analytics.weekly import run_weekly
 from app.backtest.job import run_backtests
 from app.backtest.strategies import STRATEGIES
 from app.calendar.nse import TradingCalendar
@@ -43,6 +44,8 @@ from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
+from app.exits.job import run_preopen
+from app.journal.importer import import_tradebook
 from app.news.deepseek import LabellerError
 from app.news.job import (
     api_error_message,
@@ -144,6 +147,22 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("alerts", help="send due signal alerts and the daily summary")
     p.add_argument("--date", type=_date, help="day to send for (default: newest scan)")
+
+    p = sub.add_parser(
+        "preopen", help="pre-open check of open journal positions (08:30 IST), sent as an alert"
+    )
+    p.add_argument("--date", type=_date, help="session to check for (default: the next one)")
+    p.add_argument("--no-send", action="store_true", help="print the message only")
+
+    p = sub.add_parser(
+        "weekly",
+        help="weekly summary and revalidation (retires failing strategies), sent as an alert",
+    )
+    p.add_argument("--date", type=_date, help="last day of the week (default: today)")
+    p.add_argument("--no-send", action="store_true", help="print the message only")
+
+    p = sub.add_parser("tradebook", help="import a Zerodha tradebook CSV into the journal")
+    p.add_argument("file", type=Path)
 
     p = sub.add_parser("telegram", help="set up or test Telegram alerts")
     group = p.add_mutually_exclusive_group(required=True)
@@ -307,6 +326,27 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "alerts":
             sent = run_alerts(session, args.date, log=_log)
             return 0 if sent.status == "ok" and not sent.failed else 1
+
+        if args.command == "preopen":
+            _, check = run_preopen(session, args.date, send=not args.no_send, log=_log)
+            return 0 if check.status in ("ok", "not_configured") and not check.failed else 1
+
+        if args.command == "weekly":
+            _, sent = run_weekly(session, args.date, send=not args.no_send, log=_log)
+            return 0 if sent.status in ("ok", "not_configured") and not sent.failed else 1
+
+        if args.command == "tradebook":
+            imported = import_tradebook(session, args.file.read_text(encoding="utf-8-sig"))
+            _log(
+                f"Tradebook: {imported.added} fills added ({imported.to_signals} to signals, "
+                f"{imported.new_entries} new entries without a signal), {imported.already} "
+                "already imported."
+            )
+            for segment, count in sorted(imported.skipped.items()):
+                _log(f"  Skipped {count} {segment} trades (only equity cash is journalled).")
+            for problem in imported.problems:
+                _log(f"  - {problem}")
+            return 1 if imported.problems else 0
 
         if args.command == "telegram":
             settings = get_settings()

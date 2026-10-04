@@ -241,6 +241,10 @@ def add_fill(
     shares: int,
     price: Decimal,
     charges: Decimal = Decimal(0),
+    *,
+    source: str = "manual",
+    broker_trade_id: str | None = None,
+    charges_estimated: bool = False,
 ) -> JournalFill:
     if side not in ("buy", "sell"):
         raise JournalError("Side must be buy or sell")
@@ -262,6 +266,9 @@ def add_fill(
         shares=shares,
         price=price,
         charges=charges,
+        source=source,
+        broker_trade_id=broker_trade_id,
+        charges_estimated=charges_estimated,
     )
     session.add(fill)
     session.commit()

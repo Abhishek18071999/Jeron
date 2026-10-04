@@ -451,6 +451,17 @@ export type JournalFill = {
   shares: number;
   price: string;
   charges: string;
+  charges_estimated: boolean;
+  source: "manual" | "tradebook";
+};
+
+export type TradebookImport = {
+  added: number;
+  already: number;
+  to_signals: number;
+  new_entries: number;
+  skipped: Record<string, number>;
+  problems: string[];
 };
 
 export type JournalPosition = {
@@ -654,3 +665,45 @@ export async function sendJson<T>(
     return { ok: false, error: "The backend is not reachable" };
   }
 }
+
+export type CompareRecord = {
+  trades: number;
+  win_rate: number | null;
+  expectancy_r: number | null;
+  profit_factor: number | null;
+  avg_sessions: number | null;
+  max_drawdown: number | null;
+  drawdown_unit: "%" | "R";
+  start: string | null;
+  end: string | null;
+};
+
+export type CompareGate = { name: string; status: "passed" | "failed" | "not yet"; detail: string };
+
+export type StrategyCompare = {
+  account_id: number | null;
+  strategy_key: string | null;
+  strategy_version: string | null;
+  params_label: string | null;
+  live_eligible: boolean;
+  account_status: string | null;
+  backtest_run_id: number | null;
+  backtest: CompareRecord | null;
+  paper: CompareRecord | null;
+  real: CompareRecord;
+  paper_gate: CompareGate | null;
+  real_gate: CompareGate | null;
+  paper_range: [number, number] | null;
+  real_range: [number, number] | null;
+  stage: string;
+  divergence: {
+    pairs: number;
+    slippage_r: number | null;
+    late_days: number | null;
+    exit_gap_r: number | null;
+    skipped: number;
+    skipped_r: number;
+    skipped_winners: number;
+    causes: string[];
+  } | null;
+};

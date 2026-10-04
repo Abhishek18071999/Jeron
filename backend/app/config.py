@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = "https://ollama.com"
     # Where the web app is, for links in alerts.
     web_url: str = "http://localhost:3000"
+    # When the scheduler runs the jobs (HH:MM, IST, weekdays that trade).
+    schedule_preopen: str = "08:30"
+    schedule_daily: str = "19:00"
 
     @property
     def telegram_ready(self) -> bool:

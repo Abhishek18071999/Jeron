@@ -1,5 +1,35 @@
 # Runs the whole of Jeron on your computer: `docker compose up`, then open
 # http://localhost:3000. Settings come from .env (copy .env.example first).
+x-backend-env: &backend-env
+  JERON_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jeron}:${POSTGRES_PASSWORD:-jeron}@db:5432/${POSTGRES_DB:-jeron}
+  JERON_CORS_ORIGINS: http://localhost:3000
+  JERON_DATA_DIR: /data
+  JERON_CAPITAL: ${JERON_CAPITAL:-1000000}
+  JERON_RISK_PCT: ${JERON_RISK_PCT:-1}
+  JERON_MAX_POSITIONS_SWING: ${JERON_MAX_POSITIONS_SWING:-5}
+  JERON_MAX_POSITIONS_POSITIONAL: ${JERON_MAX_POSITIONS_POSITIONAL:-8}
+  JERON_SECTOR_CAP_PCT: ${JERON_SECTOR_CAP_PCT:-30}
+  # Alerts (M5): set these in .env, never in this file.
+  JERON_TELEGRAM_BOT_TOKEN: ${JERON_TELEGRAM_BOT_TOKEN:-}
+  JERON_TELEGRAM_CHAT_ID: ${JERON_TELEGRAM_CHAT_ID:-}
+  JERON_ALERT_RESEARCH_SIGNALS: ${JERON_ALERT_RESEARCH_SIGNALS:-false}
+  JERON_SMTP_HOST: ${JERON_SMTP_HOST:-}
+  JERON_SMTP_PORT: ${JERON_SMTP_PORT:-587}
+  JERON_SMTP_USER: ${JERON_SMTP_USER:-}
+  JERON_SMTP_PASSWORD: ${JERON_SMTP_PASSWORD:-}
+  JERON_ALERT_EMAIL_FROM: ${JERON_ALERT_EMAIL_FROM:-}
+  JERON_ALERT_EMAIL_TO: ${JERON_ALERT_EMAIL_TO:-}
+  JERON_WEB_URL: ${JERON_WEB_URL:-http://localhost:3000}
+  JERON_ANTHROPIC_API_KEY: ${JERON_ANTHROPIC_API_KEY:-}
+  JERON_NEWS_PROVIDER: ${JERON_NEWS_PROVIDER:-claude}
+  JERON_NEWS_MODEL: ${JERON_NEWS_MODEL:-claude-opus-5-5}
+  JERON_DEEPSEEK_API_KEY: ${JERON_DEEPSEEK_API_KEY:-}
+  JERON_DEEPSEEK_MODEL: ${JERON_DEEPSEEK_MODEL:-deepseek-chat}
+  JERON_OLLAMA_API_KEY: ${JERON_OLLAMA_API_KEY:-}
+  JERON_OLLAMA_MODEL: ${JERON_OLLAMA_MODEL:-gemma4:31b}
+  JERON_SCHEDULE_PREOPEN: ${JERON_SCHEDULE_PREOPEN:-08:30}
+  JERON_SCHEDULE_DAILY: ${JERON_SCHEDULE_DAILY:-19:00}
+
 services:
   db:
     image: postgres:16-alpine
@@ -20,32 +50,7 @@ services:
   backend:
     build: ./backend
     environment:
-      JERON_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jeron}:${POSTGRES_PASSWORD:-jeron}@db:5432/${POSTGRES_DB:-jeron}
-      JERON_CORS_ORIGINS: http://localhost:3000
-      JERON_DATA_DIR: /data
-      JERON_CAPITAL: ${JERON_CAPITAL:-1000000}
-      JERON_RISK_PCT: ${JERON_RISK_PCT:-1}
-      JERON_MAX_POSITIONS_SWING: ${JERON_MAX_POSITIONS_SWING:-5}
-      JERON_MAX_POSITIONS_POSITIONAL: ${JERON_MAX_POSITIONS_POSITIONAL:-8}
-      JERON_SECTOR_CAP_PCT: ${JERON_SECTOR_CAP_PCT:-30}
-      # Alerts (M5): set these in .env, never in this file.
-      JERON_TELEGRAM_BOT_TOKEN: ${JERON_TELEGRAM_BOT_TOKEN:-}
-      JERON_TELEGRAM_CHAT_ID: ${JERON_TELEGRAM_CHAT_ID:-}
-      JERON_ALERT_RESEARCH_SIGNALS: ${JERON_ALERT_RESEARCH_SIGNALS:-false}
-      JERON_SMTP_HOST: ${JERON_SMTP_HOST:-}
-      JERON_SMTP_PORT: ${JERON_SMTP_PORT:-587}
-      JERON_SMTP_USER: ${JERON_SMTP_USER:-}
-      JERON_SMTP_PASSWORD: ${JERON_SMTP_PASSWORD:-}
-      JERON_ALERT_EMAIL_FROM: ${JERON_ALERT_EMAIL_FROM:-}
-      JERON_ALERT_EMAIL_TO: ${JERON_ALERT_EMAIL_TO:-}
-      JERON_WEB_URL: ${JERON_WEB_URL:-http://localhost:3000}
-      JERON_ANTHROPIC_API_KEY: ${JERON_ANTHROPIC_API_KEY:-}
-      JERON_NEWS_PROVIDER: ${JERON_NEWS_PROVIDER:-claude}
-      JERON_NEWS_MODEL: ${JERON_NEWS_MODEL:-claude-opus-5-5}
-      JERON_DEEPSEEK_API_KEY: ${JERON_DEEPSEEK_API_KEY:-}
-      JERON_DEEPSEEK_MODEL: ${JERON_DEEPSEEK_MODEL:-deepseek-chat}
-      JERON_OLLAMA_API_KEY: ${JERON_OLLAMA_API_KEY:-}
-      JERON_OLLAMA_MODEL: ${JERON_OLLAMA_MODEL:-gemma4:31b}
+      <<: *backend-env
     volumes:
       # Downloaded NSE files, kept so history can be re-read without downloading again.
       - marketdata:/data
@@ -59,6 +64,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # Runs the daily job at 19:00 IST, the pre-open check at 08:30 IST and the weekly
+  # summary after Friday's run (app/scheduler.py).
+  scheduler:
+    build: ./backend
+    command: ["python", "-m", "app.scheduler"]
+    environment:
+      <<: *backend-env
+    volumes:
+      - marketdata:/data
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
   web:
     build: ./web
