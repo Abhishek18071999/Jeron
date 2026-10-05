@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { Card, ErrorNote, ResearchBadge, inr } from "@/components/ui";
-import { type SignalJournal, getJson } from "@/lib/api";
+import { Card, ErrorNote, LinkButton, ResearchBadge, inr } from "@/components/ui";
+import { type SavedPlan, type SignalJournal, getJson } from "@/lib/api";
 
 import { decideSignal } from "../../actions";
-import { PlanForm } from "../../forms";
+import { PlanForm, PlanSummary } from "../../forms";
 
 export const dynamic = "force-dynamic";
 
@@ -28,15 +28,22 @@ export default async function SignalDecision({
   }
   const { signal: s, payload: p, entry } = result.data;
   if (entry && !error) redirect(`/journal/${entry.id}`);
+  const plans = await getJson<SavedPlan[]>(`/plans?signal_id=${encodeURIComponent(s.signal_id)}&limit=1`);
+  const plan = plans.ok ? (plans.data[0] ?? null) : null;
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
-      <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight sm:text-2xl">
-        <Link href={`/stocks/${s.ticker}`} className="underline">
-          {s.ticker}
-        </Link>
-        <ResearchBadge research={s.research_only} />
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight sm:text-2xl">
+          <Link href={`/stocks/${s.ticker}`} className="underline">
+            {s.ticker}
+          </Link>
+          <ResearchBadge research={s.research_only} />
+        </h1>
+        <LinkButton href={`/plan/${s.ticker}?signal=${s.signal_id}`} variant={plan || s.research_only ? "secondary" : "primary"}>
+          {plan ? "Plan again" : "Plan trade"}
+        </LinkButton>
+      </div>
       <ErrorNote error={error} />
       <Card title="The plan">
         <div className="space-y-2 text-sm">
@@ -75,8 +82,9 @@ export default async function SignalDecision({
           )}
         </div>
       </Card>
-      <Card title="What I did">
-        <PlanForm action={decideSignal.bind(null, s.signal_id)} entry={entry} signalStop={s.stop} />
+      {plan && <PlanSummary plan={plan} title="My plan" />}
+      <Card title="What I did" subtitle={plan ? `Starts from plan #${plan.id}` : "No trade plan saved for this signal yet"}>
+        <PlanForm action={decideSignal.bind(null, s.signal_id)} entry={entry} signalStop={s.stop} plan={plan} />
       </Card>
     </main>
   );

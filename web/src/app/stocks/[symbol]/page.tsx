@@ -1,7 +1,8 @@
 import Link from "next/link";
 
-import { Card, ResearchBadge, inr, rMultiple } from "@/components/ui";
-import { type StockView, getJson } from "@/lib/api";
+import { WatchStar } from "@/components/watch-star";
+import { Card, LinkButton, ResearchBadge, inr, rMultiple } from "@/components/ui";
+import { type StockView, type Watchlist, getJson } from "@/lib/api";
 
 import { signClass } from "../../backtests/format";
 import { type Level, PriceChart } from "./chart";
@@ -10,7 +11,10 @@ export const dynamic = "force-dynamic";
 
 export default async function StockPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
-  const result = await getJson<StockView>(`/stocks/${encodeURIComponent(symbol)}?sessions=500`);
+  const [result, watch] = await Promise.all([
+    getJson<StockView>(`/stocks/${encodeURIComponent(symbol)}?sessions=500`),
+    getJson<Watchlist>("/watchlist"),
+  ]);
   if (!result.ok) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
@@ -20,6 +24,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
     );
   }
   const s = result.data;
+  const watched = watch.ok && watch.data.items.some((i) => i.ticker === s.symbol);
   const latest = s.signals[0];
   const levels: Level[] = latest
     ? [
@@ -35,16 +40,25 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-          {s.symbol}
-          {s.name && <span className="ml-2 text-base font-normal text-muted">{s.name}</span>}
-        </h1>
-        <p className="text-sm text-muted">
-          {[s.series, s.sector, s.industry].filter(Boolean).join(" · ")}
-          {last && ` · close ${inr(last.close)} on ${last.time}`}
-          {scan && ` · technical score ${Number(scan.score).toFixed(1)} (rank ${scan.rank})`}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h1 className="flex flex-wrap items-center gap-x-2 text-xl font-semibold tracking-tight sm:text-2xl">
+            {s.symbol}
+            <WatchStar ticker={s.symbol} watched={watched} back={`/stocks/${s.symbol}`} />
+            {s.name && <span className="text-base font-normal text-muted">{s.name}</span>}
+          </h1>
+          <p className="text-sm text-muted">
+            {[s.series, s.sector, s.industry].filter(Boolean).join(" · ")}
+            {last && ` · close ${inr(last.close)} on ${last.time}`}
+            {scan && ` · technical score ${Number(scan.score).toFixed(1)} (rank ${scan.rank})`}
+          </p>
+        </div>
+        <LinkButton
+          href={latest ? `/plan/${s.symbol}?signal=${latest.signal.signal_id}` : `/plan/${s.symbol}`}
+          variant="primary"
+        >
+          Plan trade
+        </LinkButton>
       </div>
 
       <Card title="Price (split/bonus-adjusted)">
@@ -92,9 +106,14 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
                 report cards
               </Link>
             </p>
-            <Link href={`/journal/signal/${latest.signal.signal_id}`} className="underline">
-              Record what I did
-            </Link>
+            <p className="flex flex-wrap gap-4">
+              <Link href={`/plan/${s.symbol}?signal=${latest.signal.signal_id}`} className="font-medium text-accent underline">
+                Plan this trade
+              </Link>
+              <Link href={`/journal/signal/${latest.signal.signal_id}`} className="underline">
+                Record what I did
+              </Link>
+            </p>
           </div>
         </Card>
       )}

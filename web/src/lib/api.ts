@@ -491,6 +491,7 @@ export type JournalEntry = {
   own_stop: boolean;
   followed_plan: boolean | null;
   notes: string;
+  plan_id?: number | null;
   created_at: string;
   updated_at: string;
   signal: SignalBrief | null;
@@ -798,4 +799,139 @@ export type Portfolio = {
     sectors: { sector: string; positions: number; value: string; pct_of_capital: string; over_cap: boolean }[];
     warnings: string[];
   };
+};
+
+// --- Trade plan, watchlist and ranked stocks (UI phase 1b) ----------------------------
+
+export type PlanCheck = {
+  key: string;
+  label: string;
+  status: "pass" | "fail" | "warn";
+  detail: string;
+  hard: boolean;
+};
+
+export type PlanResult = {
+  entry: string;
+  stop: string;
+  tier: "swing" | "positional";
+  shares: number;
+  sized_by: string;
+  risk_per_share: string;
+  risk_amount: string;
+  position_value: string;
+  position_pct: string;
+  target1: string;
+  target2: string;
+  reward_risk_t1: string | null;
+  reward_risk_t2: string | null;
+  round_trip_costs: string | null;
+  slippage_pct: number;
+  stop_distance_pct: string | null;
+  stop_atr: string | null;
+  heat_before_pct: string;
+  heat_after_pct: string;
+  heat_warn_pct: string;
+  heat_block_pct: string;
+  sector_before_pct: string;
+  sector_after_pct: string;
+  sector_cap_pct: string;
+  risk_pct: number;
+  risk_multiplier: number;
+  checks: PlanCheck[];
+  ok: boolean;
+  blockers: string[];
+};
+
+export type SavedPlan = {
+  id: number;
+  ticker: string;
+  signal_id: string | null;
+  supersedes_id: number | null;
+  tier: "swing" | "positional";
+  entry: string;
+  stop: string;
+  target1: string;
+  target2: string;
+  shares: number;
+  risk_amount: string;
+  position_value: string;
+  reward_risk_t2: string;
+  stop_distance_pct: string;
+  mood: MoodMode | null;
+  reason: string;
+  data_as_of: string | null;
+  details: Record<string, unknown>;
+  checklist: string[];
+  created_at: string;
+};
+
+export type PlanView = {
+  stock: {
+    symbol: string;
+    name: string | null;
+    sector: string | null;
+    last_close: string | null;
+    last_date: string | null;
+    atr: number | null;
+    avg_volume20: number | null;
+    score: string | null;
+    rank: number | null;
+    in_scan: boolean;
+  };
+  signal: SignalBrief | null;
+  defaults: { entry: string | null; stop: string | null; tier: "swing" | "positional"; reason: string; stop_hint: string };
+  mood: { day: string; mode: MoodMode; reason: string; risk_multiplier: number } | null;
+  events: { results_date: string | null; results_line: string; blackout: boolean | null; ex_dates: string[] };
+  capital: string;
+  open_risk: string;
+  plan: PlanResult | null;
+  checklist: { key: string; label: string }[];
+  saved: SavedPlan[];
+};
+
+export type WatchItem = {
+  id: number;
+  ticker: string;
+  name: string | null;
+  sector: string | null;
+  alert_price: string | null;
+  alert_direction: "above" | "below" | null;
+  note: string;
+  last_close: string | null;
+  last_date: string | null;
+  day_high: string | null;
+  day_low: string | null;
+  change_pct: string | null;
+  pct_to_alert: string | null;
+  below_52w_high_pct: string | null;
+  score: string | null;
+  rank: number | null;
+  hit: boolean;
+  alerted_on: string | null;
+};
+
+export type Watchlist = { day: string | null; items: WatchItem[]; hits: number };
+
+export type RankedStock = {
+  rank: number;
+  symbol: string;
+  name: string | null;
+  sector: string | null;
+  score: string;
+  close: string;
+  in_nifty500: boolean;
+  return_6m: number | null;
+  rs_6m: number | null;
+  below_52w_high_pct: number | null;
+  watched: boolean;
+};
+
+export type Ranked = {
+  trade_date: string | null;
+  sector: string | null;
+  sort: "score" | "rs" | "return";
+  total: number;
+  offset: number;
+  items: RankedStock[];
 };

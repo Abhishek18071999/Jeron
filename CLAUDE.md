@@ -64,10 +64,17 @@ are part of done, never commit secrets.
   - `app/portfolio/` my real portfolio: `calc.py` (open risk, heat, give-back, sector
     exposure vs settings; pure) and `service.py` (journal positions + the pre-open exit
     plan). Served at `/portfolio`.
+  - `app/plan/` trade plans (decision 0010): `calc.py` (the engine's `position_size` and
+    `reward_risk`, spec section 4 checks, heat and sector after the buy, the 5-item
+    checklist; pure) and `service.py` (database). `GET /plan/{symbol}`, `POST /plans`;
+    plans are never changed (a new one supersedes), journal entries carry `plan_id`.
+  - `app/watchlist/` `calc.py` (alert hits, alert keys; pure) and `service.py`; served at
+    `/watchlist`. The alerts job sends one alert per item and price (`watch:` keys).
   - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
     days, `weekly` after the last session of the week. Runs as the `scheduler` service.
   - `app/api/` routes; `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
     `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
+    `stocks.py` `/stocks/ranked` (the latest scan, by industry), `plan.py`, `watchlist.py`;
     `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
     company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
@@ -79,8 +86,11 @@ are part of done, never commit secrets.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Navigation: Today (`/`),
-  Stocks, Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
+  Stocks (sector heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under
+  it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
   compare, data, spot check); phones get a bottom tab bar (`src/components/nav.tsx`).
+  Ctrl+K opens the command palette (`src/components/command-palette.tsx`); the trade
+  plan form recalculates through the read-only `/api/plan` route handler.
   Colours are tokens in `src/app/globals.css` (`text-muted`, `border-line`, `text-good`,
   `text-bad`, `bg-accent`...); shared parts in `src/components/ui.tsx` (Card, Stat, Badge,
   Button, Table, EmptyState with the command that fills it). Server components call the

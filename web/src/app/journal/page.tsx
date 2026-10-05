@@ -12,7 +12,7 @@ import {
   rMultiple,
 } from "@/components/ui";
 import { StockSearch } from "@/components/stock-search";
-import { type JournalEntry, type JournalView, getJson } from "@/lib/api";
+import { type JournalEntry, type JournalView, type SavedPlan, getJson } from "@/lib/api";
 
 import { signClass } from "../backtests/format";
 import { addManual, importTradebook } from "./actions";
@@ -74,9 +74,9 @@ const fmt = (v: string | null, digits = 2) => (v === null ? "-" : Number(v).toFi
 export default async function Journal({
   searchParams,
 }: {
-  searchParams: Promise<{ signal?: string; error?: string | string[]; research?: string; imported?: string }>;
+  searchParams: Promise<{ signal?: string; error?: string | string[]; research?: string; imported?: string; plan?: string }>;
 }) {
-  const { signal, error, research, imported } = await searchParams;
+  const { signal, error, research, imported, plan: planParam } = await searchParams;
   if (signal) redirect(`/journal/signal/${encodeURIComponent(signal)}`);
   const showResearch = research === "1";
   const result = await getJson<JournalView>(`/journal?research=${showResearch}`);
@@ -89,6 +89,8 @@ export default async function Journal({
     );
   }
   const j = result.data;
+  const planResult = planParam && /^\d+$/.test(planParam) ? await getJson<SavedPlan>(`/plans/${planParam}`) : null;
+  const plan = planResult?.ok ? planResult.data : null;
   const weekly = await getJson<{ week_start: string; day: string; text: string }>("/analytics/weekly");
   const open = j.entries.filter((e) => e.position.status === "open");
   const closed = j.entries.filter((e) => e.position.status === "closed");
@@ -222,16 +224,34 @@ export default async function Journal({
         </p>
       </Card>
 
-      <Card title="Add a trade I took without a signal">
-        <form action={addManual} className="grid gap-3 text-sm sm:grid-cols-4">
-          <StockSearch name="ticker" placeholder="Stock, e.g. RIL" required inputClassName={`${inputClass} w-full`} />
-          <input name="stop" placeholder="Stop ₹" inputMode="decimal" className={inputClass} />
-          <input name="reason" placeholder="Why" className={inputClass} />
-          <div>
-            <button className={buttonClass}>Add</button>
-          </div>
-        </form>
-      </Card>
+      <section id="add" className="scroll-mt-20">
+        <Card
+          title="Add a trade I took without a signal"
+          subtitle={plan ? `From trade plan #${plan.id}: ${plan.shares} ${plan.ticker} at ${inr(plan.entry)}, stop ${inr(plan.stop)}` : undefined}
+        >
+          <form action={addManual} className="grid gap-3 text-sm sm:grid-cols-4">
+            {plan && <input type="hidden" name="plan_id" value={plan.id} />}
+            <StockSearch
+              name="ticker"
+              placeholder="Stock, e.g. RIL"
+              required
+              defaultValue={plan?.ticker ?? ""}
+              inputClassName={`${inputClass} w-full`}
+            />
+            <input
+              name="stop"
+              placeholder="Stop ₹"
+              inputMode="decimal"
+              defaultValue={plan ? String(Number(plan.stop)) : ""}
+              className={inputClass}
+            />
+            <input name="reason" placeholder="Why" defaultValue={plan?.reason ?? ""} className={inputClass} />
+            <div>
+              <button className={buttonClass}>Add</button>
+            </div>
+          </form>
+        </Card>
+      </section>
     </main>
   );
 }
