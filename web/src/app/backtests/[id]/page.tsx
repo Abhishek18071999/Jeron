@@ -48,27 +48,27 @@ function EquityChart({ points, holdoutStart }: { points: EquityPoint[]; holdoutS
       <svg viewBox={`0 0 ${W} ${H + 110}`} className="w-full" role="img" aria-label="Equity curve">
         {splitX !== null && (
           <>
-            <rect x={splitX} y={0} width={W - splitX} height={H + 90} className="fill-amber-100/60 dark:fill-amber-900/20" />
-            <text x={splitX + 4} y={12} className="fill-amber-700 text-[11px] dark:fill-amber-400">
+            <rect x={splitX} y={0} width={W - splitX} height={H + 90} className="fill-warn-bg" />
+            <text x={splitX + 4} y={12} className="fill-warn text-[11px]">
               holdout
             </text>
           </>
         )}
-        <path d={path(bench, min, max, H)} className="fill-none stroke-neutral-400" strokeWidth={1.5} strokeDasharray="4 3" />
-        <path d={path(equity, min, max, H)} className="fill-none stroke-green-700 dark:stroke-green-400" strokeWidth={2} />
+        <path d={path(bench, min, max, H)} className="fill-none stroke-muted" strokeWidth={1.5} strokeDasharray="4 3" />
+        <path d={path(equity, min, max, H)} className="fill-none stroke-good" strokeWidth={2} />
         <g transform={`translate(0, ${H + 10})`}>
-          <path d={`${path(dd, ddMin, 0, 70)}L${W},0L0,0Z`} className="fill-red-200 dark:fill-red-900/50" />
-          <text x={4} y={66} className="fill-neutral-500 text-[11px]">
+          <path d={`${path(dd, ddMin, 0, 70)}L${W},0L0,0Z`} className="fill-bad-bg" />
+          <text x={4} y={66} className="fill-muted text-[11px]">
             drawdown (deepest {num(-ddMin, 1)}%)
           </text>
         </g>
         {years.map(({ i, year }) => (
-          <text key={year} x={(i / (points.length - 1)) * W + 2} y={H + 102} className="fill-neutral-500 text-[11px]">
+          <text key={year} x={(i / (points.length - 1)) * W + 2} y={H + 102} className="fill-muted text-[11px]">
             {year}
           </text>
         ))}
       </svg>
-      <figcaption className="text-xs text-neutral-500">
+      <figcaption className="text-xs text-muted">
         Green: strategy equity from {rupees(points[0].equity)}. Dashed grey: Nifty 500 bought and held from the same
         day. Red: the strategy&apos;s drawdown from its peak.
       </figcaption>
@@ -79,7 +79,7 @@ function EquityChart({ points, holdoutStart }: { points: EquityPoint[]; holdoutS
 function StatsTable({ rows }: { rows: { label: string; trades: TradeStats; curve: CurveStats | null }[] }) {
   return (
     <table className="mt-3 w-full text-sm">
-      <thead className="text-left text-neutral-500">
+      <thead className="text-left text-muted">
         <tr>
           <th className="py-1 pr-3"></th>
           <th className="pr-3 text-right">Trades</th>
@@ -95,7 +95,7 @@ function StatsTable({ rows }: { rows: { label: string; trades: TradeStats; curve
       </thead>
       <tbody>
         {rows.map(({ label, trades: t, curve: c }) => (
-          <tr key={label} className="border-t border-neutral-200 dark:border-neutral-800">
+          <tr key={label} className="border-t border-line">
             <td className="py-1 pr-3">{label}</td>
             <td className="pr-3 text-right">{t.trades}</td>
             <td className="pr-3 text-right">{pct(t.win_rate)}</td>
@@ -137,7 +137,7 @@ function TradesTable({ trades }: { trades: BacktestTrade[] }) {
   return (
     <div className="mt-3 max-h-[36rem] overflow-auto">
       <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-white text-left text-neutral-500 dark:bg-neutral-950">
+        <thead className="sticky top-0 bg-surface text-left text-muted">
           <tr>
             <th className="py-1 pr-2">#</th>
             <th className="pr-2">Stock</th>
@@ -157,8 +157,8 @@ function TradesTable({ trades }: { trades: BacktestTrade[] }) {
         </thead>
         <tbody>
           {trades.map((t) => (
-            <tr key={t.seq} className="border-t border-neutral-100 dark:border-neutral-900">
-              <td className="py-0.5 pr-2 text-neutral-500">{t.seq}</td>
+            <tr key={t.seq} className="border-t border-line">
+              <td className="py-0.5 pr-2 text-muted">{t.seq}</td>
               <td className="pr-2">
                 <Link href={`/spot-check?symbol=${encodeURIComponent(t.symbol)}&date=${t.entry_date}`} className="underline">
                   {t.symbol}
@@ -193,7 +193,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
   if (!view.ok) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <p className="text-neutral-600 dark:text-neutral-400">{view.error}</p>
+        <p className="text-muted">{view.error}</p>
       </main>
     );
   }
@@ -205,11 +205,11 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <Link href="/backtests" className="text-sm text-neutral-500 underline">
+      <Link href="/backtests" className="text-sm text-muted underline">
         All backtests
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold">{run.strategy_name}</h1>
-      <p className="mt-1 text-sm text-neutral-500">
+      <h1 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">{run.strategy_name}</h1>
+      <p className="mt-1 text-sm text-muted">
         {run.strategy_version} ({run.tier}). Run {run.id} of {view.data.runs_of_strategy} for this strategy, on{" "}
         {run.created_at.slice(0, 10)}. Data {summary.periods.data[0]} to {summary.periods.data[1]} (fingerprint{" "}
         {run.fingerprint}). Tested {summary.periods.out_of_sample[0]} to {summary.periods.out_of_sample[1]}; holdout{" "}
@@ -218,10 +218,10 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
 
       <section
         className={`mt-6 rounded-lg border px-4 py-3 ${
-          run.live_eligible ? "border-green-300 dark:border-green-800" : "border-red-300 dark:border-red-800"
+          run.live_eligible ? "border-accent/40" : "border-line-strong"
         }`}
       >
-        <p className={`font-semibold ${run.live_eligible ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+        <p className={`font-semibold ${run.live_eligible ? "text-good" : "text-bad"}`}>
           {run.live_eligible
             ? "Live-eligible: passes every check, out of sample and after costs."
             : "Not live-eligible: it fails at least one check below. Jeron will not issue signals from it."}
@@ -229,14 +229,14 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
         <ul className="mt-2 text-sm">
           {summary.gates.map((g) => (
             <li key={g.key}>
-              <span className={g.passed ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}>
+              <span className={g.passed ? "text-good" : "text-bad"}>
                 {g.passed ? "✓" : "✗"}
               </span>{" "}
               {g.label}: <span className="font-medium">{g.value}</span>
             </li>
           ))}
         </ul>
-        <p className="mt-2 text-xs text-neutral-500">
+        <p className="mt-2 text-xs text-muted">
           Deflated Sharpe ratio {num(oos.deflated_sharpe, 3)} after {oos.variants_tried} variants tried (0.95 or more
           means the result is unlikely to be luck from trying several settings).
         </p>
@@ -249,7 +249,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
           { label: "Final 12-month holdout", trades: summary.holdout.trades, curve: summary.holdout.curve },
         ]}
       />
-      <p className="mt-2 text-sm text-neutral-500">
+      <p className="mt-2 text-sm text-muted">
         Nifty 500 over the test period: CAGR {pct(oos.benchmark.cagr)}, max drawdown{" "}
         {num(oos.benchmark.max_drawdown_pct, 1)}%, Sharpe {num(oos.benchmark.sharpe)}. Over the holdout: CAGR{" "}
         {pct(summary.holdout.benchmark.cagr)}, Sharpe {num(summary.holdout.benchmark.sharpe)}.
@@ -260,7 +260,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
         <div>
           <h2 className="text-lg font-semibold">By year (test period)</h2>
           <table className="mt-2 w-full text-sm">
-            <thead className="text-left text-neutral-500">
+            <thead className="text-left text-muted">
               <tr>
                 <th className="py-1 pr-3">Year</th>
                 <th className="pr-3 text-right">Trades</th>
@@ -271,7 +271,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
             </thead>
             <tbody>
               {years.map((y) => (
-                <tr key={y} className="border-t border-neutral-200 dark:border-neutral-800">
+                <tr key={y} className="border-t border-line">
                   <td className="py-1 pr-3">{y}</td>
                   <td className="pr-3 text-right">{oos.by_year[y]?.trades ?? 0}</td>
                   <td className={`pr-3 text-right ${signClass(oos.by_year[y]?.expectancy_r ?? 0)}`}>
@@ -287,7 +287,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
         <div>
           <h2 className="text-lg font-semibold">By market regime (test period)</h2>
           <table className="mt-2 w-full text-sm">
-            <thead className="text-left text-neutral-500">
+            <thead className="text-left text-muted">
               <tr>
                 <th className="py-1 pr-3">Regime at signal</th>
                 <th className="pr-3 text-right">Trades</th>
@@ -298,7 +298,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
             </thead>
             <tbody>
               {Object.entries(oos.by_regime).map(([k, t]) => (
-                <tr key={k} className="border-t border-neutral-200 dark:border-neutral-800">
+                <tr key={k} className="border-t border-line">
                   <td className="py-1 pr-3">{k}</td>
                   <td className="pr-3 text-right">{t.trades}</td>
                   <td className="pr-3 text-right">{pct(t.win_rate)}</td>
@@ -308,7 +308,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-neutral-500">
+          <p className="mt-2 text-xs text-muted">
             Bull: Nifty 500 above its 200-day EMA and the EMA rising over 20 sessions. Bear: below and falling.
             Sideways: anything else.
           </p>
@@ -325,7 +325,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
             {oos.tax.interest !== undefined && <> (including {rupees(oos.tax.interest)} interest on idle cash)</>}, tax about {rupees(oos.tax.estimated_tax)}, post-tax{" "}
             <span className={signClass(oos.tax.post_tax_pnl)}>{rupees(oos.tax.post_tax_pnl)}</span>.
           </p>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-muted">
             STCG 15% (20% from 23 July 2024), LTCG 10%/12.5% above the exemption, dividends and interest on idle cash at a 30% slab; surcharge
             and cess left out.
           </p>
@@ -347,7 +347,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
       </ul>
 
       <h2 className="mt-8 text-lg font-semibold">Walk-forward settings</h2>
-      <p className="mt-1 text-sm text-neutral-500">
+      <p className="mt-1 text-sm text-muted">
         Each window traded the setting with the best training Sharpe ratio (at least 30 training trades) on everything
         before it. Every setting tried is listed.
       </p>
@@ -359,9 +359,9 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
         ))}
       </ul>
       <details className="mt-2">
-        <summary className="cursor-pointer text-sm text-neutral-500">All {variants.length} variant results</summary>
+        <summary className="cursor-pointer text-sm text-muted">All {variants.length} variant results</summary>
         <table className="mt-2 text-xs">
-          <thead className="text-left text-neutral-500">
+          <thead className="text-left text-muted">
             <tr>
               <th className="pr-3">Window</th>
               <th className="pr-3">Setting</th>
@@ -393,7 +393,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
       {summary.notes.length > 0 && (
         <>
           <h2 className="mt-8 text-lg font-semibold">Caveats</h2>
-          <ul className="mt-2 list-disc pl-6 text-sm text-amber-700 dark:text-amber-400">
+          <ul className="mt-2 list-disc pl-6 text-sm text-warn">
             {summary.notes.map((n) => (
               <li key={n}>{n}</li>
             ))}
@@ -402,7 +402,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
       )}
 
       <h2 className="mt-8 text-lg font-semibold">All trades ({sortedTrades.length})</h2>
-      <p className="text-sm text-neutral-500">
+      <p className="text-sm text-muted">
         Prices are adjusted for splits and bonuses; shares are as bought. Losses in red.
       </p>
       <TradesTable trades={sortedTrades} />

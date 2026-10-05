@@ -14,7 +14,7 @@ export function PlanForm({
   return (
     <form action={action} className="grid gap-3 text-sm sm:grid-cols-2">
       <label className="space-y-1">
-        <span className="text-neutral-500">What I did</span>
+        <span className="text-muted">What I did</span>
         <select name="decision" defaultValue={entry?.decision ?? "taken"} className={inputClass}>
           <option value="taken">Taken as planned</option>
           <option value="modified">Taken, modified</option>
@@ -22,7 +22,7 @@ export function PlanForm({
         </select>
       </label>
       <label className="space-y-1">
-        <span className="text-neutral-500">Followed the plan?</span>
+        <span className="text-muted">Followed the plan?</span>
         <select name="followed_plan" defaultValue={followed} className={inputClass}>
           <option value="">Not yet known</option>
           <option value="yes">Yes</option>
@@ -30,11 +30,11 @@ export function PlanForm({
         </select>
       </label>
       <label className="space-y-1">
-        <span className="text-neutral-500">Why (skip reason, change made)</span>
+        <span className="text-muted">Why (skip reason, change made)</span>
         <input name="reason" defaultValue={entry?.reason ?? ""} className={inputClass} />
       </label>
       <label className="space-y-1">
-        <span className="text-neutral-500">
+        <span className="text-muted">
           My stop, if not the signal&apos;s{signalStop ? ` (₹${Number(signalStop).toFixed(2)})` : ""}
         </span>
         <input
@@ -45,7 +45,7 @@ export function PlanForm({
         />
       </label>
       <label className="space-y-1 sm:col-span-2">
-        <span className="text-neutral-500">Notes</span>
+        <span className="text-muted">Notes</span>
         <textarea name="notes" rows={2} defaultValue={entry?.notes ?? ""} className={inputClass} />
       </label>
       <div>
@@ -59,26 +59,26 @@ export function FillForm({ action, today }: { action: (form: FormData) => Promis
   return (
     <form action={action} className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-6">
       <label className="space-y-1">
-        <span className="text-neutral-500">Date</span>
+        <span className="text-muted">Date</span>
         <input type="date" name="trade_date" defaultValue={today} required className={inputClass} />
       </label>
       <label className="space-y-1">
-        <span className="text-neutral-500">Side</span>
+        <span className="text-muted">Side</span>
         <select name="side" className={inputClass}>
           <option value="buy">Buy</option>
           <option value="sell">Sell</option>
         </select>
       </label>
       <label className="space-y-1">
-        <span className="text-neutral-500">Shares</span>
+        <span className="text-muted">Shares</span>
         <input name="shares" type="number" min={1} required className={inputClass} />
       </label>
       <label className="space-y-1">
-        <span className="text-neutral-500">Price ₹</span>
+        <span className="text-muted">Price ₹</span>
         <input name="price" inputMode="decimal" required className={inputClass} />
       </label>
       <label className="space-y-1">
-        <span className="text-neutral-500">Charges ₹</span>
+        <span className="text-muted">Charges ₹</span>
         <input name="charges" inputMode="decimal" defaultValue="0" className={inputClass} />
       </label>
       <div className="flex items-end">

@@ -27,6 +27,11 @@ def _q(value: Decimal, places: str = "0.01") -> Decimal:
     return value.quantize(Decimal(places))
 
 
+def _g(value: Decimal) -> str:
+    """30.0 -> "30", 5.5 -> "5.5"."""
+    return f"{float(value):g}"
+
+
 @dataclass(frozen=True)
 class Holding:
     """One open journal position. Prices are rupees on today's basis (after any split
@@ -138,19 +143,19 @@ def totals(
     warnings = []
     if heat > heat_block_pct:
         warnings.append(
-            f"Portfolio heat {heat:.1f}% is above {heat_block_pct:g}%: no new entries "
+            f"Portfolio heat {heat:.1f}% is above {_g(heat_block_pct)}%: no new entries "
             "until risk comes down."
         )
     elif heat >= heat_warn_pct:
         warnings.append(
-            f"Portfolio heat {heat:.1f}% is at the {heat_warn_pct:g}% warning level "
-            f"(new entries blocked above {heat_block_pct:g}%)."
+            f"Portfolio heat {heat:.1f}% is at the {_g(heat_warn_pct)}% warning level "
+            f"(new entries blocked above {_g(heat_block_pct)}%)."
         )
     for s in sectors:
         if s.over_cap:
             warnings.append(
                 f"{s.sector} is {s.pct_of_capital:.1f}% of capital, above the "
-                f"{sector_cap_pct:g}% sector cap."
+                f"{_g(sector_cap_pct)}% sector cap."
             )
     without_stop = sum(1 for h in holdings if h.stop is None)
     if without_stop:

@@ -63,6 +63,6 @@ jobs:
         run: |
           for i in $(seq 1 30); do curl -sf localhost:3000 >/dev/null && break; sleep 2; done
           curl -sf localhost:8000/health | tee /dev/stderr | grep -q '"database":"ok"'
-          curl -sf localhost:3000 | grep -q 'text-green-600">connected' 
+          curl -sf localhost:3000 | grep -q 'data-database="connected"'
       - if: failure()
         run: docker compose logs

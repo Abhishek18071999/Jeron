@@ -20,8 +20,8 @@ export default async function DataPage() {
   if (!status.ok) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-2xl font-semibold">Data quality</h1>
-        <p className="mt-4 text-red-600">{status.error}</p>
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Data quality</h1>
+        <p className="mt-4 text-bad">{status.error}</p>
       </main>
     );
   }
@@ -30,13 +30,13 @@ export default async function DataPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="text-2xl font-semibold">Data quality</h1>
+      <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Data quality</h1>
 
       <section
         className={`mt-6 rounded-lg border px-4 py-3 ${
           s.scan_allowed
-            ? "border-green-300 dark:border-green-800"
-            : "border-red-300 dark:border-red-800"
+            ? "border-line"
+            : "border-bad/40"
         }`}
       >
         {latest ? (
@@ -52,7 +52,7 @@ export default async function DataPage() {
               </span>
             </div>
             {latest.reasons.length > 0 && (
-              <ul className="mt-2 list-disc pl-6 text-sm text-neutral-600 dark:text-neutral-400">
+              <ul className="mt-2 list-disc pl-6 text-sm text-muted">
                 {latest.reasons.map((r) => (
                   <li key={r}>{r}</li>
                 ))}
@@ -69,7 +69,7 @@ export default async function DataPage() {
 
       <h2 className="mt-8 text-lg font-semibold">What is stored</h2>
       <table className="mt-2 w-full text-sm">
-        <thead className="text-left text-neutral-500">
+        <thead className="text-left text-muted">
           <tr>
             <th className="py-1">Source</th>
             <th>From</th>
@@ -79,7 +79,7 @@ export default async function DataPage() {
         </thead>
         <tbody>
           {s.coverage.map((c) => (
-            <tr key={c.source} className="border-t border-neutral-200 dark:border-neutral-800">
+            <tr key={c.source} className="border-t border-line">
               <td className="py-1">{sourceNames[c.source] ?? c.source}</td>
               <td>{c.first_date ?? "-"}</td>
               <td>{c.last_date ?? "-"}</td>
@@ -88,7 +88,7 @@ export default async function DataPage() {
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-sm text-neutral-500">
+      <p className="mt-2 text-sm text-muted">
         {s.instruments} stocks, {s.corporate_actions} corporate-action records.
       </p>
 
@@ -97,7 +97,7 @@ export default async function DataPage() {
         <table className="mt-2 w-full text-sm">
           <tbody>
             {reports.data.map((r) => (
-              <tr key={r.trade_date} className="border-t border-neutral-200 dark:border-neutral-800">
+              <tr key={r.trade_date} className="border-t border-line">
                 <td className="py-1 pr-4 whitespace-nowrap">
                   <Link className="underline" href={`/data/quality/${r.trade_date}`}>
                     {r.trade_date}
@@ -106,13 +106,13 @@ export default async function DataPage() {
                 <td className="pr-4">
                   <StatusBadge status={r.status} />
                 </td>
-                <td className="text-neutral-600 dark:text-neutral-400">{r.reasons.join("; ")}</td>
+                <td className="text-muted">{r.reasons.join("; ")}</td>
               </tr>
             ))}
           </tbody>
         </table>
       ) : (
-        <p className="mt-2 text-red-600">{reports.error}</p>
+        <p className="mt-2 text-bad">{reports.error}</p>
       )}
     </main>
   );

@@ -1,19 +1,115 @@
 @import "tailwindcss";
 
+/*
+  Design tokens. Light and dark follow the system setting.
+  Colour has meaning: good/bad only for gains and losses, accent only for "act now",
+  warn for limits and risks. Everything else is neutral.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #f0f0ed;
+  --fg: #17181a;
+  --muted: #5d6167;
+  --line: #e3e3df;
+  --line-strong: #cfcfca;
+  --good: #137a3a;
+  --good-bg: #e8f6ed;
+  --bad: #b42318;
+  --bad-bg: #fdecea;
+  --warn: #935f00;
+  --warn-bg: #fdf4dc;
+  --accent: #1f4fd1;
+  --accent-bg: #e9effd;
+  --accent-fg: #ffffff;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #0d0e10;
+    --surface: #16181b;
+    --surface-2: #1e2125;
+    --fg: #e7e7e5;
+    --muted: #9ba0a6;
+    --line: #272a2f;
+    --line-strong: #383c42;
+    --good: #4ccb7a;
+    --good-bg: #13291c;
+    --bad: #f47067;
+    --bad-bg: #331a18;
+    --warn: #e9b949;
+    --warn-bg: #2e2510;
+    --accent: #7aa5ff;
+    --accent-bg: #18243d;
+    --accent-fg: #0b1220;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-good: var(--good);
+  --color-good-bg: var(--good-bg);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-accent: var(--accent);
+  --color-accent-bg: var(--accent-bg);
+  --color-accent-fg: var(--accent-fg);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Default borders use the token, so plain `border` utilities match the theme. */
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--line);
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  /* Fixed-width digits everywhere, so columns of numbers line up. */
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+}
+
+a {
+  text-underline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Inputs follow the theme (the browser's default is white in dark mode). */
+input,
+select,
+textarea {
+  color: inherit;
+}
+select option {
+  background: var(--surface);
 }

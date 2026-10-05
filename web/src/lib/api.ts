@@ -442,6 +442,7 @@ export type SignalBrief = {
   t2: string;
   shares: number;
   capital_at_risk: string;
+  event_risk?: string;
 };
 
 export type JournalFill = {
@@ -586,6 +587,8 @@ export type Dashboard = {
   pending: SignalBrief[];
   alerts: { telegram: boolean; email: boolean; research_signals: boolean };
   last_summary: AlertRecord | null;
+  // Next results board meeting (within 30 days of as_of) per signal ticker.
+  results_ahead?: Record<string, string>;
 };
 
 export type Candle = {
@@ -706,4 +709,93 @@ export type StrategyCompare = {
     skipped_winners: number;
     causes: string[];
   } | null;
+};
+
+// --- Market mood and portfolio (UI phase 1) --------------------------------------------
+
+export type MoodMode = "attack" | "normal" | "defend";
+
+export type MarketMood = {
+  day: string;
+  mode: MoodMode;
+  reason: string;
+  risk_multiplier: number;
+  rule: string;
+  breadth: {
+    stocks: number;
+    above_ema200: number;
+    pct_above_ema200: number | null;
+    nifty500_stocks: number;
+    nifty500_above_ema200: number;
+    nifty500_pct_above_ema200: number | null;
+    new_highs: number;
+    new_lows: number;
+  };
+  regime: {
+    day: string;
+    regime: "bull" | "bear" | "sideways";
+    risk_off: boolean;
+    nifty50: number | null;
+    nifty50_ema200: number | null;
+    nifty50_below: boolean;
+    vix: number | null;
+    vix_top_decile: number | null;
+    vix_high: boolean;
+  } | null;
+  sectors: {
+    sector: string;
+    stocks: number;
+    median_return_6m: number | null;
+    pct_above_ema200: number | null;
+  }[];
+};
+
+export type Holding = {
+  entry_id: number;
+  ticker: string;
+  strategy_key: string | null;
+  sector: string | null;
+  shares: number;
+  avg_entry: string;
+  last_close: string | null;
+  last_close_date: string | null;
+  stop: string | null;
+  initial_stop: string | null;
+  value: string | null;
+  pnl: string | null;
+  r_multiple: string | null;
+  open_risk: string | null;
+  give_back: string | null;
+  stop_distance_pct: string | null;
+  first_date: string;
+  days_held: number;
+  sessions_held: number | null;
+  action: "hold" | "sell half" | "sell all" | null;
+  reason: string | null;
+  problem: string | null;
+  events: string[];
+  notes: string[];
+};
+
+export type Portfolio = {
+  day: string;
+  data_as_of: string | null;
+  expected: string;
+  stale: boolean;
+  holdings: Holding[];
+  totals: {
+    positions: number;
+    value: string;
+    pnl: string;
+    open_risk: string;
+    heat_pct: string;
+    give_back: string;
+    without_stop: number;
+    heat_warn_pct: string;
+    heat_block_pct: string;
+    sector_cap_pct: string;
+    capital: string;
+    sectors: { sector: string; positions: number; value: string; pct_of_capital: string; over_cap: boolean }[];
+    warnings: string[];
+  };
 };

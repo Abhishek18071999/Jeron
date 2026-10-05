@@ -22,7 +22,7 @@ export default async function SignalDecision({
   if (!result.ok) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-8">
-        <p className="text-red-600">{result.error}</p>
+        <p className="text-bad">{result.error}</p>
       </main>
     );
   }
@@ -31,7 +31,7 @@ export default async function SignalDecision({
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
-      <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold">
+      <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight sm:text-2xl">
         <Link href={`/stocks/${s.ticker}`} className="underline">
           {s.ticker}
         </Link>
@@ -40,7 +40,7 @@ export default async function SignalDecision({
       <ErrorNote error={error} />
       <Card title="The plan">
         <div className="space-y-2 text-sm">
-          <p className="text-neutral-500">
+          <p className="text-muted">
             {p.setup_name} · {p.strategy_version} · {s.signal_date} · conviction {s.conviction}/5
           </p>
           <p>
@@ -61,14 +61,14 @@ export default async function SignalDecision({
           </ul>
           <p>Exit plan: {p.exit_plan}</p>
           <p>Cancel if: {p.invalidation}</p>
-          <p className="text-neutral-500">Event risk: {p.event_risk}</p>
+          <p className="text-muted">Event risk: {p.event_risk}</p>
           {p.notes.map((n) => (
-            <p key={n} className="text-neutral-500">
+            <p key={n} className="text-muted">
               Note: {n}
             </p>
           ))}
           {s.research_only && (
-            <p className="text-amber-700 dark:text-amber-400">
+            <p className="text-warn">
               Research only: this strategy has not passed the backtest bar, so this is not a trade to take.
               Recording &quot;skipped&quot; keeps the journal honest.
             </p>

@@ -14,8 +14,8 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
   if (!result.ok) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-2xl font-semibold">{decodeURIComponent(symbol).toUpperCase()}</h1>
-        <p className="mt-4 text-red-600">{result.error}</p>
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{decodeURIComponent(symbol).toUpperCase()}</h1>
+        <p className="mt-4 text-bad">{result.error}</p>
       </main>
     );
   }
@@ -36,11 +36,11 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
       <div>
-        <h1 className="text-2xl font-semibold">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
           {s.symbol}
-          {s.name && <span className="ml-2 text-base font-normal text-neutral-500">{s.name}</span>}
+          {s.name && <span className="ml-2 text-base font-normal text-muted">{s.name}</span>}
         </h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted">
           {[s.series, s.sector, s.industry].filter(Boolean).join(" · ")}
           {last && ` · close ${inr(last.close)} on ${last.time}`}
           {scan && ` · technical score ${Number(scan.score).toFixed(1)} (rank ${scan.rank})`}
@@ -49,7 +49,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
 
       <Card title="Price (split/bonus-adjusted)">
         <PriceChart candles={s.candles} levels={levels} />
-        <p className="mt-2 text-xs text-neutral-500">
+        <p className="mt-2 text-xs text-muted">
           Blue: EMA 50, purple: EMA 200.
           {latest
             ? ` Lines: the ${latest.signal.signal_date} signal's entry zone, stop and targets.`
@@ -63,7 +63,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
             <p className="flex flex-wrap items-center gap-2">
               <ResearchBadge research={latest.signal.research_only} />
               <span className="font-medium">{latest.payload.setup_name}</span>
-              <span className="text-neutral-500">
+              <span className="text-muted">
                 {latest.payload.strategy_version} · {latest.signal.signal_date} · conviction{" "}
                 {latest.signal.conviction}/5
               </span>
@@ -79,11 +79,11 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
                 <li key={w}>{w}</li>
               ))}
             </ul>
-            <p className="text-neutral-500">
+            <p className="text-muted">
               Brains: technical {Number(latest.payload.brains_breakdown.technical).toFixed(0)}, fundamental
               and news arrive in M6. Event risk: {latest.payload.event_risk.replace(/\.$/, "")}.
             </p>
-            <p className="text-neutral-500">
+            <p className="text-muted">
               Backtest (out of sample, after costs): {latest.payload.backtest_stats.trades} trades, expectancy{" "}
               {Number(latest.payload.backtest_stats.expectancy_R).toFixed(2)}R, profit factor{" "}
               {latest.payload.backtest_stats.profit_factor ?? "n/a"}, max drawdown{" "}
@@ -107,7 +107,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
               <table className="w-full">
                 <tbody>
                   {scan.components.map((c) => (
-                    <tr key={c.key} className="border-t border-neutral-200 dark:border-neutral-800">
+                    <tr key={c.key} className="border-t border-line">
                       <td className="py-1">{c.label}</td>
                       <td className="text-right">
                         {Number(c.points).toFixed(1).replace(/\.0$/, "")} / {c.max_points}
@@ -118,17 +118,17 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
               </table>
             </div>
           ) : (
-            <p className="text-sm text-neutral-500">Not in a scan&apos;s universe.</p>
+            <p className="text-sm text-muted">Not in a scan&apos;s universe.</p>
           )}
         </Card>
         <Card title="Signals and trades">
           <div className="space-y-3 text-sm">
-            {s.signals.length === 0 && <p className="text-neutral-500">No signals.</p>}
+            {s.signals.length === 0 && <p className="text-muted">No signals.</p>}
             {s.signals.map((x) => (
               <p key={x.signal.signal_id} className="flex flex-wrap items-center gap-2">
                 <span>{x.signal.signal_date}</span>
                 <ResearchBadge research={x.signal.research_only} />
-                <span className="text-neutral-500">{x.signal.strategy_key}</span>
+                <span className="text-muted">{x.signal.strategy_key}</span>
                 <Link href={`/journal/signal/${x.signal.signal_id}`} className="underline">
                   journal
                 </Link>
@@ -155,7 +155,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
           </div>
         </Card>
       </div>
-      <p className="text-xs text-neutral-500">Fundamentals, news and the results countdown arrive with M6.</p>
+      <p className="text-xs text-muted">Fundamentals, news and the results countdown arrive with M6.</p>
     </main>
   );
 }
@@ -172,7 +172,7 @@ function ScoreSpark({ points }: { points: number[] }) {
     .join(" ");
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-12 w-full" role="img" aria-label="Score history">
-      <path d={d} fill="none" className="stroke-blue-600" strokeWidth={1.5} />
+      <path d={d} fill="none" className="stroke-accent" strokeWidth={1.5} />
     </svg>
   );
 }
