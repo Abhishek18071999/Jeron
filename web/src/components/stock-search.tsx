@@ -20,7 +20,7 @@ type Props = {
 // ("ZOMATO"); suggestions appear as you type.
 export function StockSearch({
   className = "",
-  inputClassName = "w-full rounded border border-neutral-300 bg-transparent px-2 py-1 text-sm dark:border-neutral-700",
+  inputClassName = "w-full rounded-lg border border-line-strong bg-surface px-2.5 py-1.5 text-sm placeholder:text-muted",
   placeholder = "Search: tata steel, RIL",
   name,
   defaultValue = "",
@@ -115,7 +115,7 @@ export function StockSearch({
         <ul
           id={listId}
           role="listbox"
-          className="absolute right-0 left-0 z-20 mt-1 max-h-80 overflow-auto rounded border border-neutral-200 bg-white text-sm shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+          className="absolute right-0 left-0 z-50 mt-1 max-h-80 overflow-auto rounded-lg border border-line bg-surface text-sm shadow-lg"
         >
           {shown.map((m, i) => (
             <li
@@ -127,12 +127,12 @@ export function StockSearch({
                 go(m.symbol);
               }}
               onMouseEnter={() => setActive(i)}
-              className={`cursor-pointer px-3 py-2 ${i === active ? "bg-neutral-100 dark:bg-neutral-800" : ""}`}
+              className={`cursor-pointer px-3 py-2 ${i === active ? "bg-surface-2" : ""}`}
             >
               <span className="font-medium">{m.symbol}</span>
-              {m.series !== "EQ" && <span className="ml-1 text-xs text-neutral-500">{m.series}</span>}
-              {m.alias && <span className="ml-2 text-xs text-neutral-500">{m.alias}</span>}
-              {m.name && <span className="block truncate text-xs text-neutral-500">{m.name}</span>}
+              {m.series !== "EQ" && <span className="ml-1 text-xs text-muted">{m.series}</span>}
+              {m.alias && <span className="ml-2 text-xs text-muted">{m.alias}</span>}
+              {m.name && <span className="block truncate text-xs text-muted">{m.name}</span>}
             </li>
           ))}
         </ul>

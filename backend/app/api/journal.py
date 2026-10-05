@@ -37,6 +37,8 @@ class SignalBrief(BaseModel):
     t2: Decimal
     shares: int
     capital_at_risk: Decimal
+    # The signal's event-risk line when it was made (results ahead, calendar not loaded).
+    event_risk: str = ""
 
 
 class FillOut(BaseModel):
@@ -163,6 +165,7 @@ def brief(info: SignalInfo) -> SignalBrief:
         t2=d(p["targets"]["t2"]),
         shares=p["shares"],
         capital_at_risk=d(p["capital_at_risk"]),
+        event_risk=p.get("event_risk", ""),
     )
 
 

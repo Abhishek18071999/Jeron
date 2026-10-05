@@ -18,7 +18,7 @@ export const rupees = (value: number | string | null | undefined) => {
 
 export const signClass = (value: number | string) =>
   Number(value) > 0
-    ? "text-green-700 dark:text-green-400"
+    ? "text-good"
     : Number(value) < 0
-      ? "text-red-700 dark:text-red-400"
+      ? "text-bad"
       : "";

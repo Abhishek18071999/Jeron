@@ -12,26 +12,26 @@ export default async function PaperPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="text-2xl font-semibold">Paper trading</h1>
-      <p className="mt-2 text-neutral-500">
+      <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Paper trading</h1>
+      <p className="mt-2 text-muted">
         Every strategy&apos;s signals, traded on paper with exactly the rules that were backtested (spec
         section 7, stage 2). A strategy that hasn&apos;t passed its backtest is traded as{" "}
         <em>research only</em>: its signals collect evidence and are never alerts to act on.
       </p>
 
       {!accounts.ok ? (
-        <p className="mt-6 text-neutral-600 dark:text-neutral-400">
+        <p className="mt-6 text-muted">
           {accounts.error}. Run <code>python -m app.cli paper</code>.
         </p>
       ) : accounts.data.length === 0 ? (
-        <p className="mt-6 text-neutral-600 dark:text-neutral-400">
+        <p className="mt-6 text-muted">
           No paper accounts yet. Run <code>python -m app.cli backtest</code>, then{" "}
           <code>python -m app.cli paper</code> after the daily scan.
         </p>
       ) : (
         <div className="mt-6 overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-neutral-500">
+            <thead className="text-left text-muted">
               <tr>
                 <th className="py-2 pr-4">Strategy</th>
                 <th className="pr-4">Stage</th>
@@ -47,12 +47,12 @@ export default async function PaperPage() {
             </thead>
             <tbody>
               {accounts.data.map((a) => (
-                <tr key={a.id} className="border-t border-neutral-200 dark:border-neutral-800">
+                <tr key={a.id} className="border-t border-line">
                   <td className="py-2 pr-4">
                     <Link href={`/paper/${a.id}`} className="font-medium underline">
                       {a.strategy_name}
                     </Link>
-                    <div className="text-xs text-neutral-500">
+                    <div className="text-xs text-muted">
                       {a.strategy_version} ({a.params_label}), updated to {a.last_date ?? "-"}
                     </div>
                   </td>

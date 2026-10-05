@@ -4,11 +4,11 @@ import { num, rupees, signClass } from "../backtests/format";
 
 export function StageBadge({ stage }: { stage: string }) {
   return stage === "paper" ? (
-    <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800 dark:bg-green-900/40 dark:text-green-300">
+    <span className="rounded-full bg-accent-bg px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-wide text-accent">
       PAPER
     </span>
   ) : (
-    <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-wide text-muted">
       RESEARCH ONLY
     </span>
   );
@@ -32,14 +32,14 @@ export function EquityLine({ days, capital }: { days: PaperDay[]; capital: numbe
         x2={W}
         y1={y(capital)}
         y2={y(capital)}
-        className="stroke-neutral-400"
+        className="stroke-muted"
         strokeDasharray="4 4"
       />
-      <path d={line} fill="none" className="stroke-blue-600 dark:stroke-blue-400" strokeWidth={2} />
-      <text x={0} y={H + 16} className="fill-neutral-500 text-xs">
+      <path d={line} fill="none" className="stroke-accent" strokeWidth={2} />
+      <text x={0} y={H + 16} className="fill-muted text-xs">
         {days[0].trade_date}
       </text>
-      <text x={W} y={H + 16} textAnchor="end" className="fill-neutral-500 text-xs">
+      <text x={W} y={H + 16} textAnchor="end" className="fill-muted text-xs">
         {days[days.length - 1].trade_date}
       </text>
     </svg>
@@ -50,7 +50,7 @@ export function TradesTable({ trades, open }: { trades: PaperTrade[]; open: bool
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-left text-neutral-500">
+        <thead className="text-left text-muted">
           <tr>
             <th className="py-2 pr-4">Stock</th>
             <th className="pr-4">Entry</th>
@@ -75,7 +75,7 @@ export function TradesTable({ trades, open }: { trades: PaperTrade[]; open: bool
         </thead>
         <tbody>
           {trades.map((t) => (
-            <tr key={t.seq} className="border-t border-neutral-200 dark:border-neutral-800">
+            <tr key={t.seq} className="border-t border-line">
               <td className="py-2 pr-4 font-medium">{t.ticker}</td>
               <td className="pr-4">{t.entry_date}</td>
               <td className="pr-4 text-right">{num(t.entry_price)}</td>
@@ -94,7 +94,7 @@ export function TradesTable({ trades, open }: { trades: PaperTrade[]; open: bool
               )}
               <td className={`pr-4 text-right ${signClass(t.net_pnl)}`}>{rupees(t.net_pnl)}</td>
               <td className={`pr-4 text-right ${signClass(t.r_multiple)}`}>{num(t.r_multiple)}</td>
-              <td className="text-neutral-500">{open ? t.sessions : t.exit_reason}</td>
+              <td className="text-muted">{open ? t.sessions : t.exit_reason}</td>
             </tr>
           ))}
         </tbody>
@@ -106,7 +106,7 @@ export function TradesTable({ trades, open }: { trades: PaperTrade[]; open: bool
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[10rem_1fr] gap-2 py-1">
-      <dt className="text-neutral-500">{label}</dt>
+      <dt className="text-muted">{label}</dt>
       <dd>{children}</dd>
     </div>
   );
@@ -116,14 +116,14 @@ export function SignalCard({ signal }: { signal: SignalView }) {
   const p = signal.payload;
   const b = p.backtest_stats;
   return (
-    <details className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
+    <details className="rounded-xl border border-line bg-surface p-3">
       <summary className="cursor-pointer">
         <span className="font-medium">{p.ticker}</span> on {signal.signal_date}: buy {p.shares} between{" "}
         {num(p.entry_zone.low)} and {num(p.entry_zone.high)}, stop {num(p.stop.price)}, T1 {num(p.targets.t1)}
         {signal.research_only ? (
-          <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">research only</span>
+          <span className="ml-2 text-xs text-warn">research only</span>
         ) : null}
-        {signal.late ? <span className="ml-2 text-xs text-neutral-500">recorded late</span> : null}
+        {signal.late ? <span className="ml-2 text-xs text-muted">recorded late</span> : null}
       </summary>
       <dl className="mt-3 text-sm">
         <Row label="Setup">

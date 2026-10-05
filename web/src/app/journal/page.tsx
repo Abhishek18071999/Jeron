@@ -23,7 +23,7 @@ function EntryTable({ entries, open }: { entries: JournalEntry[]; open: boolean 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-left text-neutral-500">
+        <thead className="text-left text-muted">
           <tr>
             <th className="py-1 pr-3">Stock</th>
             <th className="pr-3">Strategy</th>
@@ -38,7 +38,7 @@ function EntryTable({ entries, open }: { entries: JournalEntry[]; open: boolean 
         </thead>
         <tbody>
           {entries.map((e) => (
-            <tr key={e.id} className="border-t border-neutral-200 dark:border-neutral-800">
+            <tr key={e.id} className="border-t border-line">
               <td className="py-1 pr-3">
                 <Link href={`/journal/${e.id}`} className="font-medium underline">
                   {e.ticker}
@@ -83,8 +83,8 @@ export default async function Journal({
   if (!result.ok) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-2xl font-semibold">Journal</h1>
-        <p className="mt-4 text-red-600">{result.error}</p>
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Journal</h1>
+        <p className="mt-4 text-bad">{result.error}</p>
       </main>
     );
   }
@@ -96,9 +96,9 @@ export default async function Journal({
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
-      <h1 className="text-2xl font-semibold">Journal</h1>
+      <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Journal</h1>
       {imported && (
-        <p className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-800 dark:bg-green-950/40 dark:text-green-300">
+        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
           Tradebook: {imported}.
         </p>
       )}
@@ -113,7 +113,7 @@ export default async function Journal({
         }
       >
         {j.pending.length === 0 ? (
-          <p className="text-sm text-neutral-500">Nothing pending from the last 30 days.</p>
+          <p className="text-sm text-muted">Nothing pending from the last 30 days.</p>
         ) : (
           <ul>
             {j.pending.map((s) => (
@@ -124,13 +124,13 @@ export default async function Journal({
       </Card>
 
       <Card title={`Open (${open.length})`}>
-        {open.length ? <EntryTable entries={open} open /> : <p className="text-sm text-neutral-500">None.</p>}
+        {open.length ? <EntryTable entries={open} open /> : <p className="text-sm text-muted">None.</p>}
       </Card>
       <Card title={`Closed (${closed.length})`}>
         {closed.length ? (
           <EntryTable entries={closed} open={false} />
         ) : (
-          <p className="text-sm text-neutral-500">None yet.</p>
+          <p className="text-sm text-muted">None yet.</p>
         )}
       </Card>
       {other.length > 0 && (
@@ -143,7 +143,7 @@ export default async function Journal({
                 </Link>
                 {e.signal && <ResearchBadge research={e.signal.research_only} />}
                 <span>{e.decision}</span>
-                <span className="text-neutral-500">{e.reason}</span>
+                <span className="text-muted">{e.reason}</span>
               </li>
             ))}
           </ul>
@@ -152,11 +152,11 @@ export default async function Journal({
 
       <Card title="By strategy">
         {j.stats.length === 0 ? (
-          <p className="text-sm text-neutral-500">No signals yet.</p>
+          <p className="text-sm text-muted">No signals yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-left text-neutral-500">
+              <thead className="text-left text-muted">
                 <tr>
                   <th className="py-1 pr-3">Strategy</th>
                   <th className="pr-3 text-right">Signals</th>
@@ -174,7 +174,7 @@ export default async function Journal({
                 {j.stats.map((s) => (
                   <tr
                     key={s.strategy_key ?? "own"}
-                    className="border-t border-neutral-200 dark:border-neutral-800"
+                    className="border-t border-line"
                   >
                     <td className="py-1 pr-3">{s.strategy_key ?? "own ideas"}</td>
                     <td className="pr-3 text-right">{s.signals}</td>
@@ -199,7 +199,7 @@ export default async function Journal({
             </table>
           </div>
         )}
-        <p className="mt-2 text-xs text-neutral-500">
+        <p className="mt-2 text-xs text-muted">
           Expectancy is the average R of closed trades.
         </p>
       </Card>
@@ -215,7 +215,7 @@ export default async function Journal({
           <input name="file" type="file" accept=".csv,text/csv" required className="text-sm" />
           <button className={buttonClass}>Import</button>
         </form>
-        <p className="mt-2 text-xs text-neutral-500">
+        <p className="mt-2 text-xs text-muted">
           Console &gt; Reports &gt; Tradebook, segment Equity, download CSV. Each trade becomes a fill on the
           matching signal or open position; importing the same file again adds nothing. Charges are estimated
           at delivery rates and marked &ldquo;est.&rdquo;.

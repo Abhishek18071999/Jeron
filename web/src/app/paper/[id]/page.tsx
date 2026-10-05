@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 
 function Stat({ label, value, className = "" }: { label: string; value: string; className?: string }) {
   return (
-    <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
-      <div className="text-xs text-neutral-500">{label}</div>
+    <div className="rounded-xl border border-line bg-surface p-3">
+      <div className="text-xs text-muted">{label}</div>
       <div className={`text-lg font-semibold ${className}`}>{value}</div>
     </div>
   );
@@ -32,13 +32,13 @@ export default async function PaperAccountPage({ params }: { params: Promise<{ i
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <Link href="/paper" className="text-sm text-neutral-500 underline">
+      <Link href="/paper" className="text-sm text-muted underline">
         Paper trading
       </Link>
-      <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold">
+      <h1 className="mt-2 flex items-center gap-3 text-xl font-semibold tracking-tight sm:text-2xl">
         {a.strategy_name} <StageBadge stage={a.stage} />
       </h1>
-      <p className="mt-2 text-neutral-500">
+      <p className="mt-2 text-muted">
         {a.strategy_version} with {a.params_label}, chosen by{" "}
         <Link href={`/backtests/${a.backtest_run_id}`} className="underline">
           backtest run {a.backtest_run_id}
@@ -46,7 +46,7 @@ export default async function PaperAccountPage({ params }: { params: Promise<{ i
         . Trading on paper since {a.start_date} with {rupees(a.capital)}; updated to {a.last_date ?? "-"}.
       </p>
       {a.stage !== "paper" ? (
-        <p className="mt-2 rounded bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+        <p className="mt-2 rounded-lg border border-warn/30 bg-warn-bg p-3 text-sm">
           This strategy did not pass its backtest, so these signals are research only: they test the strategy
           forward and are not trades to take.
         </p>
@@ -85,7 +85,7 @@ export default async function PaperAccountPage({ params }: { params: Promise<{ i
       <section className="mt-8">
         <h2 className="text-lg font-semibold">Latest signals</h2>
         {signals.length === 0 ? (
-          <p className="mt-2 text-sm text-neutral-500">No signals yet.</p>
+          <p className="mt-2 text-sm text-muted">No signals yet.</p>
         ) : (
           <div className="mt-2 space-y-2">
             {signals.map((sig) => (
@@ -94,7 +94,7 @@ export default async function PaperAccountPage({ params }: { params: Promise<{ i
           </div>
         )}
         {s.skipped_today && Object.keys(s.skipped_today).length ? (
-          <p className="mt-2 text-sm text-neutral-500">
+          <p className="mt-2 text-sm text-muted">
             Skipped on {s.as_of}:{" "}
             {Object.entries(s.skipped_today)
               .map(([reason, n]) => `${reason} (${n})`)
@@ -108,7 +108,7 @@ export default async function PaperAccountPage({ params }: { params: Promise<{ i
         {open_trades.length ? (
           <TradesTable trades={open_trades} open />
         ) : (
-          <p className="text-sm text-neutral-500">None.</p>
+          <p className="text-sm text-muted">None.</p>
         )}
       </section>
 
@@ -117,7 +117,7 @@ export default async function PaperAccountPage({ params }: { params: Promise<{ i
         {closed_trades.length ? (
           <TradesTable trades={[...closed_trades].reverse()} open={false} />
         ) : (
-          <p className="text-sm text-neutral-500">None yet.</p>
+          <p className="text-sm text-muted">None yet.</p>
         )}
       </section>
     </main>

@@ -18,15 +18,15 @@ export default async function QualityReportPage({
       <Link href="/data" className="text-sm underline">
         All reports
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold">Data quality on {date}</h1>
+      <h1 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">Data quality on {date}</h1>
       {!report.ok ? (
-        <p className="mt-4 text-red-600">{report.error}</p>
+        <p className="mt-4 text-bad">{report.error}</p>
       ) : (
         <div className="mt-6 space-y-4">
           {report.data.checks.map((check) => (
             <section
               key={check.name}
-              className="rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800"
+              className="rounded-xl border border-line bg-surface px-4 py-3"
             >
               <div className="flex items-center gap-3">
                 <StatusBadge status={check.status} />
@@ -56,7 +56,7 @@ function ItemsTable({
   return (
     <div className="mt-3 overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-left text-neutral-500">
+        <thead className="text-left text-muted">
           <tr>
             {columns.map((c) => (
               <th key={c} className="pr-4">
@@ -67,7 +67,7 @@ function ItemsTable({
         </thead>
         <tbody>
           {items.map((item, i) => (
-            <tr key={i} className="border-t border-neutral-200 dark:border-neutral-800">
+            <tr key={i} className="border-t border-line">
               {columns.map((c) => (
                 <td key={c} className="py-1 pr-4">
                   {c === "symbol" ? (
@@ -87,7 +87,7 @@ function ItemsTable({
         </tbody>
       </table>
       {total > items.length && (
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-muted">
           Showing {items.length} of {total}.
         </p>
       )}

@@ -58,9 +58,16 @@ are part of done, never commit secrets.
   - `app/analytics/` `compare.py` (backtest vs paper vs real: gates, expected ranges,
     stages, causes of divergence; pure), `service.py` (database) and `weekly.py` (weekly
     summary and revalidation, which retires failing strategies' paper accounts).
+  - `app/market/` the market mood (decision 0009): `mood.py` (breadth above the 200-day
+    EMA, 52-week highs/lows, the engine's regime filter, attack/normal/defend, sector
+    strength; pure) and `service.py` (database). Served at `/market/mood`.
+  - `app/portfolio/` my real portfolio: `calc.py` (open risk, heat, give-back, sector
+    exposure vs settings; pure) and `service.py` (journal positions + the pre-open exit
+    plan). Served at `/portfolio`.
   - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
     days, `weekly` after the last session of the week. Runs as the `scheduler` service.
-  - `app/api/` routes; `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
+  - `app/api/` routes; `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
+    `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
     `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
     company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
@@ -71,7 +78,12 @@ are part of done, never commit secrets.
     `tradebook FILE`.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
-- `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Server components call the
+- `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Navigation: Today (`/`),
+  Stocks, Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
+  compare, data, spot check); phones get a bottom tab bar (`src/components/nav.tsx`).
+  Colours are tokens in `src/app/globals.css` (`text-muted`, `border-line`, `text-good`,
+  `text-bad`, `bg-accent`...); shared parts in `src/components/ui.tsx` (Card, Stat, Badge,
+  Button, Table, EmptyState with the command that fills it). Server components call the
   backend at `JERON_API_URL`; journal writes go through server actions
   (`src/app/journal/actions.ts`), so the browser never calls the API. The stock chart
   uses TradingView Lightweight Charts (client component). Installable PWA

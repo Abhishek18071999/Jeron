@@ -22,7 +22,7 @@ export default async function EntryPage({
   if (!result.ok) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-8">
-        <p className="text-red-600">{result.error}</p>
+        <p className="text-bad">{result.error}</p>
       </main>
     );
   }
@@ -32,12 +32,12 @@ export default async function EntryPage({
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
-      <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold">
+      <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight sm:text-2xl">
         <Link href={`/stocks/${e.ticker}`} className="underline">
           {e.ticker}
         </Link>
         {e.signal && <ResearchBadge research={e.signal.research_only} />}
-        <span className="text-base font-normal text-neutral-500">
+        <span className="text-base font-normal text-muted">
           {e.strategy_key ?? "own idea"} · {e.decision} · {p.status}
         </span>
       </h1>
@@ -46,36 +46,36 @@ export default async function EntryPage({
       <Card title="Position">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-neutral-500">Held</dt>
+            <dt className="text-muted">Held</dt>
             <dd>
               {p.held} of {p.bought} bought
             </dd>
           </div>
           <div>
-            <dt className="text-neutral-500">Average entry</dt>
+            <dt className="text-muted">Average entry</dt>
             <dd>{inr(p.avg_entry)}</dd>
           </div>
           <div>
-            <dt className="text-neutral-500">Stop {e.own_stop ? "(mine)" : "(signal's)"}</dt>
+            <dt className="text-muted">Stop {e.own_stop ? "(mine)" : "(signal's)"}</dt>
             <dd>{inr(e.stop)}</dd>
           </div>
           <div>
-            <dt className="text-neutral-500">Realised P&amp;L (after charges)</dt>
+            <dt className="text-muted">Realised P&amp;L (after charges)</dt>
             <dd className={signClass(p.realised_pnl)}>{inr(p.realised_pnl)}</dd>
           </div>
           <div>
-            <dt className="text-neutral-500">
+            <dt className="text-muted">
               Open P&amp;L{e.last_close_date ? ` at the ${e.last_close_date} close` : ""}
             </dt>
             <dd className={signClass(p.open_pnl ?? 0)}>{inr(p.open_pnl)}</dd>
           </div>
           <div>
-            <dt className="text-neutral-500">R multiple</dt>
+            <dt className="text-muted">R multiple</dt>
             <dd className={signClass(p.r_multiple ?? 0)}>{rMultiple(p.r_multiple)}</dd>
           </div>
         </dl>
         {e.signal && (
-          <p className="mt-3 text-sm text-neutral-500">
+          <p className="mt-3 text-sm text-muted">
             Signal {e.signal.signal_date}: buy {inr(e.signal.entry_low)}-{inr(e.signal.entry_high)}, stop{" "}
             {inr(e.signal.stop)}, T1 {inr(e.signal.t1)}, {e.signal.shares} shares ·{" "}
             <Link href={`/stocks/${e.ticker}`} className="underline">
@@ -88,7 +88,7 @@ export default async function EntryPage({
       <Card title="Fills">
         {e.fills.length > 0 && (
           <table className="mb-4 w-full text-sm">
-            <thead className="text-left text-neutral-500">
+            <thead className="text-left text-muted">
               <tr>
                 <th className="py-1">Date</th>
                 <th>Side</th>
@@ -100,18 +100,18 @@ export default async function EntryPage({
             </thead>
             <tbody>
               {e.fills.map((f) => (
-                <tr key={f.id} className="border-t border-neutral-200 dark:border-neutral-800">
+                <tr key={f.id} className="border-t border-line">
                   <td className="py-1">{f.trade_date}</td>
                   <td>{f.side}</td>
                   <td className="text-right">{f.shares}</td>
                   <td className="text-right">{inr(f.price)}</td>
                   <td className="text-right">
                     {inr(f.charges)}
-                    {f.charges_estimated && <span className="text-xs text-neutral-500"> est.</span>}
+                    {f.charges_estimated && <span className="text-xs text-muted"> est.</span>}
                   </td>
                   <td className="text-right">
                     <form action={deleteFill.bind(null, e.id, f.id)}>
-                      <button className="text-xs text-red-600 underline">delete</button>
+                      <button className="text-xs text-bad underline">delete</button>
                     </form>
                   </td>
                 </tr>

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+
+import { TabBar, TopNav } from "@/components/nav";
 import { StockSearch } from "@/components/stock-search";
 
 import "./globals.css";
@@ -11,7 +13,13 @@ export const metadata: Metadata = {
   icons: { apple: "/icons/apple-touch-icon.png" },
 };
 
-export const viewport: Viewport = { themeColor: "#172554" };
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#16181b" },
+  ],
+  viewportFit: "cover",
+};
 
 export default function RootLayout({
   children,
@@ -20,23 +28,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
-        <nav className="border-b border-neutral-200 dark:border-neutral-800">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 text-sm">
-            <Link href="/" className="font-semibold">
+      <body className="min-h-dvh antialiased">
+        <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+            <Link href="/" className="text-base font-semibold tracking-tight">
               Jeron
             </Link>
-            <Link href="/journal">Journal</Link>
-            <Link href="/scanner">Scanner</Link>
-            <Link href="/backtests">Backtests</Link>
-            <Link href="/paper">Paper trading</Link>
-            <Link href="/compare">Compare</Link>
-            <Link href="/data">Data quality</Link>
-            <Link href="/spot-check">Spot check</Link>
-            <StockSearch className="w-full sm:ml-auto sm:w-64" />
+            <TopNav />
+            <StockSearch className="ml-auto w-full max-w-[16rem] sm:max-w-xs" />
           </div>
-        </nav>
-        {children}
+        </header>
+        {/* Room for the phone tab bar. */}
+        <div className="pb-24 md:pb-8">{children}</div>
+        <TabBar />
       </body>
     </html>
   );
