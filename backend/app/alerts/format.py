@@ -243,3 +243,31 @@ def digest_signals(rows: Sequence[tuple[str, bool, Mapping[str, Any]]]) -> list[
         )
         for key, research, p in rows
     ]
+
+
+def watch_message(
+    ticker: str,
+    direction: str,
+    price: Decimal,
+    day: date,
+    high: Decimal,
+    low: Decimal,
+    close: Decimal,
+    note: str,
+    web_url: str,
+) -> str:
+    """A watchlist alert price reached on the day."""
+    touched = f"high {inr(high)}" if direction == "above" else f"low {inr(low)}"
+    lines = [
+        f"WATCHLIST: {ticker} reached {inr(price)} ({direction})",
+        f"{_day(day)}: {touched}, close {inr(close)}",
+    ]
+    if note.strip():
+        lines.append(f"Note: {note.strip()}")
+    base = web_url.rstrip("/")
+    lines += [
+        "",
+        "Not a signal: plan it before buying.",
+        f"Plan: {base}/plan/{ticker} · Watchlist: {base}/watchlist",
+    ]
+    return "\n".join(lines)

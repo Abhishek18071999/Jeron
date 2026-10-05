@@ -10,8 +10,11 @@ from app.api import (
     journal,
     market,
     paper,
+    plan,
     portfolio,
     scan,
+    stocks,
+    watchlist,
 )
 from app.config import get_settings
 
@@ -28,7 +31,11 @@ app.include_router(scan.router)
 app.include_router(backtests.router)
 app.include_router(paper.router)
 app.include_router(journal.router)
+# Before the dashboard's /stocks/{symbol}.
+app.include_router(stocks.router)
 app.include_router(dashboard.router)
 app.include_router(analytics.router)
 app.include_router(market.router)
 app.include_router(portfolio.router)
+app.include_router(plan.router)
+app.include_router(watchlist.router)

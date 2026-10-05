@@ -196,6 +196,51 @@ class SimResult:
     heat_pct: Array = field(default_factory=lambda: np.zeros(0))
 
 
+def position_size(
+    equity: float,
+    rules: PortfolioRules,
+    risk_mult: float,
+    entry: float,
+    stop: float,
+    factor: float = 1.0,
+    avg_volume: float = math.nan,
+) -> int:
+    """Whole raw shares to buy (spec section 5): risk % of equity (times `risk_mult`,
+    0.5 in a risk-off regime or a drawdown) over the risk per share, capped at
+    `max_position_pct` of equity and `max_volume_pct` of the 20-day average volume
+    (NaN: no cap). Prices are adjusted; `factor` turns them into raw rupees. The trade
+    plan (`app.plan.calc`) sizes with this same function."""
+    budget = equity * rules.risk_pct / 100 * risk_mult
+    raw_risk = (entry - stop) / factor
+    raw = math.floor(budget / raw_risk)
+    raw = min(raw, math.floor(equity * rules.max_position_pct / 100 / (entry / factor)))
+    if not math.isnan(avg_volume):
+        raw = min(raw, math.floor(avg_volume * factor * rules.max_volume_pct / 100))
+    return raw
+
+
+def round_trip_costs(
+    costs: CostModel, price: float, distance: float, shares: float, slip_pct: float, r: float
+) -> float:
+    """Estimated charges and slippage to buy at `price` and sell at `price + r x distance`."""
+    return (
+        costs.charges(price * shares, "buy").total
+        + costs.charges((price + r * distance) * shares, "sell").total
+        + 2 * slip_pct / 100 * price * shares
+    )
+
+
+def reward_risk(
+    costs: CostModel, price: float, distance: float, shares: float, slip_pct: float, r: float
+) -> float:
+    """Reward:risk to the `r` x R target after estimated round-trip costs (spec section
+    4): the costs come off the reward and are added to the risk."""
+    round_trip = round_trip_costs(costs, price, distance, shares, slip_pct, r)
+    reward = r * distance * shares - round_trip
+    risk = distance * shares + round_trip
+    return reward / risk
+
+
 def _locked(m: Market, s: int, t: int, prev_close: float, down: bool) -> bool:
     """Whether the day traded only at one price, at a circuit limit."""
     h, lo, c = m.high[s, t], m.low[s, t], m.close[s, t]
@@ -505,27 +550,15 @@ def simulate(
             stop = c - distance
             zone_high = c + rules.entry_zone_atr * atr
             factor = m.factor[s, t]
-            budget = value * rules.risk_pct / 100 * risk_mult
-            raw_risk = (zone_high - stop) / factor
-            raw = math.floor(budget / raw_risk)
-            raw = min(raw, math.floor(value * rules.max_position_pct / 100 / (zone_high / factor)))
-            avg_volume = m.avg_volume20[s, t]
-            if not math.isnan(avg_volume):
-                raw = min(raw, math.floor(avg_volume * factor * rules.max_volume_pct / 100))
+            raw = position_size(
+                value, rules, risk_mult, zone_high, stop, factor, m.avg_volume20[s, t]
+            )
             if raw < 1:
                 skipped.append(Skip(s, t, "position too small"))
                 continue
             shares = raw / factor
             slip = costs.slippage_pct(np.nan_to_num(m.median_turnover[s, t]))
-            # Reward:risk to T2 after estimated round-trip costs (spec section 4).
-            round_trip = (
-                costs.charges(c * shares, "buy").total
-                + costs.charges((c + rules.t2_r * distance) * shares, "sell").total
-                + 2 * slip / 100 * c * shares
-            )
-            reward = rules.t2_r * distance * shares - round_trip
-            risk = distance * shares + round_trip
-            if reward / risk < rules.min_reward_risk_t2:
+            if reward_risk(costs, c, distance, shares, slip, rules.t2_r) < rules.min_reward_risk_t2:
                 skipped.append(Skip(s, t, "reward:risk to T2 below 2 after costs"))
                 continue
             new_risk = (zone_high - stop) * shares

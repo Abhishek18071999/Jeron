@@ -78,6 +78,7 @@ class EntryOut(BaseModel):
     own_stop: bool
     followed_plan: bool | None
     notes: str
+    plan_id: int | None = None
     created_at: datetime
     updated_at: datetime
     signal: SignalBrief | None
@@ -126,6 +127,7 @@ class DecisionIn(BaseModel):
     stop: Decimal | None = Field(default=None, gt=0)
     followed_plan: bool | None = None
     notes: str = ""
+    plan_id: int | None = None
 
 
 class ManualIn(BaseModel):
@@ -133,6 +135,7 @@ class ManualIn(BaseModel):
     reason: str = ""
     stop: Decimal | None = Field(default=None, gt=0)
     notes: str = ""
+    plan_id: int | None = None
 
 
 class FillIn(BaseModel):
@@ -181,6 +184,7 @@ def entry_out(view: EntryView) -> EntryOut:
         own_stop=e.stop is not None,
         followed_plan=e.followed_plan,
         notes=e.notes,
+        plan_id=e.plan_id,
         created_at=e.created_at,
         updated_at=e.updated_at,
         signal=brief(view.signal) if view.signal else None,
@@ -283,7 +287,10 @@ def entry(entry_id: int, session: SessionDep) -> EntryOut:
 @router.put("/{entry_id}")
 def update(entry_id: int, body: DecisionIn, session: SessionDep) -> EntryOut:
     entry = _entry(session, entry_id)
-    service.update_entry(session, entry, **body.model_dump())
+    try:
+        service.update_entry(session, entry, **body.model_dump())
+    except JournalError as e:
+        raise HTTPException(422, str(e)) from None
     return _one(session, entry)
 
 
