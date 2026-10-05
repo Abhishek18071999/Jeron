@@ -57,6 +57,13 @@ With Jeron running, open a second terminal in the `Jeron` folder.
    ```sh
    docker compose exec backend python -m app.cli daily
    ```
+   You don't need to run this yourself: the `scheduler` service runs it at 19:00 IST on
+   trading days (and the weekly summary after the week's last session), plus the
+   pre-open check at 08:30 IST. Start Jeron once with `docker compose up -d`; every
+   service restarts with Docker. For that to survive a reboot, turn on Docker Desktop's
+   "Start Docker Desktop when you sign in", and keep the computer awake at those times
+   (a run up to an hour late still happens). See what ran with
+   `docker compose logs scheduler`.
 7. Optional, to exclude ASM stocks: on nseindia.com open Surveillance > ASM, download
    the list as CSV into the `Jeron` folder, then
    ```sh
