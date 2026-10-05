@@ -16,6 +16,7 @@ from app.backtest.market import REGIME_RULES, Regime
 from app.config import get_settings
 from app.data import store
 from app.data.adjust import adjust_bars, build_adjustments
+from app.data.events import EVENT_LOOKAHEAD_DAYS, next_results
 from app.db import get_session
 from app.indicators import ema
 from app.journal import service
@@ -116,6 +117,9 @@ class Dashboard(BaseModel):
     pending: list[SignalBrief]
     alerts: AlertsSetup
     last_summary: AlertOut | None
+    # The next results board meeting within EVENT_LOOKAHEAD_DAYS of the scan day, per
+    # ticker of `signals` and `pending`; empty when the results calendar isn't loaded.
+    results_ahead: dict[str, date] = {}
 
 
 def _regime(session: Session, day: date) -> RegimeOut | None:
@@ -191,6 +195,7 @@ def dashboard(session: SessionDep) -> Dashboard:
             for r, key in day_signals(session, day)
         ]
     pending_since = (day or date.today()) - timedelta(days=PENDING_DAYS)
+    pending = service.pending_signals(session, since=pending_since, include_research=False)
     last_summary = session.scalar(
         select(Alert).where(Alert.kind == "digest").order_by(Alert.created_at.desc()).limit(1)
     )
@@ -211,17 +216,28 @@ def dashboard(session: SessionDep) -> Dashboard:
         journal_positions=[
             entry_out(v) for v in service.entry_views(session) if v.position.status == "open"
         ],
-        pending=[
-            brief(p)
-            for p in service.pending_signals(session, since=pending_since, include_research=False)
-        ],
+        pending=[brief(p) for p in pending],
         alerts=AlertsSetup(
             telegram=settings.telegram_ready,
             email=settings.email_ready,
             research_signals=settings.alert_research_signals,
         ),
         last_summary=None if last_summary is None else _alert(last_summary),
+        results_ahead=_results_ahead(
+            session, {s.ticker for s in signals} | {p.ticker for p in pending}, day
+        ),
     )
+
+
+def _results_ahead(session: Session, tickers: set[str], day: date | None) -> dict[str, date]:
+    if not tickers or day is None:
+        return {}
+    out = {}
+    for ticker, dates in store.results_dates(session, tickers).items():
+        upcoming = next_results(dates, day)
+        if upcoming is not None and (upcoming.meeting_date - day).days <= EVENT_LOOKAHEAD_DAYS:
+            out[ticker] = upcoming.meeting_date
+    return out
 
 
 @router.get("/alerts")
