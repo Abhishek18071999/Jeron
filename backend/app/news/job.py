@@ -199,15 +199,16 @@ def label_news(
 ) -> LabelRun:
     """Label `items` one request at a time, saving as it goes."""
     run = LabelRun()
-    for start in range(0, len(items), _SAVE_EVERY):
-        chunk = items[start : start + _SAVE_EVERY]
+    every = getattr(labeller, "save_every", _SAVE_EVERY)
+    for start in range(0, len(items), every):
+        chunk = items[start : start + every]
         labels = labeller.label(chunk)
         good = [(item.id, label) for item, label in zip(chunk, labels, strict=True) if label]
         run.sent += len(chunk)
         run.labelled += save_labels(session, labeller.name, PROMPT_VERSION, good)
         run.failed += len(chunk) - len(good)
         session.commit()
-        if run.sent % 500 < _SAVE_EVERY:
+        if run.sent % 500 < every:
             log(f"  {run.sent} of {len(items)} sent, {run.labelled} labelled.")
     return run
 

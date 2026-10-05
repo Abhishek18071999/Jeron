@@ -32,6 +32,7 @@ x-backend-env: &backend-env
 
 services:
   db:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-jeron}
@@ -48,6 +49,7 @@ services:
       retries: 10
 
   backend:
+    restart: unless-stopped
     build: ./backend
     environment:
       <<: *backend-env
@@ -80,6 +82,7 @@ services:
     restart: unless-stopped
 
   web:
+    restart: unless-stopped
     build: ./web
     environment:
       JERON_API_URL: http://backend:8000
