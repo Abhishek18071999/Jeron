@@ -1,11 +1,11 @@
 import Link from "next/link";
 
 import { Card, ErrorNote, ResearchBadge, inr, rMultiple } from "@/components/ui";
-import { type JournalEntry, getJson } from "@/lib/api";
+import { type JournalEntry, type SavedPlan, getJson } from "@/lib/api";
 
 import { signClass } from "../../backtests/format";
 import { addFill, deleteFill, updateEntry } from "../actions";
-import { FillForm, PlanForm } from "../forms";
+import { FillForm, PlanForm, PlanSummary } from "../forms";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +28,8 @@ export default async function EntryPage({
   }
   const e = result.data;
   const p = e.position;
+  const planResult = e.plan_id ? await getJson<SavedPlan>(`/plans/${e.plan_id}`) : null;
+  const plan = planResult?.ok ? planResult.data : null;
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
   return (
@@ -43,6 +45,7 @@ export default async function EntryPage({
       </h1>
       <ErrorNote error={error} />
 
+      {plan && <PlanSummary plan={plan} />}
       <Card title="Position">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
           <div>
@@ -119,11 +122,11 @@ export default async function EntryPage({
             </tbody>
           </table>
         )}
-        <FillForm action={addFill.bind(null, e.id)} today={today} />
+        <FillForm action={addFill.bind(null, e.id)} today={today} plan={e.fills.length === 0 ? plan : null} />
       </Card>
 
       <Card title="Decision and notes">
-        <PlanForm action={updateEntry.bind(null, e.id)} entry={e} signalStop={e.signal?.stop} />
+        <PlanForm action={updateEntry.bind(null, e.id)} entry={e} signalStop={e.signal?.stop} plan={plan} />
       </Card>
     </main>
   );

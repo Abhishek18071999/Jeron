@@ -16,7 +16,13 @@ function plan(form: FormData) {
     stop: optional(form, "stop"),
     followed_plan: followed === "yes" ? true : followed === "no" ? false : null,
     notes: text(form, "notes"),
+    plan_id: planId(form),
   };
+}
+
+function planId(form: FormData) {
+  const id = Number(text(form, "plan_id"));
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
 function fail(path: string, error: string): never {
@@ -65,6 +71,7 @@ export async function addManual(form: FormData) {
     reason: text(form, "reason"),
     stop: optional(form, "stop"),
     notes: text(form, "notes"),
+    plan_id: planId(form),
   });
   if (!result.ok) fail("/journal", result.error);
   done(result.data);

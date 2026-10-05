@@ -21,7 +21,15 @@ from app.journal.calc import (
     position,
     strategy_stats,
 )
-from app.models import DailyBar, Instrument, JournalEntry, JournalFill, PaperAccount, SignalRecord
+from app.models import (
+    DailyBar,
+    Instrument,
+    JournalEntry,
+    JournalFill,
+    PaperAccount,
+    SignalRecord,
+    TradePlan,
+)
 
 
 class JournalError(ValueError):
@@ -163,6 +171,17 @@ def _check_decision(decision: str) -> None:
         raise JournalError(f"Decision must be one of {', '.join(DECISIONS)}")
 
 
+def _check_plan(session: Session, plan_id: int | None, ticker: str) -> None:
+    """A journal entry may point at a saved trade plan for the same stock."""
+    if plan_id is None:
+        return
+    plan = session.get(TradePlan, plan_id)
+    if plan is None:
+        raise JournalError(f"No trade plan {plan_id}")
+    if plan.ticker != ticker:
+        raise JournalError(f"Trade plan {plan_id} is for {plan.ticker}, not {ticker}")
+
+
 def decide(
     session: Session,
     signal_id: UUID,
@@ -172,12 +191,14 @@ def decide(
     stop: Decimal | None = None,
     followed_plan: bool | None = None,
     notes: str = "",
+    plan_id: int | None = None,
 ) -> JournalEntry:
     """Record (or change) what I did with a signal."""
     _check_decision(decision)
     info = signal_info(session, signal_id)
     if info is None:
         raise JournalError(f"No signal {signal_id}")
+    _check_plan(session, plan_id, info.ticker)
     entry = session.scalar(select(JournalEntry).where(JournalEntry.signal_id == signal_id))
     if entry is None:
         entry = JournalEntry(
@@ -189,6 +210,8 @@ def decide(
     entry.stop = stop
     entry.followed_plan = followed_plan
     entry.notes = notes
+    if plan_id is not None:
+        entry.plan_id = plan_id
     session.commit()
     return entry
 
@@ -200,13 +223,21 @@ def manual_entry(
     reason: str = "",
     stop: Decimal | None = None,
     notes: str = "",
+    plan_id: int | None = None,
 ) -> JournalEntry:
     """A trade I took without a signal."""
     ticker = ticker.strip().upper()
     if not ticker:
         raise JournalError("Ticker is required")
+    _check_plan(session, plan_id, ticker)
     entry = JournalEntry(
-        ticker=ticker, decision="taken", reason=reason, stop=stop, notes=notes, followed_plan=None
+        ticker=ticker,
+        decision="taken",
+        reason=reason,
+        stop=stop,
+        notes=notes,
+        followed_plan=None,
+        plan_id=plan_id,
     )
     session.add(entry)
     session.commit()
@@ -222,13 +253,17 @@ def update_entry(
     stop: Decimal | None,
     followed_plan: bool | None,
     notes: str,
+    plan_id: int | None = None,
 ) -> JournalEntry:
     _check_decision(decision)
+    _check_plan(session, plan_id, entry.ticker)
     entry.decision = decision
     entry.reason = reason
     entry.stop = stop
     entry.followed_plan = followed_plan
     entry.notes = notes
+    if plan_id is not None:
+        entry.plan_id = plan_id
     session.commit()
     return entry
 

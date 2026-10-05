@@ -1,6 +1,7 @@
 """Send what is due after the daily run: one alert per new signal of a live-eligible
-strategy (research-only ones too if the setting is on), and the daily summary. Every
-alert is stored once; a re-run sends only what failed before."""
+strategy (research-only ones too if the setting is on), one per watchlist alert price
+reached, and the daily summary. Every alert is stored once; a re-run sends only what
+failed before."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ from app.alerts.format import (
     digest_message,
     digest_signals,
     signal_message,
+    watch_message,
 )
 from app.backtest.market import market_state
 from app.config import Settings, get_settings
@@ -36,6 +38,7 @@ from app.models import (
 from app.paper.job import latest_scan_date
 from app.scan.score import SCORE_VERSION
 from app.signals.build import IST
+from app.watchlist.service import hits as watchlist_hits
 
 Log = Callable[[str], None]
 # Calendar days of index closes for the regime (200-day EMA) and VIX (5-year decile).
@@ -218,6 +221,28 @@ def run_alerts(
             now,
             day,
             record.signal_id,
+        )
+    for hit in watchlist_hits(session, day):
+        _send(
+            session,
+            channels,
+            hit.key,
+            "watch",
+            watch_message(
+                hit.ticker,
+                hit.direction,
+                hit.price,
+                hit.day,
+                hit.high,
+                hit.low,
+                hit.close,
+                hit.note,
+                settings.web_url,
+            ),
+            f"Jeron watchlist: {hit.ticker} {hit.direction} {hit.price.normalize():f}",
+            outcome,
+            now,
+            day,
         )
     digest = digest_message(build_digest(session, day, settings.web_url))
     _send(

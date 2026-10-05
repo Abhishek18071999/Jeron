@@ -27,6 +27,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    event,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -518,13 +519,14 @@ class PaperDay(Base):
 
 class Alert(Base):
     """A message sent (or tried) to me: one per key, so a re-run never sends twice.
-    Keys: "signal:<signal_id>", "digest:<date>", "test:<timestamp>"."""
+    Keys: "signal:<signal_id>", "digest:<date>", "test:<timestamp>",
+    "watch:<watchlist id>:<above/below>:<price>"."""
 
     __tablename__ = "alerts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(String(100), unique=True)
-    kind: Mapped[str] = mapped_column(String(16))  # "signal" / "digest" / "test"
+    kind: Mapped[str] = mapped_column(String(16))  # "signal" / "digest" / "test" / "watch"
     trade_date: Mapped[date | None] = mapped_column(Date, index=True)
     signal_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
     status: Mapped[str] = mapped_column(String(16))  # "sent" / "failed"
@@ -556,6 +558,8 @@ class JournalEntry(Base):
     stop: Mapped[Decimal | None] = mapped_column(Price)
     followed_plan: Mapped[bool | None] = mapped_column(Boolean)
     notes: Mapped[str] = mapped_column(String, default="")
+    # The trade plan this entry was made from (UI phase 1b), if any.
+    plan_id: Mapped[int | None] = mapped_column(ForeignKey("trade_plans.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -583,3 +587,59 @@ class JournalFill(Base):
     # "zerodha:<exchange>:<trade id>" for imported fills, so a re-import adds nothing.
     broker_trade_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TradePlan(Base):
+    """A trade plan saved before buying (decision 0010): levels, the engine's size, the
+    spec section 4 checks and the pre-buy checklist, as they were when saved. Never
+    changed: a new plan for the same stock is a new row pointing at the one it replaces.
+    Prices are raw rupees on the day it was made."""
+
+    __tablename__ = "trade_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(32), index=True)
+    signal_id: Mapped[UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("signals.signal_id"), index=True
+    )
+    supersedes_id: Mapped[int | None] = mapped_column(ForeignKey("trade_plans.id"))
+    tier: Mapped[str] = mapped_column(String(16))  # "swing" / "positional"
+    entry: Mapped[Decimal] = mapped_column(Price)
+    stop: Mapped[Decimal] = mapped_column(Price)
+    target1: Mapped[Decimal] = mapped_column(Price)
+    target2: Mapped[Decimal] = mapped_column(Price)
+    shares: Mapped[int] = mapped_column(Integer)
+    risk_amount: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    position_value: Mapped[Decimal] = mapped_column(Numeric(16, 2))
+    reward_risk_t2: Mapped[Decimal] = mapped_column(Numeric(8, 2))
+    stop_distance_pct: Mapped[Decimal] = mapped_column(Numeric(8, 2))
+    mood: Mapped[str | None] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(String, default="")
+    data_as_of: Mapped[date | None] = mapped_column(Date)
+    # Every number behind the plan (capital, risk %, ATR, heat, sector) and the checks.
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    # The checklist items ticked, by key.
+    checklist: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+@event.listens_for(TradePlan, "before_update")
+def _plans_are_immutable(*_: object) -> None:
+    raise ValueError("Trade plans are never changed; save a new plan instead")
+
+
+class WatchlistItem(Base):
+    """A stock I am watching, with an optional alert price (raw rupees). The daily job
+    alerts once per item and price when the day's high (above) or low (below) reaches it."""
+
+    __tablename__ = "watchlist"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(32), unique=True)
+    alert_price: Mapped[Decimal | None] = mapped_column(Price)
+    alert_direction: Mapped[str | None] = mapped_column(String(8))  # "above" / "below"
+    note: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

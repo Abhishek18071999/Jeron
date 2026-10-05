@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 
+import { CommandPalette } from "@/components/command-palette";
 import { TabBar, TopNav } from "@/components/nav";
 import { StockSearch } from "@/components/stock-search";
 
@@ -35,7 +36,8 @@ export default function RootLayout({
               Jeron
             </Link>
             <TopNav />
-            <StockSearch className="ml-auto w-full max-w-[16rem] sm:max-w-xs" />
+            <StockSearch className="ml-auto hidden w-full max-w-xs md:block" />
+            <CommandPalette />
           </div>
         </header>
         {/* Room for the phone tab bar. */}

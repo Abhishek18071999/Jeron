@@ -26,6 +26,7 @@ import {
   type MarketMood,
   type Portfolio,
   type SignalBrief,
+  type Watchlist,
   fetchHealth,
   getJson,
 } from "@/lib/api";
@@ -137,7 +138,7 @@ function SignalItem({ s, resultsOn }: { s: SignalBrief; resultsOn?: string }) {
   const notChecked = s.event_risk?.startsWith("Results calendar");
   return (
     <li className="border-t border-line py-2.5 first:border-t-0 first:pt-0">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <Link href={`/stocks/${s.ticker}`} className="font-semibold hover:underline">
           {s.ticker}
         </Link>
@@ -147,9 +148,14 @@ function SignalItem({ s, resultsOn }: { s: SignalBrief; resultsOn?: string }) {
             Results {shortDate(resultsOn)}
           </Badge>
         )}
-        <Link href={`/journal/signal/${s.signal_id}`} className="ml-auto text-xs text-muted hover:text-fg hover:underline">
-          Open
-        </Link>
+        <span className="ml-auto flex shrink-0 items-center gap-3 text-xs">
+          <Link href={`/journal/signal/${s.signal_id}`} className="text-muted hover:text-fg hover:underline">
+            Open
+          </Link>
+          <Link href={`/plan/${s.ticker}?signal=${s.signal_id}`} className="font-medium text-accent hover:underline">
+            Plan
+          </Link>
+        </span>
       </div>
       <p className="mt-0.5 text-xs text-muted">
         Entry <span className="text-fg">{inr(s.entry_low)}–{inr(s.entry_high)}</span> · Stop{" "}
@@ -269,6 +275,44 @@ function YourRisk({ p }: { p: Portfolio | null }) {
   );
 }
 
+// A slim line: watchlist stocks whose alert price the latest session reached.
+function WatchHits({ w }: { w: Watchlist | null }) {
+  if (!w) return null;
+  const hits = w.items.filter((i) => i.hit);
+  return (
+    <section className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm sm:px-5">
+      <Link href="/watchlist" className="font-semibold hover:underline">
+        Watchlist
+      </Link>
+      {w.items.length === 0 ? (
+        <span className="text-muted">Empty. Star a stock on its page to watch it and set an alert price.</span>
+      ) : hits.length === 0 ? (
+        <span className="text-muted">
+          {w.items.length} watched; none reached its alert price on {shortDate(w.day)}.
+        </span>
+      ) : (
+        <>
+          <span className="text-muted">Alert price reached on {shortDate(w.day)}:</span>
+          <ul className="flex flex-wrap gap-2">
+            {hits.map((h) => (
+              <li key={h.ticker}>
+                <Link
+                  href={`/plan/${h.ticker}`}
+                  title={h.note || `Plan a trade in ${h.ticker}`}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-accent-bg px-2.5 py-0.5 text-xs font-medium text-accent hover:underline"
+                >
+                  {h.ticker} {h.alert_direction === "above" ? "↑" : "↓"} {inr(h.alert_price, 0)}
+                  <span className="text-fg/70">close {inr(h.last_close, 0)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 function BehindTheScenes({ d }: { d: Dashboard }) {
   const alertsOn = d.alerts.telegram || d.alerts.email;
   return (
@@ -346,11 +390,12 @@ function BehindTheScenes({ d }: { d: Dashboard }) {
 export default async function Home({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
   const { day } = await searchParams;
   const dayParam = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `?day=${day}` : "";
-  const [result, health, moodResult, portfolioResult] = await Promise.all([
+  const [result, health, moodResult, portfolioResult, watchResult] = await Promise.all([
     getJson<Dashboard>("/dashboard"),
     fetchHealth(),
     getJson<MarketMood>("/market/mood"),
     getJson<Portfolio>(`/portfolio${dayParam}`),
+    getJson<Watchlist>("/watchlist"),
   ]);
   const db = health?.database === "ok";
   if (!result.ok) {
@@ -396,6 +441,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
         <NewSignals d={d} />
         <YourRisk p={p} />
       </div>
+      <WatchHits w={watchResult.ok ? watchResult.data : null} />
       <SectorStrength mood={mood} />
       <BehindTheScenes d={d} />
       <SystemLine ok={!!health} db={db} />
