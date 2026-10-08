@@ -28,7 +28,9 @@ are part of done, never commit secrets.
     and score for every day), `features.py`, `engine.py` (daily-bar simulation),
     `costs.py` (Indian charges, slippage, tax estimate), `strategies.py` (versioned; the `-events` versions add M6's results blackout and news
     filter; `trend-breakout` and `rs-pullback` are the v2 research, see
-    `docs/backtests/strategies-v2-report.md`),
+    `docs/backtests/strategies-v2-report.md`; `results-drift` and `sector-rotation` are
+    the v3 research, both research only, see `docs/backtests/strategies-v3-report.md`;
+    their inputs, the results reaction and the measured sector, are built in `market.py`),
     `walkforward.py` (folds, holdout, gates), `stats.py`, `job.py` (database).
     Changing a strategy's rules means a new strategy version; runs are never
     overwritten. The engine is also the risk manager (spec section 5); the sector cap,
