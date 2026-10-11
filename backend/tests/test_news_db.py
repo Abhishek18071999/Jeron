@@ -211,7 +211,7 @@ def test_deepseek_labels_the_same_way(empty_session):
     assert body["response_format"] == {"type": "json_object"}
     assert "JSON" in body["messages"][0]["content"]
     assert _labels(s, "deepseek-chat") == 1
-    assert "600 input and 40 output tokens" in logged[-1]
+    assert "used about US$0.0002" in logged[-1]  # 600 input and 40 output tokens
 
     bad = DeepSeekLabeller("secret", client=FakeHttp(content="not json"), pause=0)  # type: ignore[arg-type]
     item = NewsItem(1, "LIQUID", date(2025, 3, 3), None, "text")
@@ -290,3 +290,53 @@ def test_settings_pick_ollama():
     labeller = job.make_labeller(cloud)
     assert isinstance(labeller, OllamaLabeller) and labeller.name == "gemma4:31b"
     assert "JERON_OLLAMA_API_KEY" in job.missing_key(Settings(news_provider="ollama"))
+
+
+def test_spend_is_recorded_and_the_monthly_cap_stops_labelling(empty_session):
+    from decimal import Decimal
+
+    from app.models import LlmUsage
+    from app.settings_store import save_settings
+
+    s = empty_session
+    _setup(s)
+    client = FakeClient({"ORDER": _message(ORDER)})
+    assert job.run_news(s, ClaudeLabeller("key", MODEL, client=client)) == 0
+    row = s.scalars(select(LlmUsage)).one()
+    # 500 input and 100 output tokens at Opus's list price.
+    assert (row.labeller, row.requests, row.cost_usd) == (MODEL, 1, Decimal("0.0040"))
+    assert job.month_spend(s) == Decimal("0.0040")
+
+    # Over the cap: the next run sends nothing and says why.
+    s.add(LlmUsage(labeller=MODEL, requests=100, cost_usd=Decimal("5")))
+    save_settings(s, {"news_monthly_budget_usd": 5})
+    s.execute(NewsLabelRow.__table__.delete().where(NewsLabelRow.labeller == MODEL))
+    s.commit()
+    client = FakeClient({"ORDER": _message(ORDER)})
+    logged: list[str] = []
+    assert job.run_news(s, ClaudeLabeller("key", MODEL, client=client), log=logged.append) == 0
+    assert client.requests == []
+    assert any("monthly cap of US$5.00" in line for line in logged)
+    # Batches too.
+    assert job.run_news(s, ClaudeLabeller("key", MODEL, client=client), batch=True) == 0
+    assert client.messages.batches.created == []
+
+    # 0 turns the cap off.
+    save_settings(s, {"news_monthly_budget_usd": 0})
+    assert job.run_news(s, ClaudeLabeller("key", MODEL, client=client)) == 0
+    assert len(client.requests) == 1
+
+
+def test_batches_record_their_half_price_spend(empty_session):
+    from app.models import LlmUsage
+
+    s = empty_session
+    _setup(s)
+    client = FakeClient({"ORDER": _message(ORDER)})
+    labeller = ClaudeLabeller("key", MODEL, client=client)
+    assert job.run_news(s, labeller, batch=True) == 0
+    client.messages.batches.status = "ended"
+    job.collect_batches(s, labeller)
+    s.commit()
+    row = s.scalars(select(LlmUsage)).one()
+    assert row.batch and str(row.cost_usd) == "0.0020"

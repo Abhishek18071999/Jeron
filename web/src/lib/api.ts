@@ -999,3 +999,20 @@ export type StockDeals = {
   deals_coverage: DataCoverage;
   insider_coverage: DataCoverage;
 };
+
+// --- Settings ----------------------------------------------------------------------
+
+export type SettingRow = {
+  key: string;
+  label: string;
+  help: string;
+  value: number | boolean;
+  env_value: number | boolean;
+  changed_at: string | null;
+};
+
+export type SettingsView = {
+  settings: SettingRow[];
+  setup: { telegram: boolean; email: boolean; news_provider: string; news_model: string; news_ready: boolean };
+  news_spend: { since: string; spent_usd: string; cap_usd: string };
+};

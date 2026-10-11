@@ -23,7 +23,7 @@ from app.alerts.format import (
     watch_message,
 )
 from app.backtest.market import market_state
-from app.config import Settings, get_settings
+from app.config import Settings
 from app.data import store
 from app.data.nse_lists import INDIA_VIX, NIFTY_50, NIFTY_500
 from app.journal.service import entry_views, pending_signals
@@ -37,6 +37,7 @@ from app.models import (
 )
 from app.paper.job import latest_scan_date
 from app.scan.score import SCORE_VERSION
+from app.settings_store import effective_settings
 from app.signals.build import IST
 from app.watchlist.service import hits as watchlist_hits
 
@@ -194,7 +195,7 @@ def run_alerts(
     now: datetime | None = None,
     log: Log = _quiet,
 ) -> AlertOutcome:
-    settings = settings or get_settings()
+    settings = settings or effective_settings(session)
     channels = channels_from(settings) if channels is None else channels
     now = now or datetime.now(IST)
     day = day or latest_scan_date(session)
@@ -273,7 +274,7 @@ def send_test(
     channels: Sequence[Channel] | None = None,
     now: datetime | None = None,
 ) -> Alert | None:
-    settings = settings or get_settings()
+    settings = settings or effective_settings(session)
     channels = channels_from(settings) if channels is None else channels
     if not channels:
         return None

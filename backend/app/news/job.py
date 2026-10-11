@@ -8,9 +8,10 @@ version), so re-runs never pay twice.
 """
 
 import csv
+import math
 import random
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -23,9 +24,9 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.data.store import NSE_BARS
-from app.models import Announcement, DailyBar, Instrument, NewsBatch
+from app.models import Announcement, DailyBar, Instrument, LlmUsage, NewsBatch
 from app.models import NewsLabel as NewsLabelRow
-from app.news.claude import ClaudeLabeller, Labeller, Usage
+from app.news.claude import PRICES, ClaudeLabeller, Labeller, Usage
 from app.news.deepseek import DeepSeekLabeller, LabellerError
 from app.news.labels import (
     PROMPT_VERSION,
@@ -40,6 +41,7 @@ from app.news.labels import (
     rule_label,
 )
 from app.news.ollama import OllamaLabeller
+from app.settings_store import effective_settings
 
 IST = ZoneInfo("Asia/Kolkata")
 RULES_VERSION = "rules-v1"
@@ -138,6 +140,89 @@ def label_rules(session: Session, log: Log = _quiet) -> int:
     return new
 
 
+# Monthly cost cap ------------------------------------------------------------------
+
+# For a model with no spend recorded yet: a generous guess per announcement, so a first
+# batch can't run far past the cap.
+_GUESS_TOKENS = (2500, 600)
+
+
+def month_start(now: datetime | None = None) -> datetime:
+    """The start of this calendar month, IST."""
+    now = (now or datetime.now(IST)).astimezone(IST)
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def month_spend(session: Session, now: datetime | None = None) -> Decimal:
+    """Estimated US$ the labellers used this month (models without a price count 0)."""
+    total = session.scalar(
+        select(func.coalesce(func.sum(LlmUsage.cost_usd), 0)).where(LlmUsage.at >= month_start(now))
+    )
+    return Decimal(total or 0)
+
+
+def record_usage(session: Session, model: str, used: Usage, batch: bool = False) -> Decimal:
+    """Store what a chunk or batch used. Returns its estimated US$ (0 without a price)."""
+    if not used.requests:
+        return Decimal(0)
+    cost = used.cost(model, batch=batch)
+    session.add(
+        LlmUsage(
+            labeller=model,
+            batch=batch,
+            requests=used.requests,
+            input_tokens=used.input_tokens,
+            output_tokens=used.output_tokens,
+            cache_read_tokens=used.cache_read_tokens,
+            cache_write_tokens=used.cache_write_tokens,
+            cost_usd=None if cost is None else Decimal(str(round(cost, 4))),
+        )
+    )
+    return Decimal(str(round(cost, 4))) if cost is not None else Decimal(0)
+
+
+@dataclass
+class Budget:
+    """The month's cap and spend so far; cap 0 means no cap."""
+
+    cap: Decimal
+    spent: Decimal
+
+    @property
+    def reached(self) -> bool:
+        return self.cap > 0 and self.spent >= self.cap
+
+    @property
+    def left(self) -> Decimal:
+        return max(self.cap - self.spent, Decimal(0))
+
+    def message(self) -> str:
+        return (
+            f"The monthly cap of US${self.cap:.2f} for news labels is reached "
+            f"(about US${self.spent:.2f} used this month). Labelling stops until next month; "
+            "raise the cap on the Settings page to carry on."
+        )
+
+
+def budget(session: Session, now: datetime | None = None) -> Budget:
+    cap = Decimal(str(effective_settings(session).news_monthly_budget_usd))
+    return Budget(cap, month_spend(session, now))
+
+
+def cost_per_item(session: Session, model: str, batch: bool) -> Decimal | None:
+    """Estimated US$ per announcement: the average of what this model used before, else
+    a guess from its list price. None for a model without a price."""
+    row = session.execute(
+        select(func.sum(LlmUsage.cost_usd), func.sum(LlmUsage.requests)).where(
+            LlmUsage.labeller == model, LlmUsage.batch == batch, LlmUsage.cost_usd.is_not(None)
+        )
+    ).one()
+    if row[0] is not None and row[1]:
+        return Decimal(row[0]) / row[1]
+    guess = Usage(1, *_GUESS_TOKENS).cost(model, batch=batch)
+    return None if guess is None else Decimal(str(guess))
+
+
 def pending_items(
     session: Session,
     labeller: str,
@@ -189,6 +274,7 @@ class LabelRun:
     sent: int = 0
     labelled: int = 0
     failed: int = 0
+    capped: bool = False  # stopped at the monthly cap
 
 
 def label_news(
@@ -197,16 +283,26 @@ def label_news(
     items: Sequence[NewsItem],
     log: Log = _quiet,
 ) -> LabelRun:
-    """Label `items` one request at a time, saving as it goes."""
+    """Label `items` one request at a time, saving as it goes and stopping at the
+    monthly cap (checked before each chunk, so it can pass the cap by one chunk)."""
     run = LabelRun()
     every = getattr(labeller, "save_every", _SAVE_EVERY)
+    usage: Usage | None = getattr(labeller, "usage", None)
+    money = budget(session)
     for start in range(0, len(items), every):
+        if money.reached:
+            log(money.message())
+            run.capped = True
+            break
         chunk = items[start : start + every]
+        before = replace(usage) if usage else None
         labels = labeller.label(chunk)
         good = [(item.id, label) for item, label in zip(chunk, labels, strict=True) if label]
         run.sent += len(chunk)
         run.labelled += save_labels(session, labeller.name, PROMPT_VERSION, good)
         run.failed += len(chunk) - len(good)
+        if usage and before:
+            money.spent += record_usage(session, labeller.name, usage.since(before))
         session.commit()
         if run.sent % 500 < every:
             log(f"  {run.sent} of {len(items)} sent, {run.labelled} labelled.")
@@ -216,7 +312,9 @@ def label_news(
 def submit_batches(
     session: Session, labeller: ClaudeLabeller, items: Sequence[NewsItem], log: Log = _quiet
 ) -> list[str]:
-    """Send `items` as Message Batches (half price, back within a day)."""
+    """Send `items` as Message Batches (half price, back within a day), as many as the
+    monthly cap leaves room for after the batches still running."""
+    items = _within_cap(session, labeller.name, items, log)
     ids: list[str] = []
     for start in range(0, len(items), labeller.BATCH_LIMIT):
         chunk = items[start : start + labeller.BATCH_LIMIT]
@@ -251,13 +349,52 @@ def collect_batches(
         if not labeller.batch_done(batch.batch_id):
             running += 1
             continue
+        before = replace(labeller.usage)
         found = labeller.batch_results(batch.batch_id, log=log)
+        record_usage(session, labeller.name, labeller.usage.since(before), batch=True)
         good = [(i, label) for i, label in found.items() if label]
         new += save_labels(session, labeller.name, PROMPT_VERSION, good)
         batch.collected_at = datetime.now(IST)
         session.commit()
         log(f"  Batch {batch.batch_id}: {len(good)} of {batch.items} labelled.")
     return new, running
+
+
+def _within_cap(
+    session: Session, model: str, items: Sequence[NewsItem], log: Log
+) -> Sequence[NewsItem]:
+    money = budget(session)
+    each = cost_per_item(session, model, batch=True)
+    if money.cap == 0 or not each:
+        return items
+    running = int(
+        session.scalar(
+            select(func.coalesce(func.sum(NewsBatch.items), 0)).where(
+                NewsBatch.collected_at.is_(None), NewsBatch.labeller == model
+            )
+        )
+        or 0
+    )
+    room = money.left - each * running
+    allowed = max(math.floor(room / each), 0)
+    if allowed >= len(items):
+        return items
+    if allowed == 0:
+        log(money.message() if money.reached else _cap_note(money, running))
+    else:
+        log(
+            f"The monthly cap leaves room for about {allowed} of {len(items)} announcements "
+            f"(US${money.left:.2f} left, about US${each:.4f} each); sending those, newest first."
+        )
+    return items[:allowed]
+
+
+def _cap_note(money: Budget, running: int) -> str:
+    return (
+        f"Batches still running ({running} announcements) would use the US${money.left:.2f} "
+        "left under this month's cap; nothing more was sent. Run `news-label --collect` "
+        "once they finish, or raise the cap on the Settings page."
+    )
 
 
 # Test set ------------------------------------------------------------------------
@@ -500,13 +637,13 @@ def api_error_message(exc: Exception) -> str:
 
 
 def spent(labeller: Labeller) -> str:
-    """What a run used: US$ for Claude, tokens for others (see their own bill)."""
+    """What a run used: US$ for models with a list price, else tokens (see the bill)."""
     usage: Usage | None = getattr(labeller, "usage", None)
     if usage is None:
         return ""
     cost = usage.cost(labeller.name)
     if cost is not None:
-        return f"about US${cost:.2f}"
+        return f"about US${cost:.2f}" if cost >= 0.01 else f"about US${cost:.4f}"
     return (
         f"{usage.input_tokens:,} input and {usage.output_tokens:,} output tokens "
         "(the exact cost is on your provider's billing page)"
@@ -547,6 +684,8 @@ def _run_llm(
             "--batch (half price), or --limit or --start to label fewer."
         )
         return 1
+    if labeller.name not in PRICES:
+        log(f"{labeller.name} has no list price here, so the monthly cap can't count it.")
     log(f"Labelling {len(items)} announcements with {labeller.name}...")
     run = label_news(session, labeller, items, log)
     used = spent(labeller)

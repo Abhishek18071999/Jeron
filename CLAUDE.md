@@ -72,6 +72,11 @@ are part of done, never commit secrets.
     plans are never changed (a new one supersedes), journal entries carry `plan_id`.
   - `app/watchlist/` `calc.py` (alert hits, alert keys; pure) and `service.py`; served at
     `/watchlist`. The alerts job sends one alert per item and price (`watch:` keys).
+  - `app/settings_store.py` settings changed on the Settings page (`setting_changes`,
+    latest per key wins over `.env`); risk code reads `effective_settings(session)`, not
+    `get_settings()`. `app/auth.py` makes the web login's scrypt hash and TOTP secret
+    (`auth-setup`). The news labeller records spend in `llm_usage` and stops at the
+    monthly cap (decision 0012).
   - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
     days, `weekly` after the last session of the week. Runs as the `scheduler` service.
   - `app/api/` routes; `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
@@ -87,15 +92,18 @@ are part of done, never commit secrets.
     block deals; `daily` runs it too), `deals-import FILE` (bulk/block deals or insider
     trades saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
-    `tradebook FILE`.
+    `tradebook FILE`, `auth-setup` (the web login's secrets).
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
+- `backup/backup.sh` the nightly `pg_dump` run by the `backup` service.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Navigation: Today (`/`),
   Stocks (sector heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under
   it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
   compare, data, spot check); phones get a bottom tab bar (`src/components/nav.tsx`).
   Ctrl+K opens the command palette (`src/components/command-palette.tsx`); the trade
   plan form recalculates through the read-only `/api/plan` route handler.
+  Login (password + TOTP, decision 0012): `src/proxy.ts` guards every route,
+  `src/lib/auth.ts`, `src/app/login/`; `/settings` changes risk and alert settings.
   Colours are tokens in `src/app/globals.css` (`text-muted`, `border-line`, `text-good`,
   `text-bad`, `bg-accent`...); shared parts in `src/components/ui.tsx` (Card, Stat, Badge,
   Button, Table, EmptyState with the command that fills it). Server components call the

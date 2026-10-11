@@ -21,6 +21,27 @@ docker compose up --build
 Open http://localhost:3000. The page shows whether the backend and database are
 running. Stop with Ctrl+C; your data is kept in a Docker volume.
 
+### Log in
+
+Jeron stays locked until the login is set up (password + a 6-digit code from an
+authenticator app such as Google Authenticator):
+
+```sh
+docker compose run --rm backend python -m app.cli auth-setup
+```
+
+Paste the two lines it prints into `.env`, add the account to your authenticator app
+with the setup key it shows, then `docker compose up -d`. A login lasts 30 days per
+device; Log out is on the Settings page. Changing the password or key logs out every
+device.
+
+### Backups
+
+The `backup` service saves the database every night after 02:00 IST to `backups/`
+(the newest 14 are kept). Set `JERON_BACKUP_DIR` in `.env` to a synced folder (Google
+Drive, iCloud) to keep a copy off this computer. One backup now:
+`docker compose exec backup sh /backup.sh now`. Restoring is in `backup/backup.sh`.
+
 ## Load market data
 
 With Jeron running, open a second terminal in the `Jeron` folder.

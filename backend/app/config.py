@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     ollama_api_key: str = ""
     ollama_model: str = "gemma4:31b"
     ollama_base_url: str = "https://ollama.com"
+    # Monthly cap on the news labeller's estimated spend, US$ (spec section 10). The
+    # labeller stops for the month once it is reached; 0 turns the cap off.
+    news_monthly_budget_usd: float = Field(default=20.0, ge=0)
     # Where the web app is, for links in alerts.
     web_url: str = "http://localhost:3000"
     # When the scheduler runs the jobs (HH:MM, IST, weekdays that trade).

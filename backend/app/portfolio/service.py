@@ -10,12 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.backtest.engine import PortfolioRules
 from app.calendar.nse import TradingCalendar
-from app.config import Settings, get_settings
+from app.config import Settings
 from app.enums import Exchange
 from app.exits.job import PositionCheck, build_preopen, check_day
 from app.journal.service import EntryView, entry_views
 from app.models import Instrument, JournalEntry
 from app.portfolio.calc import Holding, PortfolioTotals, totals
+from app.settings_store import effective_settings
 from app.signals.build import IST
 
 RULES = PortfolioRules()
@@ -80,7 +81,7 @@ def portfolio(
     now: datetime | None = None,
 ) -> Portfolio:
     """Open positions as the next pre-open check (or `day`'s) sees them."""
-    settings = settings or get_settings()
+    settings = settings or effective_settings(session)
     calendar = TradingCalendar.default()
     day = day or check_day(calendar, now or datetime.now(IST))
     p = build_preopen(session, day, calendar)

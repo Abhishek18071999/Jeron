@@ -27,6 +27,10 @@ PRICES: dict[str, tuple[float, float, float, float]] = {
     "claude-opus-5-5": (4.0, 20.0, 0.20, 5.0),
     "claude-sonnet-5-5": (2.0, 10.0, 0.20, 2.5),
     "claude-haiku-4-5": (1.0, 5.0, 0.10, 1.25),
+    # DeepSeek's list prices (cache-miss input); its replies don't split cache hits out,
+    # so this errs high.
+    "deepseek-chat": (0.28, 0.42, 0.028, 0.0),
+    "deepseek-reasoner": (0.28, 0.42, 0.028, 0.0),
 }
 
 
@@ -47,6 +51,16 @@ class Usage:
         self.output_tokens += getattr(usage, "output_tokens", 0) or 0
         self.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
         self.cache_write_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
+
+    def since(self, before: "Usage") -> "Usage":
+        """What was used after `before` (a copy taken earlier)."""
+        return Usage(
+            self.requests - before.requests,
+            self.input_tokens - before.input_tokens,
+            self.output_tokens - before.output_tokens,
+            self.cache_read_tokens - before.cache_read_tokens,
+            self.cache_write_tokens - before.cache_write_tokens,
+        )
 
     def cost(self, model: str, batch: bool = False) -> float | None:
         """Estimated US$; None for a model without a price here."""

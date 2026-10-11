@@ -20,10 +20,12 @@ python -m app.cli alerts                        # send the newest day's signals 
 python -m app.cli telegram --setup              # find your chat id after messaging the bot
 python -m app.cli daily                         # update, scan, paper-trade, send alerts
 python -m app.cli holidays --year 2025          # holidays as NSE's files show them
+python -m app.cli auth-setup                    # password and TOTP for the web login
 """
 
 import argparse
 import csv
+import getpass
 import io
 import sys
 from datetime import date, datetime, timedelta
@@ -33,6 +35,7 @@ from zoneinfo import ZoneInfo
 import anthropic
 from sqlalchemy.orm import Session
 
+from app import auth
 from app.alerts.channels import AlertError, TelegramChannel
 from app.alerts.job import NOT_SET_UP, run_alerts, send_test
 from app.analytics.weekly import run_weekly
@@ -85,6 +88,31 @@ def _yahoo() -> YahooClient:
 
 def _date(value: str) -> date:
     return date.fromisoformat(value)
+
+
+def _auth_setup() -> int:
+    """Ask for a password, then print the two `.env` lines for the web login."""
+    password = getpass.getpass("New password for Jeron: ")
+    if len(password) < auth.MIN_PASSWORD:
+        _log(f"Use at least {auth.MIN_PASSWORD} characters.")
+        return 1
+    if getpass.getpass("Same password again: ") != password:
+        _log("The two passwords differ; nothing was made.")
+        return 1
+    secret = auth.new_totp_secret()
+    _log(
+        "\nAdd these two lines to .env (they replace any earlier ones), then run "
+        "`docker compose up -d` so the web app reads them:\n\n"
+        f"JERON_LOGIN_PASSWORD_HASH={auth.hash_password(password)}\n"
+        f"JERON_LOGIN_TOTP_SECRET={secret}\n\n"
+        "In your authenticator app (Google Authenticator, Authy, 1Password...), add an "
+        f"account by setup key: {secret} (time-based, 6 digits).\n"
+        f"Or make a QR code of this link: {auth.otpauth_uri(secret)}\n"
+        f"Check it: the app should now show {auth.totp(secret)} (it changes every 30 "
+        "seconds).\nKeep the setup key somewhere safe: it is the only way to add the "
+        "account to a new phone. Changing the password or key logs out every device."
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -226,7 +254,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--year", type=int, required=True)
 
+    sub.add_parser("auth-setup", help="make the web login's password hash and TOTP secret")
+
     args = parser.parse_args(argv)
+    if args.command == "auth-setup":
+        return _auth_setup()
     calendar = TradingCalendar.default()
     today = _today()
 

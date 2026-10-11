@@ -697,3 +697,38 @@ class WatchlistItem(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class SettingChange(Base):
+    """A setting changed on the Settings page. Rows are only added: the latest per key
+    wins over the `JERON_` env value, and the history says what was in force when."""
+
+    __tablename__ = "setting_changes"
+    __table_args__ = (Index("ix_setting_changes_key_id", "key", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(64))
+    # JSON text of the value; null puts the env value back.
+    value: Mapped[str | None] = mapped_column(String(200))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LlmUsage(Base):
+    """What the news labeller used, one row per saved chunk or collected batch, so the
+    monthly cost cap can count the month's spend."""
+
+    __tablename__ = "llm_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    labeller: Mapped[str] = mapped_column(String(64))  # the model id
+    batch: Mapped[bool] = mapped_column(Boolean, default=False)
+    requests: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+    # Estimated US$ at list prices; null for a model without a known price.
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
