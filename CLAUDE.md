@@ -41,6 +41,10 @@ are part of done, never commit secrets.
     batches; tests use a fake client, never the API), `deepseek.py` (DeepSeek's chat API in
     JSON mode) and `ollama.py` (Ollama Cloud), the alternative labellers, and `job.py` (database). Labels are
     stored once per model and `PROMPT_VERSION`; changing the prompt means a new version.
+  - `app/fundamentals/` the fundamental brain (decision 0013): `score.py` (TTM, growth,
+    P/E against own history, `FUND_SCORE_VERSION`; pure) and `job.py` (load filings from
+    NSE's Financial Results CSVs and XBRL, point-in-time `quarters_known`, the stock page).
+    `app/data/fundamentals.py` parses the CSV and the XBRL (pure).
   - `app/signals/` the spec section 4 signal: `schema.py` (Pydantic, every field
     required) and `build.py` (engine order -> signal).
   - `app/paper/job.py` paper trading: one account per strategy version, replayed by the
@@ -82,7 +86,7 @@ are part of done, never commit secrets.
   - `app/api/` routes; `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
     `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
     `stocks.py` `/stocks/ranked` (the latest scan, by industry), `plan.py`, `watchlist.py`;
-    `deals.py` `/stocks/{symbol}/deals`;
+    `deals.py` `/stocks/{symbol}/deals`; `fundamentals.py` `/stocks/{symbol}/fundamentals`;
     `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
     company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
@@ -90,7 +94,8 @@ are part of done, never commit secrets.
     `events` (board-meeting and announcement history from the PR bundles),
     `events-import` (a board-meeting CSV saved from nseindia.com), `deals` (the day's bulk and
     block deals; `daily` runs it too), `deals-import FILE` (bulk/block deals or insider
-    trades saved from nseindia.com), `news-label`,
+    trades saved from nseindia.com), `fundamentals-import FILE...` (quarterly results from
+    Financial Results CSVs saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
     `tradebook FILE`, `auth-setup` (the web login's secrets).
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.

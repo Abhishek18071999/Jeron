@@ -11,6 +11,7 @@ python -m app.cli events-import meetings.csv    # board meetings saved from nsei
 python -m app.cli deals                         # today's bulk and block deals
 python -m app.cli deals-import deals.csv        # bulk/block deals or insider trades saved
                                                 # from nseindia.com
+python -m app.cli fundamentals-import CF-FR*.csv # quarterly results (CSV from nseindia.com)
 python -m app.cli news-label --limit 100        # label news (Claude or DeepSeek; needs a key)
 python -m app.cli news-testset                  # write headlines for you to label by hand
 python -m app.cli news-eval testset.csv         # the model's accuracy on your labels
@@ -46,12 +47,14 @@ from app.config import get_settings
 from app.data import pipeline, store
 from app.data.deals import BLOCK, BULK, DealFormatError, read_file
 from app.data.events import parse_board_meetings, parse_board_meetings_json
+from app.data.fundamentals import ResultsFormatError, read_results_csv
 from app.data.http import Fetcher
 from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
 from app.exits.job import run_preopen
+from app.fundamentals.job import cached_fetch, import_results
 from app.journal.importer import import_tradebook
 from app.news.deepseek import LabellerError
 from app.news.job import (
@@ -229,6 +232,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--kind", choices=(BULK, BLOCK), help="bulk or block (default: from the name)")
 
     p = sub.add_parser(
+        "fundamentals-import",
+        help="load quarterly results from Financial Results CSVs saved from NSE's website",
+    )
+    p.add_argument("files", type=Path, nargs="+")
+    p.add_argument(
+        "--all", action="store_true", help="every listed company, not only liquid stocks"
+    )
+
+    p = sub.add_parser(
         "news-label",
         help="label announcements: event type by subject (free), then an LLM (needs a key)",
     )
@@ -380,6 +392,34 @@ def main(argv: list[str] | None = None) -> int:
             read = len(insider) or len(found)
             _log(f"{read} {what} read, {stored} new.")
             return 0 if read else 1
+
+        if args.command == "fundamentals-import":
+            refs = []
+            for path in args.files:
+                try:
+                    refs += read_results_csv(path.read_text(encoding="utf-8-sig"))
+                except (ResultsFormatError, UnicodeDecodeError) as exc:
+                    _log(f"{path.name}: {exc}")
+                    return 1
+            settings = get_settings()
+            fetch = cached_fetch(
+                Fetcher(min_interval=settings.nse_request_interval).get,
+                Path(settings.data_dir) / "xbrl",
+            )
+            run = import_results(session, refs, fetch, all_stocks=args.all, log=_log)
+            _log(
+                f"{run.filings} filings listed, {run.matched} of known stocks, {run.chosen} "
+                f"chosen; {run.stored} stored, {run.already} already there, {run.no_xbrl} "
+                f"without XBRL, {len(run.failed)} failed."
+            )
+            for problem in run.failed[:20]:
+                _log(f"  {problem}")
+            if run.unmatched:
+                _log(
+                    f"{len(run.unmatched)} companies matched no NSE stock by name (often "
+                    "SME or debt-only listings), e.g. " + ", ".join(sorted(run.unmatched)[:5])
+                )
+            return 0 if not run.failed else 1
 
         if args.command == "backtest":
             run_backtests(session, args.strategy, args.start, args.end, log=_log)
