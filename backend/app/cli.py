@@ -8,6 +8,9 @@ python -m app.cli scan                          # the daily scan for the newest 
 python -m app.cli asm-import asm.csv            # load NSE's ASM list (saved from nseindia.com)
 python -m app.cli events --start 2016-01-01     # board meetings (results dates), history
 python -m app.cli events-import meetings.csv    # board meetings saved from nseindia.com
+python -m app.cli deals                         # today's bulk and block deals
+python -m app.cli deals-import deals.csv        # bulk/block deals or insider trades saved
+                                                # from nseindia.com
 python -m app.cli news-label --limit 100        # label news (Claude or DeepSeek; needs a key)
 python -m app.cli news-testset                  # write headlines for you to label by hand
 python -m app.cli news-eval testset.csv         # the model's accuracy on your labels
@@ -38,6 +41,7 @@ from app.backtest.strategies import STRATEGIES
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.data import pipeline, store
+from app.data.deals import BLOCK, BULK, DealFormatError, read_file
 from app.data.events import parse_board_meetings, parse_board_meetings_json
 from app.data.http import Fetcher
 from app.data.nse import NseArchive
@@ -188,6 +192,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("file", type=Path)
 
+    sub.add_parser("deals", help="the latest day's bulk and block deals from NSE's archive")
+    p = sub.add_parser(
+        "deals-import",
+        help="load bulk or block deals, or insider trades, from a file saved from NSE's website",
+    )
+    p.add_argument("file", type=Path)
+    p.add_argument("--kind", choices=(BULK, BLOCK), help="bulk or block (default: from the name)")
+
     p = sub.add_parser(
         "news-label",
         help="label announcements: event type by subject (free), then an LLM (needs a key)",
@@ -314,6 +326,28 @@ def main(argv: list[str] | None = None) -> int:
             for_results = sum(m.is_results for m in meetings)
             _log(f"{len(meetings)} meetings read ({for_results} for results), {stored} new.")
             return 0 if meetings else 1
+
+        if args.command == "deals":
+            return (
+                0 if pipeline.collect_deals(session, _archive(), today, log=_log) is not None else 1
+            )
+
+        if args.command == "deals-import":
+            try:
+                found, insider = read_file(args.file.read_bytes(), args.file.name, args.kind)
+            except (DealFormatError, ValueError) as exc:
+                _log(f"{args.file.name}: {exc}")
+                return 1
+            if insider:
+                stored = store.save_insider_trades(session, insider, pipeline.DEALS_IMPORT)
+                what = "insider trades"
+            else:
+                stored = store.save_deals(session, found, pipeline.DEALS_IMPORT)
+                what = f"{found[0].kind if found else 'bulk/block'} deals"
+            session.commit()
+            read = len(insider) or len(found)
+            _log(f"{read} {what} read, {stored} new.")
+            return 0 if read else 1
 
         if args.command == "backtest":
             run_backtests(session, args.strategy, args.start, args.end, log=_log)

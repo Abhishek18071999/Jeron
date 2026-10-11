@@ -935,3 +935,67 @@ export type Ranked = {
   offset: number;
   items: RankedStock[];
 };
+
+export type DealParty = {
+  name: string;
+  bought_quantity: number;
+  sold_quantity: number;
+  bought_value: string;
+  sold_value: string;
+  net_value: string;
+  deals: number;
+  days: number;
+  kinds: ("bulk" | "block")[];
+  last_day: string | null;
+};
+
+export type DealRow = {
+  day: string;
+  kind: "bulk" | "block";
+  client: string;
+  side: "buy" | "sell";
+  quantity: number;
+  price: string;
+  value: string;
+};
+
+export type InsiderRow = {
+  disclosed: string;
+  person: string;
+  category: string;
+  side: "buy" | "sell";
+  quantity: number;
+  value: string | null;
+  mode: string;
+  on_market: boolean;
+  traded_from: string | null;
+  traded_to: string | null;
+  before_pct: string | null;
+  after_pct: string | null;
+};
+
+export type DataCoverage = { first: string | null; last: string | null; days: number; sessions: number | null };
+
+export type StockDeals = {
+  symbol: string;
+  since: string;
+  buyers: DealParty[];
+  sellers: DealParty[];
+  day_traders: DealParty[];
+  deals: DealRow[];
+  deal_count: number;
+  insider: InsiderRow[];
+  insider_count: number;
+  insider_totals: {
+    promoter_bought: string;
+    promoter_sold: string;
+    promoter_net: string;
+    others_bought: string;
+    others_sold: string;
+    others_net: string;
+    on_market: number;
+    other_modes: number;
+  };
+  deals_coverage: DataCoverage;
+  insider_coverage: DataCoverage;
+};

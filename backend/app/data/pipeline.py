@@ -5,6 +5,7 @@
 - `quality_range`: the daily data-quality report.
 - `ingest_lists_range`: NSE index closes and the security list (bands, GSM), per day.
 - `refresh_reference_lists`: Nifty 500 constituents, company names, symbol changes.
+- `collect_deals`: the day's bulk and block deals.
 - `daily_update`: all of these for the days since the last run.
 
 Every job is safe to re-run; each day is committed on its own, so an interrupted
@@ -12,7 +13,9 @@ backfill continues where it stopped.
 """
 
 import contextlib
+import csv
 import hashlib
+import io
 import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -25,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
 from app.data import store
 from app.data.crosscheck import CloseComparison, compare_closes, compare_share_actions
+from app.data.deals import BLOCK, BLOCK_URL, BULK, BULK_URL, DealFormatError, parse_deals
 from app.data.events import parse_pr_board_meetings
 from app.data.http import FetchError, NotPublishedError
 from app.data.news import parse_pr_announcements
@@ -549,9 +553,40 @@ def daily_update(
         return None
     ingest_lists_range(session, archive, new_days[0] - timedelta(days=7), today, today, log=log)
     refresh_reference_lists(session, archive, today, log=log)
+    collect_deals(session, archive, today, log=log)
     crosscheck_range(session, yahoo, new_days[0] - timedelta(days=7), today, log=log)
     reports = quality_range(session, calendar, new_days[0], today, log=log)
     return reports[-1] if reports else None
+
+
+# --- Bulk and block deals ---------------------------------------------------------------
+
+DEALS_SOURCE = "nse_archive"
+DEALS_IMPORT = "nse_deals_import"
+
+
+def collect_deals(
+    session: Session, archive: NseArchive, today: date, log: Log = _quiet
+) -> int | None:
+    """Store the bulk and block deals in NSE's archive. It holds the latest trading
+    day's only, so a day the job doesn't run is lost unless imported later. Returns how
+    many were new, or None if they couldn't be downloaded (the rest of the job goes on)."""
+    found = []
+    try:
+        for kind, url in ((BULK, BULK_URL), (BLOCK, BLOCK_URL)):
+            text = archive.current_list(url, today).decode("utf-8-sig")
+            found += parse_deals(csv.DictReader(io.StringIO(text)), kind)
+    except (FetchError, NotPublishedError, DealFormatError, UnicodeDecodeError) as exc:
+        session.rollback()
+        log(f"Bulk and block deals could not be collected: {exc}")
+        return None
+    new = store.save_deals(session, found, DEALS_SOURCE)
+    for day in sorted({d.day for d in found}):
+        rows = sum(d.day == day for d in found)
+        store.record_source_file(session, store.NSE_DEALS, day, "ok", rows=rows)
+    session.commit()
+    log(f"Bulk and block deals: {len(found)} read, {new} new")
+    return new
 
 
 # --- Board meetings (M6) --------------------------------------------------------------

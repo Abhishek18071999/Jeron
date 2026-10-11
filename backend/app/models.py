@@ -257,6 +257,60 @@ class Announcement(Base):
     source: Mapped[str] = mapped_column(String(32))
 
 
+class BlockDeal(Base):
+    """A bulk or block deal NSE published: who bought or sold how many shares, at what
+    price, on which day. Rows are added, never changed."""
+
+    __tablename__ = "deals"
+    __table_args__ = (
+        UniqueConstraint("day", "symbol", "kind", "client", "side", "quantity", "price"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(8))  # "bulk" / "block"
+    client: Mapped[str] = mapped_column(String(200))
+    side: Mapped[str] = mapped_column(String(4))  # "buy" / "sell"
+    quantity: Mapped[int] = mapped_column(BigInteger)
+    price: Mapped[Decimal] = mapped_column(Price)
+    remarks: Mapped[str] = mapped_column(String(200), default="")
+    source: Mapped[str] = mapped_column(String(32))
+
+
+class InsiderTradeRow(Base):
+    """An insider's (promoter, director, employee) buy or sell under SEBI's PIT rules,
+    keyed by the day NSE published it. Rows are added, never changed."""
+
+    __tablename__ = "insider_trades"
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol",
+            "person",
+            "disclosed",
+            "side",
+            "quantity",
+            "traded_from",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    person: Mapped[str] = mapped_column(String(200))
+    category: Mapped[str] = mapped_column(String(64), default="")
+    side: Mapped[str] = mapped_column(String(4))
+    quantity: Mapped[int] = mapped_column(BigInteger)
+    value: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    traded_from: Mapped[date | None] = mapped_column(Date)
+    traded_to: Mapped[date | None] = mapped_column(Date)
+    disclosed: Mapped[date] = mapped_column(Date, index=True)
+    mode: Mapped[str] = mapped_column(String(64), default="")
+    before_pct: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    after_pct: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    source: Mapped[str] = mapped_column(String(32))
+
+
 class NewsLabel(Base):
     """A label for one announcement: its event type, sentiment (-2..+2) and why. Every
     announcement gets a free label from the subject rules (`labeller = "rules"`);
