@@ -17,6 +17,8 @@ are part of done, never commit secrets.
     `search.py` (stock search: names, initials, old symbols, short names in
     `stock_aliases.csv`), `events.py` (board meetings from the PR bundle's `bm` file,
     results blackout, event risk), `news.py` (company announcements from the `an` file),
+    `deals.py` (bulk and block deals, insider trades; stock page information, not a signal,
+    see `docs/decisions/0011`),
     `store.py` (database access), `pipeline.py` (jobs). Pure modules have no database
     imports; domain enums live in `app/enums.py` for that reason.
   - `app/indicators.py` indicators (pure functions, checked against TA-Lib in
@@ -75,12 +77,15 @@ are part of done, never commit secrets.
   - `app/api/` routes; `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
     `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
     `stocks.py` `/stocks/ranked` (the latest scan, by industry), `plan.py`, `watchlist.py`;
+    `deals.py` `/stocks/{symbol}/deals`;
     `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
     company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
     `asm-import`, `daily`, `holidays`, `backtest`, `paper`, `alerts`, `telegram`,
     `events` (board-meeting and announcement history from the PR bundles),
-    `events-import` (a board-meeting CSV saved from nseindia.com), `news-label`,
+    `events-import` (a board-meeting CSV saved from nseindia.com), `deals` (the day's bulk and
+    block deals; `daily` runs it too), `deals-import FILE` (bulk/block deals or insider
+    trades saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
     `tradebook FILE`.
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.

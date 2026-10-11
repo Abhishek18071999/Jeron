@@ -12,7 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.data import events, news, search
+from app.data import deals, events, news, search
 from app.data.crosscheck import Neighbours
 from app.data.nse_lists import (
     IndexClose,
@@ -23,12 +23,14 @@ from app.data.nse_lists import (
 from app.data.provider import Bar, CorporateActionRecord, InstrumentRecord
 from app.enums import Exchange
 from app.models import Announcement as AnnouncementRow
+from app.models import BlockDeal as DealRow
 from app.models import BoardMeeting as BoardMeetingRow
 from app.models import (
     CorporateAction,
     DailyBar,
     IndexBar,
     IndexMembership,
+    InsiderTradeRow,
     Instrument,
     SecurityStatus,
     SourceFile,
@@ -43,6 +45,8 @@ NSE_INDICES = "nse_indices"
 NSE_SEC_LIST = "nse_sec_list"
 YAHOO = "yahoo"
 ASM_IMPORT = "asm_import"
+# A day whose bulk and block deals were collected from NSE's archive.
+NSE_DEALS = "nse_deals"
 IST = ZoneInfo("Asia/Kolkata")
 _CHUNK = 2000
 
@@ -837,3 +841,133 @@ def symbol_lineage(session: Session, symbols: Iterable[str]) -> dict[str, list[t
         if chain:
             lineage[symbol] = chain
     return lineage
+
+
+# --- Bulk and block deals, insider trades ---------------------------------------------
+
+
+def save_deals(session: Session, items: Sequence[deals.Deal], source: str) -> int:
+    """Store deals not stored yet (existing rows are never changed). Returns how many
+    were new."""
+    rows = [
+        {
+            "day": d.day,
+            "symbol": d.symbol[:32],
+            "kind": d.kind,
+            "client": d.client[:200],
+            "side": d.side,
+            "quantity": d.quantity,
+            "price": d.price,
+            "remarks": d.remarks[:200],
+            "source": source,
+        }
+        for d in items
+    ]
+    new = 0
+    for start in range(0, len(rows), _CHUNK):
+        result = session.execute(
+            pg_insert(DealRow)
+            .values(rows[start : start + _CHUNK])
+            .on_conflict_do_nothing()
+            .returning(DealRow.id)
+        )
+        new += len(result.all())
+    return new
+
+
+def save_insider_trades(session: Session, items: Sequence[deals.InsiderTrade], source: str) -> int:
+    """Store insider trades not stored yet. Returns how many were new."""
+    rows = [
+        {
+            "symbol": t.symbol[:32],
+            "person": t.person[:200],
+            "category": t.category[:64],
+            "side": t.side,
+            "quantity": t.quantity,
+            "value": t.value,
+            "traded_from": t.traded_from,
+            "traded_to": t.traded_to,
+            "disclosed": t.disclosed,
+            "mode": t.mode[:64],
+            "before_pct": t.before_pct,
+            "after_pct": t.after_pct,
+            "source": source,
+        }
+        for t in items
+    ]
+    new = 0
+    for start in range(0, len(rows), _CHUNK):
+        result = session.execute(
+            pg_insert(InsiderTradeRow)
+            .values(rows[start : start + _CHUNK])
+            .on_conflict_do_nothing()
+            .returning(InsiderTradeRow.id)
+        )
+        new += len(result.all())
+    return new
+
+
+def symbol_deals(session: Session, symbol: str, since: date) -> list[deals.Deal]:
+    rows = session.scalars(
+        select(DealRow)
+        .where(DealRow.symbol == symbol, DealRow.day >= since)
+        .order_by(DealRow.day.desc(), DealRow.id)
+    )
+    return [
+        deals.Deal(r.day, r.symbol, r.kind, r.client, r.side, r.quantity, r.price, r.remarks)
+        for r in rows
+    ]
+
+
+def symbol_insider_trades(session: Session, symbol: str, since: date) -> list[deals.InsiderTrade]:
+    rows = session.scalars(
+        select(InsiderTradeRow)
+        .where(InsiderTradeRow.symbol == symbol, InsiderTradeRow.disclosed >= since)
+        .order_by(InsiderTradeRow.disclosed.desc(), InsiderTradeRow.id)
+    )
+    return [
+        deals.InsiderTrade(
+            symbol=r.symbol,
+            person=r.person,
+            category=r.category,
+            side=r.side,
+            quantity=r.quantity,
+            value=r.value,
+            traded_from=r.traded_from,
+            traded_to=r.traded_to,
+            disclosed=r.disclosed,
+            mode=r.mode,
+            before_pct=r.before_pct,
+            after_pct=r.after_pct,
+        )
+        for r in rows
+    ]
+
+
+@dataclass(frozen=True)
+class Coverage:
+    first: date | None
+    last: date | None
+    days: int  # days with data
+
+
+def deals_coverage(session: Session, since: date) -> Coverage:
+    """Which days since `since` have bulk and block deals stored, from the daily download
+    or an import."""
+    first, last, days = session.execute(
+        select(
+            func.min(DealRow.day), func.max(DealRow.day), func.count(func.distinct(DealRow.day))
+        ).where(DealRow.day >= since)
+    ).one()
+    return Coverage(first, last, days)
+
+
+def insider_coverage(session: Session, since: date) -> Coverage:
+    first, last, days = session.execute(
+        select(
+            func.min(InsiderTradeRow.disclosed),
+            func.max(InsiderTradeRow.disclosed),
+            func.count(func.distinct(InsiderTradeRow.disclosed)),
+        ).where(InsiderTradeRow.disclosed >= since)
+    ).one()
+    return Coverage(first, last, days)
