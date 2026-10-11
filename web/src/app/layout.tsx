@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CommandPalette } from "@/components/command-palette";
 import { TabBar, TopNav } from "@/components/nav";
 import { StockSearch } from "@/components/stock-search";
+import { loginConfig } from "@/lib/auth";
 
 import "./globals.css";
 
@@ -38,7 +39,17 @@ export default function RootLayout({
             <TopNav />
             <StockSearch className="ml-auto hidden w-full max-w-xs md:block" />
             <CommandPalette />
+            <Link href="/settings" aria-label="Settings" title="Settings" className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-fg">
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6h10M18 6h2M16 4v4M4 12h2M10 12h10M8 10v4M4 18h10M18 18h2M16 16v4" />
+              </svg>
+            </Link>
           </div>
+          {loginConfig().mode === "off" && (
+            <p className="bg-warn-bg px-4 py-1 text-center text-xs text-warn">
+              Login is off (JERON_LOGIN_DISABLED): anyone who can open this address sees your positions.
+            </p>
+          )}
         </header>
         {/* Room for the phone tab bar. */}
         <div className="pb-24 md:pb-8">{children}</div>

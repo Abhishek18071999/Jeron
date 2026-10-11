@@ -59,10 +59,23 @@ jobs:
       - uses: actions/checkout@v4
       - run: cp .env.example .env
       - run: docker compose up -d --build --wait --wait-timeout 300
-      - name: Check API and web page
+      - name: Login is required until it is set up
         run: |
+          for i in $(seq 1 30); do curl -s localhost:3000/login >/dev/null && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:3000/)" = 307
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:3000/api/search?q=tcs)" = 401
+          curl -sf localhost:3000/login | grep -q "set up yet"
+      - name: Check API and web pages (login off)
+        run: |
+          sed -i "s/^JERON_LOGIN_DISABLED=.*/JERON_LOGIN_DISABLED=true/" .env
+          docker compose up -d --wait --wait-timeout 300 web
           for i in $(seq 1 30); do curl -sf localhost:3000 >/dev/null && break; sleep 2; done
           curl -sf localhost:8000/health | tee /dev/stderr | grep -q '"database":"ok"'
           curl -sf localhost:3000 | grep -q 'data-database="connected"'
+          curl -sf localhost:3000/settings | grep -q 'Risk and alerts'
+      - name: Backup
+        run: |
+          docker compose exec -T backup sh /backup.sh now
+          ls -l backups/jeron-*.dump
       - if: failure()
         run: docker compose logs

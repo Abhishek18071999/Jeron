@@ -27,6 +27,7 @@ x-backend-env: &backend-env
   JERON_DEEPSEEK_MODEL: ${JERON_DEEPSEEK_MODEL:-deepseek-chat}
   JERON_OLLAMA_API_KEY: ${JERON_OLLAMA_API_KEY:-}
   JERON_OLLAMA_MODEL: ${JERON_OLLAMA_MODEL:-gemma4:31b}
+  JERON_NEWS_MONTHLY_BUDGET_USD: ${JERON_NEWS_MONTHLY_BUDGET_USD:-20}
   JERON_SCHEDULE_PREOPEN: ${JERON_SCHEDULE_PREOPEN:-08:30}
   JERON_SCHEDULE_DAILY: ${JERON_SCHEDULE_DAILY:-19:00}
 
@@ -86,11 +87,37 @@ services:
     build: ./web
     environment:
       JERON_API_URL: http://backend:8000
+      # The login (make these with `python -m app.cli auth-setup`; .env only).
+      JERON_LOGIN_PASSWORD_HASH: ${JERON_LOGIN_PASSWORD_HASH:-}
+      JERON_LOGIN_TOTP_SECRET: ${JERON_LOGIN_TOTP_SECRET:-}
+      JERON_LOGIN_DISABLED: ${JERON_LOGIN_DISABLED:-false}
     depends_on:
       backend:
         condition: service_healthy
     ports:
       - "127.0.0.1:3000:3000"
+
+  # A database backup every night after 02:00 IST into ./backups (backup/backup.sh).
+  # Point JERON_BACKUP_DIR at a synced folder (Google Drive, iCloud...) to keep a copy
+  # off this machine.
+  backup:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-jeron}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-jeron}
+      PGDATABASE: ${POSTGRES_DB:-jeron}
+      TZ: Asia/Kolkata
+      BACKUP_TIME: ${JERON_BACKUP_TIME:-02:00}
+      BACKUP_KEEP: ${JERON_BACKUP_KEEP:-14}
+    volumes:
+      - ./backup/backup.sh:/backup.sh:ro
+      - ${JERON_BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:

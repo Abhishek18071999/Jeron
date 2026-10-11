@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.alerts.job import PENDING_DAYS, account_rows, day_signals, regime_on
 from app.api.journal import EntryOut, SignalBrief, brief, entry_out
 from app.backtest.market import REGIME_RULES, Regime
-from app.config import get_settings
 from app.data import store
 from app.data.adjust import adjust_bars, build_adjustments
 from app.data.events import EVENT_LOOKAHEAD_DAYS, next_results
@@ -34,6 +33,7 @@ from app.models import (
 )
 from app.paper.job import latest_scan_date
 from app.scan.score import SCORE_VERSION
+from app.settings_store import effective_settings
 
 router = APIRouter(tags=["dashboard"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -154,7 +154,7 @@ def _scan(session: Session, day: date) -> ScanBrief | None:
 
 @router.get("/dashboard")
 def dashboard(session: SessionDep) -> Dashboard:
-    settings = get_settings()
+    settings = effective_settings(session)
     report = session.scalar(
         select(DataQualityReport).order_by(DataQualityReport.trade_date.desc()).limit(1)
     )

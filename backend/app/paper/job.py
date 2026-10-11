@@ -35,7 +35,7 @@ from app.backtest.market import Market, build_market
 from app.backtest.stats import drawdown_series, trade_stats
 from app.backtest.strategies import STRATEGIES, Strategy, Tier, params_label
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
-from app.config import Settings, get_settings
+from app.config import Settings
 from app.data import store
 from app.models import (
     BacktestRun,
@@ -47,6 +47,7 @@ from app.models import (
 )
 from app.scan.job import LOOKBACK_SESSIONS
 from app.scan.score import SCORE_VERSION
+from app.settings_store import effective_settings
 from app.signals.build import IST, SignalContext, backtest_stats, build_signal
 
 Log = Callable[[str], None]
@@ -433,7 +434,7 @@ def run_paper(
 ) -> PaperOutcome:
     """Update every strategy's paper account to `day` (default: the newest scanned
     day), opening accounts that don't exist yet."""
-    settings = settings or get_settings()
+    settings = settings or effective_settings(session)
     calendar = calendar or TradingCalendar.default()
     now = now or datetime.now(IST)
     day = day or latest_scan_date(session)

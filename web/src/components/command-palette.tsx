@@ -27,6 +27,7 @@ const PAGES: { label: string; href: string; keywords?: string }[] = [
   { label: "Compare", href: "/compare", keywords: "backtest paper real" },
   { label: "Data quality", href: "/data", keywords: "quality coverage" },
   { label: "Spot check", href: "/spot-check", keywords: "prices adjusted" },
+  { label: "Settings", href: "/settings", keywords: "capital risk limits alerts cap log out" },
 ];
 
 // Subsequence match: every typed letter in order; earlier and tighter matches score

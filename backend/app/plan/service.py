@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app import indicators as ind
 from app.backtest.strategies import TIERS, Tier
-from app.config import Settings, get_settings
+from app.config import Settings
 from app.data import store
 from app.data.adjust import adjust_bars, build_adjustments
 from app.data.events import EVENT_LOOKAHEAD_DAYS, blackout_signal_days, event_risk, next_results
@@ -26,6 +26,7 @@ from app.models import Instrument, ScanResult, TradePlan
 from app.plan.calc import CHECKLIST_KEYS, Plan, PlanInputs, build_plan, missing_checklist
 from app.portfolio.calc import UNKNOWN_SECTOR
 from app.portfolio.service import portfolio
+from app.settings_store import effective_settings
 
 # Sessions of bars loaded when the stock isn't in the latest scan (ATR and volume).
 FALLBACK_DAYS = 90
@@ -168,7 +169,7 @@ def context(
     settings: Settings | None = None,
 ) -> Context | None:
     """None when the stock is unknown."""
-    settings = settings or get_settings()
+    settings = settings or effective_settings(session)
     facts = stock_facts(session, symbol)
     if facts is None:
         return None
