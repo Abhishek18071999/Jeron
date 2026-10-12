@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.backtest.engine import Trade
 from app.backtest.market import (
+    SECTOR_INDICES,
     Market,
     MarketInputs,
     SecurityStatusDay,
@@ -276,6 +277,7 @@ def load_inputs(
             else None
         ),
         news_labeller=labeller if news_job.labels_exist(session, labeller) else None,
+        sector_indices={name: closes(name) for name in SECTOR_INDICES},
     )
 
 

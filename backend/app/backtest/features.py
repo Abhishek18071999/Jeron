@@ -28,6 +28,8 @@ from app.scan.score import (
 Array = np.ndarray
 Floats = Sequence[float] | Array
 NAN = float("nan")
+# A fresh 10-week high (strategies v3's sector rotation).
+PRIOR_HIGH_SESSIONS = 50
 
 
 def _arr(series: Sequence[float | None]) -> Array:
@@ -52,6 +54,7 @@ class StockFeatures:
     avg_volume20: Array  # average of the 20 sessions before each day
     high_52w: Array  # highest high of the last 252 sessions, today included
     prior_high_52w: Array  # the same, today excluded
+    prior_high_50: Array  # highest high of the 50 sessions before each day
     rs_3m: Array
     rs_6m: Array
     last_swing_high: Array
@@ -117,6 +120,9 @@ def stock_features(
     prior = np.full(n, NAN)
     if n > 1:
         prior[1:] = _arr(ind.rolling_max(h[:-1], HIGH_52W_SESSIONS))
+    prior50 = np.full(n, NAN)
+    if n > 1:
+        prior50[1:] = _arr(ind.rolling_max(h[:-1], PRIOR_HIGH_SESSIONS))
     rs3 = _relative_strength(dates, close, index_closes, RS_SHORT_SESSIONS)
     rs6 = _relative_strength(dates, close, index_closes, RS_LONG_SESSIONS)
     pivots = ind.swing_pivots(h, lo, PIVOT_STRENGTH)
@@ -158,6 +164,7 @@ def stock_features(
         avg_volume20=avg_volume20,
         high_52w=high_52w,
         prior_high_52w=prior,
+        prior_high_50=prior50,
         rs_3m=rs3,
         rs_6m=rs6,
         last_swing_high=last_high,

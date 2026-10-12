@@ -30,6 +30,26 @@ VIX_LOOKBACK_SESSIONS = 1260
 VIX_MIN_SESSIONS = 250
 REGIME_SLOPE_SESSIONS = 20
 
+# Strategies v3 (docs/plans/strategies-v3.md). NSE sectoral indices with history from
+# 2016; a stock's sector is the one its excess returns follow most closely.
+SECTOR_INDICES = (
+    "Nifty Auto",
+    "Nifty Financial Services",
+    "Nifty PSU Bank",
+    "Nifty Energy",
+    "Nifty FMCG",
+    "Nifty IT",
+    "Nifty Media",
+    "Nifty Metal",
+    "Nifty Pharma",
+    "Nifty Realty",
+)
+SECTOR_ASSIGN_EVERY = 21
+SECTOR_LOOKBACK_SESSIONS = 252
+SECTOR_MIN_RETURNS = 200
+SECTOR_MIN_CORRELATION = 0.2
+SECTOR_STRENGTH_SESSIONS = 63
+
 
 class Regime(StrEnum):
     BULL = "bull"
@@ -89,6 +109,8 @@ class MarketInputs:
     # News labels with a sentiment per symbol, from `news_labeller`; None = no labels.
     news: Mapping[str, Sequence[DatedLabel]] | None = None
     news_labeller: str | None = None
+    # Closes of the sectoral indices in `SECTOR_INDICES`, by index name.
+    sector_indices: Mapping[str, Mapping[date, float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -137,6 +159,15 @@ class Market:
     # News score 0-100 (50 = no news) per stock and day; None = no news labels.
     news_score: Array | None = None
     news_labeller: str | None = None
+    # Strategies v3. Highest high of the 50 sessions before each day.
+    prior_high_50: Array | None = None
+    # Rank (1 = strongest) of the stock's measured sector that day; NaN = no sector.
+    sector_rank: Array | None = None
+    # On the session after a results meeting: the stock's return from the close before
+    # the meeting session, minus Nifty 500's (`results_reactions`). NaN on other days.
+    results_reaction: Array | None = None
+    # The higher volume ratio of the meeting session and the session after it.
+    results_volume_ratio: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -244,6 +275,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
     avg_vol, med_turn, band, atr = blank(), blank(), blank(), blank()
     ema20, ema50, ema200, rsi14, adx14 = (blank() for _ in range(5))
     plus_di, minus_di, vol_ratio, prior_high, swing_low = (blank() for _ in range(5))
+    prior_high_50 = blank()
     base, rs3, rs6 = blank(), blank(), blank()
     dividend = np.zeros((s_count, d_count))
     eligible = np.zeros((s_count, d_count), dtype=bool)
@@ -291,6 +323,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
             (minus_di, f.minus_di),
             (vol_ratio, f.volume_ratio),
             (prior_high, f.prior_high_52w),
+            (prior_high_50, f.prior_high_50),
             (swing_low, f.last_swing_low),
             (base, f.base_points),
             (rs3, f.rs_3m),
@@ -355,9 +388,12 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         p6 = np.nan_to_num(ranks6, nan=0.0)
         score[members, t] = np.round(base[members, t] + half * p3 + MAX_POINTS["rs_6m"] * p6, 1)
 
+    symbols = [s.symbol for s in inputs.stocks]
+    reactions = results_reactions(days, symbols, inputs.results, close, vol_ratio, nifty500)
+    sector_closes = [_index_series(days, inputs.sector_indices.get(n, {})) for n in SECTOR_INDICES]
     return Market(
         days=days,
-        symbols=[s.symbol for s in inputs.stocks],
+        symbols=symbols,
         sectors=[s.sector for s in inputs.stocks],
         open=open_,
         high=high,
@@ -390,12 +426,117 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         security_list_known=security_list_known,
         exclusions=exclusions,
         rs6_rank=rs6_rank,
-        results_blackout=results_blackout(days, [s.symbol for s in inputs.stocks], inputs.results),
+        results_blackout=results_blackout(days, symbols, inputs.results),
         results=inputs.results,
         results_updated=inputs.results_updated,
-        news_score=news_scores(days, [s.symbol for s in inputs.stocks], inputs.news),
+        news_score=news_scores(days, symbols, inputs.news),
         news_labeller=inputs.news_labeller,
+        prior_high_50=prior_high_50,
+        sector_rank=sector_ranks(close, nifty500, sector_closes),
+        results_reaction=None if reactions is None else reactions[0],
+        results_volume_ratio=None if reactions is None else reactions[1],
     )
+
+
+def _returns(closes: Array) -> Array:
+    """Daily returns along the last axis; NaN where either close is missing, and on the
+    first day."""
+    out = np.full(closes.shape, NAN)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out[..., 1:] = closes[..., 1:] / closes[..., :-1] - 1
+    return out
+
+
+def sector_ranks(close: Array, nifty500: Array, sectors: Sequence[Array]) -> Array:
+    """Strategies v3's sector rotation: for each stock and day, the strength rank
+    (1 = strongest) of the sector index the stock follows; NaN where it follows none.
+
+    Every `SECTOR_ASSIGN_EVERY` sessions each stock is assigned to the index whose daily
+    returns in excess of Nifty 500's correlate most with the stock's own excess returns
+    over the last `SECTOR_LOOKBACK_SESSIONS` (at least `SECTOR_MIN_RETURNS` of them, and
+    a correlation of at least `SECTOR_MIN_CORRELATION`). Strength is the index's return
+    over `SECTOR_STRENGTH_SESSIONS` minus Nifty 500's. Only data up to each day is used."""
+    s_count, d_count = close.shape
+    out = np.full((s_count, d_count), NAN)
+    if not sectors or d_count == 0:
+        return out
+    index = np.vstack(sectors)  # (sectors, days)
+    market = _returns(nifty500)
+    stock_excess = _returns(close) - market
+    index_excess = _returns(index) - market
+
+    n = SECTOR_STRENGTH_SESSIONS
+    strength = np.full(index.shape, NAN)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        strength[:, n:] = index[:, n:] / index[:, :-n] - (nifty500[n:] / nifty500[:-n])
+    # Rank 1 = strongest; NaN strength gets no rank.
+    order = np.argsort(np.argsort(-np.nan_to_num(strength, nan=-np.inf), axis=0), axis=0)
+    ranks = np.where(np.isnan(strength), NAN, order + 1.0)
+
+    assigned = np.full(s_count, -1)
+    for t in range(d_count):
+        if (
+            t >= SECTOR_LOOKBACK_SESSIONS
+            and (t - SECTOR_LOOKBACK_SESSIONS) % SECTOR_ASSIGN_EVERY == 0
+        ):
+            window = slice(t - SECTOR_LOOKBACK_SESSIONS + 1, t + 1)
+            assigned = _assign_sectors(stock_excess[:, window], index_excess[:, window])
+        has = assigned >= 0
+        out[has, t] = ranks[assigned[has], t]
+    return out
+
+
+def _assign_sectors(stocks: Array, sectors: Array) -> Array:
+    """Index of the best-correlated sector per stock (rows of `stocks` against rows of
+    `sectors`, over the days both have), or -1."""
+    ok = ~np.isnan(stocks)
+    x = np.where(ok, stocks, 0.0)
+    w = ok.astype(float)
+    y = np.nan_to_num(sectors, nan=0.0).T  # (days, sectors)
+    n = w.sum(axis=1, keepdims=True)
+    sx, sxx = x.sum(axis=1, keepdims=True), (x * x).sum(axis=1, keepdims=True)
+    sy, syy, sxy = w @ y, w @ (y * y), x @ y
+    with np.errstate(invalid="ignore", divide="ignore"):
+        corr = (n * sxy - sx * sy) / np.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy))
+    corr = np.where(np.isfinite(corr), corr, -np.inf)
+    best = np.argmax(corr, axis=1)
+    keep = (n[:, 0] >= SECTOR_MIN_RETURNS) & (
+        corr[np.arange(len(best)), best] >= SECTOR_MIN_CORRELATION
+    )
+    return np.where(keep, best, -1)
+
+
+def results_reactions(
+    days: Sequence[date],
+    symbols: Sequence[str],
+    results: Mapping[str, Sequence[ResultsDate]] | None,
+    close: Array,
+    volume_ratio: Array,
+    nifty500: Array,
+) -> tuple[Array, Array] | None:
+    """Strategies v3's post-results drift. For each results meeting, with `m` the first
+    session on or after the meeting date and `r = m + 1`: on day `r`, the stock's return
+    from the close of `m - 1` to the close of `r` minus Nifty 500's, and the higher of
+    the volume ratios on `m` and `r`. NaN elsewhere."""
+    if results is None:
+        return None
+    reaction = np.full(close.shape, NAN)
+    volume = np.full(close.shape, NAN)
+    ordinals = np.array([d.toordinal() for d in days])
+    for k, symbol in enumerate(symbols):
+        for meeting in results.get(symbol, ()):
+            m = int(np.searchsorted(ordinals, meeting.meeting_date.toordinal()))
+            r = m + 1
+            if m < 1 or r >= len(days):
+                continue
+            before, after = close[k, m - 1], close[k, r]
+            if np.isnan(before) or np.isnan(after):
+                continue
+            reaction[k, r] = after / before - nifty500[r] / nifty500[m - 1]
+            ratios = volume_ratio[k, m : r + 1]
+            if not np.all(np.isnan(ratios)):
+                volume[k, r] = np.nanmax(ratios)
+    return reaction, volume
 
 
 def news_scores(

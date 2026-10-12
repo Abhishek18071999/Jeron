@@ -264,6 +264,67 @@ RS_PULLBACK = Strategy(
     condition=_rs_pullback_condition,
 )
 
+# v3 research (docs/plans/strategies-v3.md).
+RESULTS_MIN_VOLUME_X = 2.0
+
+
+def _results_drift_condition(m: Market, p: Params) -> Array:
+    if m.results_reaction is None or m.results_volume_ratio is None:
+        raise ValueError("this strategy needs the results calendar (run the events job)")
+    reaction = np.nan_to_num(m.results_reaction, nan=-np.inf)
+    volume = np.nan_to_num(m.results_volume_ratio, nan=0.0)
+    return np.asarray((reaction >= p["min_jump"]) & (volume >= RESULTS_MIN_VOLUME_X), dtype=bool)
+
+
+def _sector_rotation_condition(m: Market, p: Params) -> Array:
+    if m.sector_rank is None or m.prior_high_50 is None:
+        raise ValueError("this strategy needs the sector ranks and 50-session highs")
+    rank = np.nan_to_num(m.sector_rank, nan=np.inf)
+    return np.asarray(
+        (rank <= p["top_n"])
+        & (m.close > m.prior_high_50)
+        & _uptrend(m)
+        & m.regime_is(Regime.BULL, Regime.SIDEWAYS),
+        dtype=bool,
+    )
+
+
+RESULTS_DRIFT = Strategy(
+    key="results-drift",
+    version="results-drift-v1",
+    name="Drift after a strong results reaction (positional)",
+    tier=Tier.POSITIONAL,
+    summary="Buy the day after results when the stock beat Nifty 500 by a wide margin on volume.",
+    grid_axes={"min_jump": (0.05, 0.08), "stop_atr": (2.5, 3.0)},
+    default={"min_jump": 0.05, "stop_atr": 3.0},
+    describe=lambda p: [
+        "Enter at the close of the session after a results board meeting when the stock's "
+        "return from the close before the meeting session beats Nifty 500's by at least "
+        f"{100 * p['min_jump']:g}%, and volume on the meeting session or the one after is "
+        f"at least {RESULTS_MIN_VOLUME_X:g}x the 20-day average. No trend or regime filter."
+    ],
+    condition=_results_drift_condition,
+)
+
+SECTOR_ROTATION = Strategy(
+    key="sector-rotation",
+    version="sector-rotation-v1",
+    name="10-week high in a leading sector (positional)",
+    tier=Tier.POSITIONAL,
+    summary="Buy a fresh 10-week high in an uptrend when the stock's sector leads the market.",
+    grid_axes={"top_n": (2.0, 3.0), "stop_atr": (2.5, 3.0)},
+    default={"top_n": 3.0, "stop_atr": 3.0},
+    describe=lambda p: [
+        "Enter when the stock's sector is among the strongest "
+        f"{p['top_n']:g} of ten NSE sectoral indices (3-month return against Nifty 500), "
+        "the close is above the highest high of the previous 50 sessions, the close is "
+        "above the 50-day EMA and the 50-day above the 200-day, and the market regime is "
+        "not bear. A stock's sector is the index its excess returns followed most closely "
+        "over the last year, re-measured every 21 sessions."
+    ],
+    condition=_sector_rotation_condition,
+)
+
 # Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
 # back above 40 after about 26 days.
 MIN_NEWS_SCORE = 40.0
@@ -293,6 +354,8 @@ STRATEGIES = {
         with_events(PULLBACK_TREND),
         TREND_BREAKOUT,
         RS_PULLBACK,
+        RESULTS_DRIFT,
+        SECTOR_ROTATION,
     )
 }
 
