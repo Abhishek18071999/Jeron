@@ -146,8 +146,10 @@ def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def parse_xbrl(content: bytes) -> QuarterResult:
-    """The quarter's numbers from an NSE results XBRL filing."""
+def parse_xbrl(content: bytes, period_end: date | None = None) -> QuarterResult:
+    """The quarter's numbers from an NSE results XBRL filing. Older forms (before
+    about 2020) can leave out the quarter's dates: then `period_end`, from the filing
+    list, says which quarter it is."""
     try:
         root = ElementTree.fromstring(content)
     except ElementTree.ParseError as exc:
@@ -167,8 +169,17 @@ def parse_xbrl(content: bytes) -> QuarterResult:
         else:
             text[name] = value
     try:
-        start = date.fromisoformat(text["DateOfStartOfReportingPeriod"])
-        end = date.fromisoformat(text["DateOfEndOfReportingPeriod"])
+        if "DateOfEndOfReportingPeriod" in text:
+            end = date.fromisoformat(text["DateOfEndOfReportingPeriod"])
+        elif period_end is not None:
+            end = period_end
+        else:
+            raise KeyError("DateOfEndOfReportingPeriod")
+        if "DateOfStartOfReportingPeriod" in text:
+            start = date.fromisoformat(text["DateOfStartOfReportingPeriod"])
+        else:  # the quarter ending `end`
+            month = (end.month - 3) % 12 + 1
+            start = date(end.year - (month > end.month), month, 1)
     except (KeyError, ValueError) as exc:
         raise ResultsFormatError("the filing has no reporting period") from exc
     numbers = {}
