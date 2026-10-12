@@ -1016,3 +1016,27 @@ export type SettingsView = {
   setup: { telegram: boolean; email: boolean; news_provider: string; news_model: string; news_ready: boolean };
   news_spend: { since: string; spent_usd: string; cap_usd: string };
 };
+
+// --- Fundamentals (M6 part 2) ------------------------------------------------------
+
+export type FundQuarter = {
+  period_end: string;
+  filed: string;
+  consolidated: boolean;
+  revenue: number | null;
+  net_profit: number | null;
+  eps: number | null;
+};
+
+export type StockFundamentals = {
+  symbol: string;
+  as_of: string;
+  version: string;
+  score: number | null;
+  quality: number;
+  valuation: number;
+  rejected: string | null;
+  facts: Record<string, number | null>;
+  notes: string[];
+  quarters: FundQuarter[];
+};

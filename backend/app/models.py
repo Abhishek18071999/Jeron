@@ -732,3 +732,43 @@ class LlmUsage(Base):
     cache_write_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
     # Estimated US$ at list prices; null for a model without a known price.
     cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+
+
+Money = Numeric(20, 2)
+
+
+class FinancialResult(Base):
+    """One quarter's results from one NSE XBRL filing (rupees). Known from
+    `disseminated_at`; a revised filing is another row (decision 0013)."""
+
+    __tablename__ = "financial_results"
+    __table_args__ = (
+        Index("ix_financial_results_symbol_period", "symbol", "period_end", "consolidated"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    company: Mapped[str] = mapped_column(String(200))
+    period_start: Mapped[date] = mapped_column(Date)
+    period_end: Mapped[date] = mapped_column(Date)
+    consolidated: Mapped[bool] = mapped_column(Boolean)
+    audited: Mapped[bool] = mapped_column(Boolean)
+    standard: Mapped[str] = mapped_column(String(16))  # Ind-AS New, NBFC-IND, Non-Ind-AS
+    disseminated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    xbrl_url: Mapped[str] = mapped_column(String(300), unique=True)
+    revenue: Mapped[Decimal | None] = mapped_column(Money)
+    other_income: Mapped[Decimal | None] = mapped_column(Money)
+    total_income: Mapped[Decimal | None] = mapped_column(Money)
+    finance_costs: Mapped[Decimal | None] = mapped_column(Money)
+    depreciation: Mapped[Decimal | None] = mapped_column(Money)
+    profit_before_tax: Mapped[Decimal | None] = mapped_column(Money)
+    tax: Mapped[Decimal | None] = mapped_column(Money)
+    net_profit: Mapped[Decimal | None] = mapped_column(Money)
+    profit_to_owners: Mapped[Decimal | None] = mapped_column(Money)
+    eps: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    paid_up_capital: Mapped[Decimal | None] = mapped_column(Money)
+    face_value: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    gross_npa_pct: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    audit_opinion: Mapped[str | None] = mapped_column(String(500))
+    # Every numeric fact of the quarter as text, by XBRL element name.
+    facts: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

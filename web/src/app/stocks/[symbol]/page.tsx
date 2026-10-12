@@ -2,20 +2,22 @@ import Link from "next/link";
 
 import { WatchStar } from "@/components/watch-star";
 import { Card, LinkButton, ResearchBadge, inr, rMultiple } from "@/components/ui";
-import { type StockDeals, type StockView, type Watchlist, getJson } from "@/lib/api";
+import { type StockDeals, type StockFundamentals, type StockView, type Watchlist, getJson } from "@/lib/api";
 
 import { signClass } from "../../backtests/format";
 import { type Level, PriceChart } from "./chart";
 import { DealsPanel } from "./deals";
+import { FundamentalsPanel } from "./fundamentals";
 
 export const dynamic = "force-dynamic";
 
 export default async function StockPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
-  const [result, watch, deals] = await Promise.all([
+  const [result, watch, deals, fundamentals] = await Promise.all([
     getJson<StockView>(`/stocks/${encodeURIComponent(symbol)}?sessions=500`),
     getJson<Watchlist>("/watchlist"),
     getJson<StockDeals>(`/stocks/${encodeURIComponent(symbol)}/deals`),
+    getJson<StockFundamentals>(`/stocks/${encodeURIComponent(symbol)}/fundamentals`),
   ]);
   if (!result.ok) {
     return (
@@ -176,8 +178,11 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
           </div>
         </Card>
       </div>
+      <FundamentalsPanel
+        data={fundamentals.ok ? fundamentals.data : null}
+        error={fundamentals.ok ? undefined : fundamentals.error}
+      />
       <DealsPanel data={deals.ok ? deals.data : null} error={deals.ok ? undefined : deals.error} />
-      <p className="text-xs text-muted">Fundamentals, news and the results countdown arrive with M6.</p>
     </main>
   );
 }

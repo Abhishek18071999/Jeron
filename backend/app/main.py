@@ -7,6 +7,7 @@ from app.api import (
     dashboard,
     data,
     deals,
+    fundamentals,
     health,
     journal,
     market,
@@ -36,6 +37,7 @@ app.include_router(journal.router)
 # Before the dashboard's /stocks/{symbol}.
 app.include_router(stocks.router)
 app.include_router(deals.router)
+app.include_router(fundamentals.router)
 app.include_router(dashboard.router)
 app.include_router(analytics.router)
 app.include_router(market.router)
