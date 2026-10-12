@@ -89,6 +89,7 @@ def import_results(
     all_stocks: bool = False,
     log: Log = _quiet,
 ) -> ImportRun:
+    refs = list(dict.fromkeys(refs))  # files saved for overlapping dates repeat rows
     run = ImportRun(filings=len(refs))
     instruments = session.execute(
         select(Instrument.symbol, Instrument.name).where(Instrument.exchange == Exchange.NSE)
@@ -126,7 +127,7 @@ def import_results(
             run.already += 1
             continue
         try:
-            result = parse_xbrl(fetch(ref.xbrl_url))
+            result = parse_xbrl(fetch(ref.xbrl_url), ref.period_end)
         except (FetchError, NotPublishedError, ResultsFormatError) as exc:
             run.failed.append(f"{ref.company} {ref.period_end}: {exc}")
             continue

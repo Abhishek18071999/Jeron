@@ -62,6 +62,25 @@ def test_bank_form():
     assert r.numbers["eps"] == Decimal("21.12")
 
 
+def test_older_form_without_the_quarter_start():
+    # Banks' 2019 form gives the quarter's end but not its start.
+    r = parse_xbrl((FIXTURES / "xbrl_sbi_2019q1_old_form.xml").read_bytes())
+    assert (r.period_start, r.period_end) == (date(2019, 4, 1), date(2019, 6, 30))
+    assert r.numbers["net_profit"] == Decimal("23122000000.00")  # ₹2,312 crore
+    assert r.numbers["eps"] == Decimal("2.59")
+
+
+def test_filing_without_dates_takes_the_quarter_from_the_list():
+    content = (FIXTURES / "xbrl_sbi_2019q1_old_form.xml").read_bytes()
+    content = content.replace(b"DateOfEndOfReportingPeriod", b"Removed")
+    with pytest.raises(ResultsFormatError):
+        parse_xbrl(content)
+    r = parse_xbrl(content, date(2019, 6, 30))
+    assert (r.period_start, r.period_end) == (date(2019, 4, 1), date(2019, 6, 30))
+    r = parse_xbrl(content, date(2018, 12, 31))
+    assert r.period_start == date(2018, 10, 1)
+
+
 def test_not_xbrl():
     with pytest.raises(ResultsFormatError):
         parse_xbrl(b"<html>Access Denied</html>")

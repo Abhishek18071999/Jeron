@@ -36,5 +36,11 @@ others match their published results.
 and promoter pledges need the half-yearly balance sheet and shareholding filings. Of the
 spec's hard rejects only a qualified audit opinion is checked.
 
-**Next.** With every quarter from 2016 loaded: the combined three-brain strategy versions
+**History.** NSE's filing list goes back to 2016, but XBRL starts with some filings in
+2018 and nearly all from 2019, so scores are possible from about 2019. Older forms (banks
+and small companies before about 2021) leave out the quarter's dates; the quarter then
+comes from the list. The lists saved in October 2026 have almost nothing after the
+December 2024 quarter.
+
+**Next.** With every quarter loaded: the combined three-brain strategy versions
 and the M6 report (docs/plans/M6.md, scope item 5).
