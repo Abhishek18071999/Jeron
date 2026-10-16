@@ -110,9 +110,10 @@ class Strategy:
 COMMON_RULES = [
     "Universe: the daily scan's (EQ series, close >= ₹20, 20-day median turnover >= ₹5 "
     "crore, not on GSM/ASM, 200 sessions of history).",
-    "Buy at the next open if it is at or below the signal close + 0.5 x ATR; otherwise a "
-    "limit at that price for the day. Skip if it opens below the stop or is locked at "
-    "the upper circuit.",
+    "Buy at the next open if it is at or below the signal close + 0.5 x ATR. Skip if it "
+    "opens above that, opens below the stop, or is locked at the upper circuit.",
+    "No entry in a stock in a 2% or 5% price band that day (it can lock at the lower "
+    "circuit for days).",
     "Book half at +2R, stop to breakeven at +1R (closing basis), trail the rest by "
     "2 x ATR(14) on closing basis, exiting at the next open.",
     "Size: 1% of equity at risk (halved when Nifty 50 is below its 200-day EMA or VIX is "

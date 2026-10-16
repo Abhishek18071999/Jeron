@@ -6,6 +6,7 @@ shares, capped at 20% of capital: floor(2,00,000 / 101) = 1,980 shares. Idle cas
 earns nothing in these scenarios unless a test says otherwise.
 """
 
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -18,6 +19,8 @@ from tests.backtest_helpers import NO_COSTS, one_stock_market, signal_on, weekda
 SIGNAL = (100.0, 100.5, 99.5, 100.0)
 FLAT = (101.0, 101.5, 99.5, 101.0)
 NO_INTEREST = PortfolioRules(cash_rate_pct=0.0)
+# The circuit tests use a 5% band, which engine-v3 doesn't buy; they test the mechanics.
+ANY_BAND = replace(NO_INTEREST, min_band_pct=None)
 
 
 def run(bars, costs=NO_COSTS, tier=Tier.SWING, rules=NO_INTEREST, **market_kw):
@@ -70,7 +73,7 @@ def test_lower_circuit_stop_fills_at_next_open():
         (93.0, 94.0, 92.0, 93.5),  # sold at the open
         FLAT,
     ]
-    (trade,) = run(bars, band_pct=5.0).trades
+    (trade,) = run(bars, rules=ANY_BAND, band_pct=5.0).trades
     assert (trade.exit_day, trade.exit_price) == (3, 93.0)
     assert "lower circuit" in trade.exit_reason
     assert trade.r_multiple == pytest.approx(-7 * 1980 / (4 * 1980))
@@ -91,25 +94,42 @@ def test_positional_time_stop_is_longer():
     assert trade.open_at_end
 
 
-def test_open_above_zone_buys_at_the_zone_if_touched():
+def test_open_above_zone_is_skipped_even_if_the_day_trades_down_to_it():
     bars = [SIGNAL, (103.0, 104.0, 100.8, 102.0), FLAT, FLAT]
-    (trade,) = run(bars).trades
+    result = run(bars)
+    assert result.trades == []
+    assert [s.reason for s in result.skipped] == ["opened above the entry zone"]
+
+
+def test_engine_v2_fill_buys_at_the_zone_if_touched():
+    bars = [SIGNAL, (103.0, 104.0, 100.8, 102.0), FLAT, FLAT]
+    (trade,) = run(bars, rules=replace(NO_INTEREST, zone_touch_fill=True)).trades
     assert trade.entry == 101.0
 
 
 def test_runaway_open_and_open_below_stop_are_skipped():
     result = run([SIGNAL, (103.0, 104.0, 101.5, 103.0), FLAT])
     assert result.trades == []
-    assert [s.reason for s in result.skipped] == ["ran above the entry zone"]
+    assert [s.reason for s in result.skipped] == ["opened above the entry zone"]
     result = run([SIGNAL, (95.5, 97.0, 95.0, 96.0), FLAT])
     assert result.trades == []
     assert [s.reason for s in result.skipped] == ["opened below the stop"]
 
 
 def test_upper_circuit_lock_blocks_the_buy():
-    result = run([SIGNAL, (105.0, 105.0, 105.0, 105.0), FLAT], band_pct=5.0)
+    result = run([SIGNAL, (105.0, 105.0, 105.0, 105.0), FLAT], rules=ANY_BAND, band_pct=5.0)
     assert result.trades == []
     assert [s.reason for s in result.skipped] == ["locked at the upper circuit"]
+
+
+def test_narrow_price_band_is_not_bought():
+    bars = [SIGNAL, (100.0, 101.0, 99.0, 100.0), FLAT]
+    for band in (2.0, 5.0):
+        result = run(bars, band_pct=band)
+        assert result.trades == []
+        assert [s.reason for s in result.skipped] == [f"in a {band:g}% price band"]
+    for band in (10.0, 20.0, float("nan")):  # nan: no band (F&O) or not known
+        assert len(run(bars, band_pct=band).trades) == 1
 
 
 def test_volume_cap_and_risk_halving():

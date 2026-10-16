@@ -17,6 +17,9 @@ from app.data.provider import Bar, CorporateActionRecord
 from app.enums import CorporateActionType, QualityStatus
 
 BIG_MOVE_PCT = Decimal("20")
+# A fall this big with no split or bonus holds the stock's signals and exit actions.
+DROP_HOLD_PCT = Decimal("15")
+DROPS_CHECK = "unexplained_drops"
 MIN_ROW_RATIO = Decimal("0.8")
 STALE_SESSIONS = 5
 CROSSCHECK_FAIL_RATE = Decimal("0.05")
@@ -97,6 +100,7 @@ def build_report(day: DayData) -> QualityReportData:
     checks.append(_check_rejected(day))
     checks.append(_check_zero_volume(day))
     checks.append(_check_big_moves(day))
+    checks.append(_check_drops(day))
     checks.append(_check_stale(day))
     checks.append(_check_crosscheck(day))
     checks.append(_check_actions(day))
@@ -217,6 +221,58 @@ def _check_big_moves(day: DayData) -> Check:
         )
     return Check(
         "big_moves", QualityStatus.WARN, "; ".join(parts), unexplained + unadjusted + first_trades
+    )
+
+
+def _check_drops(day: DayData) -> Check:
+    """Stocks that fell more than DROP_HOLD_PCT from the previous close with no split or
+    bonus to explain it. Jeron doesn't adjust demergers and rights issues, so such a
+    fall can be an unadjusted corporate action that would trip stops and distort
+    indicators; the stock's signals and exit actions are held until checked by hand.
+    A day locked at the lower circuit (one price all day) and a first trade in recent
+    sessions are real moves and are left out."""
+    by_symbol: dict[str, list[CorporateActionRecord]] = {}
+    for action in day.actions_today:
+        by_symbol.setdefault(action.symbol, []).append(action)
+    items = []
+    for bar in day.bars:
+        if day.recent_closes and bar.symbol not in day.recent_closes:
+            continue
+        base = bar.prev_close
+        if base is None and day.recent_closes.get(bar.symbol):
+            base = day.recent_closes[bar.symbol][-1]
+        if not base or bar.high == bar.low:
+            continue
+        actions = by_symbol.get(bar.symbol, [])
+        for action in actions:
+            factor = price_factor(action)
+            if factor is not None:
+                base *= factor
+        move = (bar.close / base - 1) * 100
+        if move >= -DROP_HOLD_PCT:
+            continue
+        item = {
+            "symbol": bar.symbol,
+            "prev_close": str(bar.prev_close),
+            "close": str(bar.close),
+            "move_pct": str(move.quantize(Decimal("0.01"))),
+        }
+        unapplied = [
+            a.raw_text or ""
+            for a in actions
+            if a.action_type in (CorporateActionType.RIGHTS, CorporateActionType.OTHER)
+        ]
+        if unapplied:
+            item["actions"] = ", ".join(unapplied)
+        items.append(item)
+    if not items:
+        return Check(DROPS_CHECK, QualityStatus.PASS, f"No fall over {DROP_HOLD_PCT}% unexplained")
+    return Check(
+        DROPS_CHECK,
+        QualityStatus.WARN,
+        f"{len(items)} stocks fell more than {DROP_HOLD_PCT}% with no split or bonus: their "
+        "signals and exit actions are held until checked by hand",
+        items,
     )
 
 

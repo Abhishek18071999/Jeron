@@ -245,3 +245,16 @@ def test_stock_search_by_symbol_or_name(empty_session):
     }
     renamed = client.get("/stocks/search", params={"q": "zomato"}).json()[0]
     assert renamed["alias"] == "was ZOMATO"
+
+
+def test_signal_on_an_unexplained_drop_is_marked_held(session):
+    from tests.test_exits_db import _held
+
+    day = _signal_day(session, live=True)
+    ticker = session.scalars(select(SignalRecord.ticker).where(SignalRecord.signal_date == day))
+    held = sorted(ticker)[0]
+    _held(session, day, held)
+    telegram = FakeChannel()
+    run_alerts(session, day, settings=Settings(), channels=[telegram], now=NOW)
+    text = next(t for subject, t in telegram.sent if f": {held} (" in subject)
+    assert text.startswith(f"HELD, check by hand before buying: {held} fell -30.00%")

@@ -281,7 +281,9 @@ def update_account(
     now: datetime,
 ) -> AccountOutcome:
     strategy = STRATEGIES[account.strategy_key]
-    rules = PortfolioRules(**account.rules)
+    # Accounts opened before engine-v3 stored neither rule and keep engine-v2's fill and
+    # no band check, so their replay doesn't change.
+    rules = PortfolioRules(**{"zone_touch_fill": True, "min_band_pct": None, **account.rules})
     costs = CostModel()
     m = market
     start, end = m.day_index(account.start_date), m.day_index(day)

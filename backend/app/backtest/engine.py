@@ -4,9 +4,12 @@ One pass over the sessions. Each day, in this order:
 
 0. Idle cash earns a liquid-fund rate for the calendar days since the last session.
 1. Open: yesterday's orders try to fill. A buy fills at the open if the open is
-   within the entry zone (at or below the signal close + 0.5 x ATR), or at the top of
-   the zone if the day trades down to it; it is skipped if the stock opens below the
-   stop, doesn't trade, runs away above the zone, or is locked at the upper circuit.
+   within the entry zone (at or below the signal close + 0.5 x ATR); it is skipped if
+   the stock opens below the stop, opens above the zone, doesn't trade, or is locked
+   at the upper circuit. (Up to engine-v2 a buy that opened above the zone filled at
+   the top of the zone if the day traded down to it. On daily bars that buys the gaps
+   that fail and misses the ones that run, so engine-v3 dropped it; paper accounts
+   opened before keep it, see `zone_touch_fill`.)
    Exits decided at yesterday's close (trailing stop, time stop) sell at the open.
 2. During the day: a stop sells at the stop price, or at the open if the stock gaps
    below it. On a day locked at the lower circuit (no trades except at the limit) the
@@ -19,7 +22,7 @@ One pass over the sessions. Each day, in this order:
    reached. Equity is marked to the close. A position held into an ex-date gets
    the dividend, even if it is sold that day.
 4. New entries from today's signals, sized by the risk rules, become orders for
-   tomorrow.
+   tomorrow. From engine-v3, stocks in a 2% or 5% price band that day are skipped.
 
 Prices are split- and bonus-adjusted, so a split mid-trade changes nothing; share
 counts are whole raw shares at entry. Every buy and sell pays slippage and the
@@ -75,6 +78,15 @@ class PortfolioRules:
     # No entry fills from 3 sessions before a results board meeting through the meeting
     # day (spec section 2). Opt-in so earlier strategy versions keep their results.
     results_blackout: bool = False
+    # engine-v2's fill: a buy that opens above the entry zone fills at the top of the
+    # zone if the day trades down to it. Off from engine-v3; paper accounts whose stored
+    # rules predate it replay with it on.
+    zone_touch_fill: bool = False
+    # No entry in a stock whose price band that day is below this % (NSE's 2% and 5%
+    # bands): it can lock at the lower circuit for days, so a 1R stop can't fill. No band
+    # (F&O stocks) and an unknown band pass. Paper accounts opened before engine-v3 have
+    # it off.
+    min_band_pct: float | None = 10.0
 
 
 @dataclass(frozen=True)
@@ -355,10 +367,10 @@ def simulate(
                 continue
             if o <= order.zone_high:
                 price = o
-            elif lo <= order.zone_high:
+            elif rules.zone_touch_fill and lo <= order.zone_high:
                 price = order.zone_high
             else:
-                skipped.append(Skip(s, t, "ran above the entry zone"))
+                skipped.append(Skip(s, t, "opened above the entry zone"))
                 continue
             fill = price * (1 + order.slippage_pct / 100)
             factor = m.factor[s, t]
@@ -535,6 +547,9 @@ def simulate(
                 and m.results_blackout[s, t]
             ):
                 skipped.append(Skip(s, t, "results due: no new entry around results"))
+                continue
+            if rules.min_band_pct is not None and m.band_pct[s, t] < rules.min_band_pct:
+                skipped.append(Skip(s, t, f"in a {m.band_pct[s, t]:g}% price band"))
                 continue
             if slots <= 0:
                 skipped.append(Skip(s, t, "no free position slot"))

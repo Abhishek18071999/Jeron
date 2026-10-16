@@ -12,11 +12,11 @@ from app.config import Settings
 from app.data import store
 from app.data.events import BoardMeeting
 from app.data.provider import CorporateActionRecord
-from app.enums import CorporateActionType
+from app.enums import CorporateActionType, QualityStatus
 from app.exits.job import build_preopen, check_day, preopen_message, run_preopen
 from app.exits.rules import Action
 from app.journal.service import add_fill, manual_entry
-from app.models import Alert
+from app.models import Alert, DataQualityReport
 from app.signals.build import IST
 from tests.conftest import requires_db
 from tests.test_alerts_db import FakeChannel
@@ -108,3 +108,25 @@ def test_sent_once_per_day(empty_session):
     assert again.already_sent == 1 and len(channel.sent) == 1
     alert = s.scalar(select(Alert).where(Alert.kind == "preopen"))
     assert alert is not None and alert.status == "sent"
+
+
+def _held(s, day: date, symbol: str) -> None:
+    item = {"symbol": symbol, "prev_close": "100", "close": "70", "move_pct": "-30.00"}
+    item["actions"] = "DEMERGER"
+    checks = [{"name": "unexplained_drops", "status": "warn", "items": [item]}]
+    s.add(DataQualityReport(trade_date=day, status=QualityStatus.WARN, details={"checks": checks}))
+    s.commit()
+
+
+def test_unexplained_drop_goes_to_check_by_hand(empty_session):
+    s = empty_session
+    _setup(s, DAYS[44])
+    _held(s, DAYS[44], "FLAT")
+    assert "DEMERGER" in store.held_drops(s, DAYS[44])["FLAT"]
+    p = build_preopen(s, DAYS[45], CAL)
+    flat = next(c for c in p.positions if c.ticker == "FLAT")
+    assert flat.plan is None
+    assert flat.problem is not None and "fell -30.00%" in flat.problem
+    assert "The rules alone say: sell all, time stop" in flat.problem
+    text = preopen_message(p)
+    assert "CHECK BY HAND" in text and "SELL ALL" not in text

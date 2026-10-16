@@ -21,6 +21,7 @@ from app.data.nse_lists import (
     SymbolChangeRecord,
 )
 from app.data.provider import Bar, CorporateActionRecord, InstrumentRecord
+from app.data.quality import DROPS_CHECK
 from app.enums import Exchange
 from app.models import Announcement as AnnouncementRow
 from app.models import BlockDeal as DealRow
@@ -28,6 +29,7 @@ from app.models import BoardMeeting as BoardMeetingRow
 from app.models import (
     CorporateAction,
     DailyBar,
+    DataQualityReport,
     IndexBar,
     IndexMembership,
     InsiderTradeRow,
@@ -971,3 +973,22 @@ def insider_coverage(session: Session, since: date) -> Coverage:
         ).where(InsiderTradeRow.disclosed >= since)
     ).one()
     return Coverage(first, last, days)
+
+
+def held_drops(session: Session, day: date) -> dict[str, str]:
+    """Stocks the day's quality report held for an unexplained fall (check #9), with
+    the reason to show: their signals and exit actions wait for a check by hand."""
+    details = session.scalar(
+        select(DataQualityReport.details).where(DataQualityReport.trade_date == day)
+    )
+    checks = (details or {}).get("checks", [])
+    items: list[dict[str, Any]] = next(
+        (c.get("items", []) for c in checks if c.get("name") == DROPS_CHECK), []
+    )
+    out: dict[str, str] = {}
+    for item in items:
+        reason = f"fell {item['move_pct']}% on {day:%-d %b} with no split or bonus"
+        if item.get("actions"):
+            reason += f" ({item['actions']}, which Jeron does not adjust for)"
+        out[item["symbol"]] = reason
+    return out

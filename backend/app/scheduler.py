@@ -7,12 +7,17 @@
 Every job is safe to re-run, so a missed or repeated run does no harm. Times come from
 `JERON_SCHEDULE_PREOPEN` and `JERON_SCHEDULE_DAILY` (HH:MM, IST).
 
+Jeron runs on my own computer, which can be asleep or off at those times. A job missed
+while the computer slept runs when it wakes (until 15:30 for the pre-open check, until
+the next morning for the daily run). On start, `catch_up` runs the daily job if the
+latest session's scan is missing and the pre-open check if it is market hours.
+
     python -m app.scheduler
 """
 
 import logging
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 
 from apscheduler.schedulers.base import BaseScheduler
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -22,10 +27,15 @@ from app import cli
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.exits.job import is_session, next_session
+from app.paper.job import latest_scan_date
 from app.signals.build import IST
 
 log = logging.getLogger("jeron.scheduler")
 Runner = Callable[[list[str]], int]
+# How late a job missed while the computer slept may still run: the pre-open check until
+# about 15:30, the daily run until the next morning.
+GRACE_SECONDS = {"preopen": 7 * 3600, "daily": 12 * 3600}
+MARKET_CLOSE = time(15, 30)
 
 
 def last_session_of_week(calendar: TradingCalendar, day: date) -> bool:
@@ -61,6 +71,62 @@ def daily_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> int
     return code
 
 
+def _previous_session(calendar: TradingCalendar, day: date) -> date:
+    day -= timedelta(days=1)
+    while not is_session(calendar, day):
+        day -= timedelta(days=1)
+    return day
+
+
+def _latest_scan() -> date | None:
+    from sqlalchemy.orm import Session
+
+    from app.db import get_engine
+
+    with Session(get_engine()) as session:
+        return latest_scan_date(session)
+
+
+def catch_up(
+    run: Runner = cli.main,
+    now: Callable[[], datetime] = lambda: datetime.now(IST),
+    latest_scan: Callable[[], date | None] = _latest_scan,
+) -> list[str]:
+    """Runs what was missed while the computer was off: the daily job (it updates
+    everything since the last run) if the latest session whose daily time has passed
+    has no scan, with the weekly job if that session ended the week; and the pre-open
+    check if today trades and the market is open or about to. Returns the jobs run.
+    Before the first scan nothing is caught up: the history comes from `backfill`."""
+    settings = get_settings()
+    calendar = TradingCalendar.default()
+    at = now().astimezone(IST)
+    today, clock = at.date(), at.time()
+    daily_at, preopen_at = (
+        time(*_hm(settings.schedule_daily)),
+        time(*_hm(settings.schedule_preopen)),
+    )
+    ran = []
+    if is_session(calendar, today) and clock >= daily_at:
+        last = today
+    else:
+        last = _previous_session(calendar, today)
+    scanned = latest_scan()
+    if scanned is None:
+        # A new install: the history comes from `backfill`, started by hand.
+        log.info("No scan yet: nothing to catch up")
+    elif scanned < last:
+        log.info("Catching up: no scan for %s yet", last)
+        run(["daily"])
+        ran.append("daily")
+        if last_session_of_week(calendar, last):
+            run(["weekly", "--date", last.isoformat()])
+            ran.append("weekly")
+    if is_session(calendar, today) and preopen_at <= clock < MARKET_CLOSE:
+        run(["preopen", "--date", today.isoformat()])  # sent once a day, so re-runs are quiet
+        ran.append("preopen")
+    return ran
+
+
 def _safe(job: Callable[[], int | None], name: str) -> Callable[[], None]:
     def wrapped() -> None:
         try:
@@ -84,7 +150,7 @@ def build(scheduler: BaseScheduler) -> BaseScheduler:
             CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone=IST),
             id=name,
             name=name,
-            misfire_grace_time=3600,
+            misfire_grace_time=GRACE_SECONDS[name],
             coalesce=True,
         )
     return scheduler
@@ -93,6 +159,7 @@ def build(scheduler: BaseScheduler) -> BaseScheduler:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     scheduler = build(BlockingScheduler(timezone=IST))
+    _safe(lambda: len(catch_up()), "catch-up")()
     for job in scheduler.get_jobs():
         log.info("Scheduled %s: %s", job.name, job.trigger)
     scheduler.start()

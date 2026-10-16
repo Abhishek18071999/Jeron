@@ -13,7 +13,9 @@ are part of done, never commit secrets.
   - `app/data/provider.py` the `DataProvider` protocol every data source implements.
   - `app/data/` market data: `nse.py` (bhavcopy + PR bundle), `nse_lists.py` (index
     closes, security list, Nifty 500 list, symbol changes), `yahoo.py` (second
-    source), `adjust.py` (corporate-action factors), `crosscheck.py`, `quality.py`,
+    source), `adjust.py` (corporate-action factors), `crosscheck.py`, `quality.py`
+    (check #9 holds a stock that fell over 15% with no split or bonus: its signals are
+    sent HELD and its exits go to CHECK BY HAND),
     `search.py` (stock search: names, initials, old symbols, short names in
     `stock_aliases.csv`), `events.py` (board meetings from the PR bundle's `bm` file,
     results blackout, event risk), `news.py` (company announcements from the `an` file),
@@ -84,7 +86,8 @@ are part of done, never commit secrets.
     (`auth-setup`). The news labeller records spend in `llm_usage` and stops at the
     monthly cap (decision 0012).
   - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
-    days, `weekly` after the last session of the week. Runs as the `scheduler` service.
+    days, `weekly` after the last session of the week; `catch_up` on start runs what was
+    missed while the computer was off. Runs as the `scheduler` service.
   - `app/api/` routes; `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
     `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
     `stocks.py` `/stocks/ranked` (the latest scan, by industry), `plan.py`, `watchlist.py`;
@@ -145,7 +148,9 @@ Everything: `docker compose up --build` from the repo root.
 - NSE's archive answers bursts with 403 "Access Denied"; keep requests at about one
   per second and retry (the `Fetcher` does this).
 - Backtests report out-of-sample, after-cost numbers only; `tests/test_backtest_engine.py`
-  holds golden trades. Keep them passing when touching the engine.
+  holds golden trades. Keep them passing when touching the engine. `engine-v3` (M8)
+  skips a buy that opens above the entry zone and stocks in a 2% or 5% price band;
+  paper accounts opened earlier keep `engine-v2`'s rules (`zone_touch_fill`).
 - Settings come from env vars prefixed `JERON_` (`app/config.py`), including the risk
   settings (capital, risk %, position limits, sector cap) and the alert secrets (Telegram
   token, SMTP password), which live only in `.env`. Every spec section 5 rule has
