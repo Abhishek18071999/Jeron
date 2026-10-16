@@ -129,6 +129,12 @@ def build_signal(
     atr = _value(m.atr14, s, t) / f
     stop = order.stop / f
     zone_high = order.zone_high / f
+    # engine-v2 accounts buy at the top of the zone if the day trades down to it.
+    zone_miss = (
+        f"stays above {_rs(zone_high)} all day"
+        if rules.zone_touch_fill
+        else f"opens above {_rs(zone_high)}"
+    )
     risk = close - stop
     t1, t2 = close + rules.t1_r * risk, close + rules.t2_r * risk
     shares = order.raw_shares
@@ -194,7 +200,7 @@ def build_signal(
         time_stop_days=time_stop,
         invalidation=(
             f"Don't buy on {ctx.next_session} if it opens at or below the stop "
-            f"({_rs(stop)}), stays above {_rs(zone_high)} all day, or is locked at the "
+            f"({_rs(stop)}), {zone_miss}, or is locked at the "
             "upper circuit. After entry, a trade at or below the stop ends the idea; "
             f"exit at the next open if it hasn't closed at +{rules.breakeven_r:g}R within "
             f"{time_stop} sessions."

@@ -153,3 +153,30 @@ def test_first_trade_moves_are_labelled_as_listings():
     big = checks(report)["big_moves"]
     assert "first trade" in big.message
     assert big.items[0]["symbol"] == "NEWCO"
+
+
+def test_unexplained_drop_over_15pct_holds_the_stock():
+    demerger = CorporateActionRecord("H", DAY, CorporateActionType.OTHER, raw_text="DEMERGER")
+    split = CorporateActionRecord(
+        "S", DAY, CorporateActionType.SPLIT, Decimal(2), Decimal(1), raw_text="SPLIT"
+    )
+    recent = {s: [Decimal(100)] for s in ("H", "D", "S", "L", "U")}
+    report = build_report(
+        clean_day(
+            bars=[
+                bar("H", DAY, 70, 72, 68, 70, prev_close=100),  # demerger: held, named
+                bar("D", DAY, 84, 85, 83, 84, prev_close=100),  # -16%: held
+                bar("S", DAY, 50, 51, 49, 50, prev_close=100),  # split 2:1: explained
+                bar("L", DAY, 80, 80, 80, 80, prev_close=100),  # locked lower circuit: real
+                bar("U", DAY, 86, 87, 85, 86, prev_close=100),  # -14%: under the line
+                bar("N", DAY, 50, 52, 49, 50, prev_close=100),  # first trade: listing
+            ],
+            recent_closes=recent,
+            actions_today=[demerger, split],
+        )
+    )
+    drops = checks(report)["unexplained_drops"]
+    assert drops.status == QualityStatus.WARN
+    assert [i["symbol"] for i in drops.items] == ["H", "D"]
+    assert drops.items[0]["actions"] == "DEMERGER"
+    assert checks(build_report(clean_day()))["unexplained_drops"].status == QualityStatus.PASS

@@ -157,8 +157,9 @@ swing and positional and require ≥ 85.
 
 ### 6. Backtesting engine (the decision-maker)
 
-- Event-driven daily-bar engine: signal on close, fill next open (or at the entry zone
-  if touched next day); gaps and circuit days handled realistically.
+- Event-driven daily-bar engine: signal on close, fill next open if it is inside the
+  entry zone (skip it if it opens above; M8, `engine-v3`); gaps and circuit days handled
+  realistically.
 - Point-in-time universe (with delisted stocks) and fundamentals.
 - Walk-forward over ≥ 8 years where data exists; report **only out-of-sample**
   results. Hold out the latest 12 months as a final untouched test.

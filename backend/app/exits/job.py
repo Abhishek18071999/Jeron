@@ -220,6 +220,15 @@ def build_preopen(session: Session, day: date, calendar: TradingCalendar | None 
         v for v in entry_views(session, entries, as_of=data_as_of) if v.position.status == "open"
     ]
     checks = [position_check(session, v, data_as_of) for v in views]
+    held = store.held_drops(session, data_as_of) if data_as_of else {}
+    for c in checks:
+        if c.ticker in held and c.plan is not None:
+            # Quality check #9: an unadjusted demerger or rights issue would trip the stop.
+            c.problem = (
+                f"{held[c.ticker]}; if it is a demerger or rights issue, the stop needs "
+                f"adjusting. The rules alone say: {c.plan.action.value}, {c.plan.reason}"
+            )
+            c.plan = None
     last = day
     for _ in range(EVENT_SESSIONS - 1):
         last = next_session(calendar, last)

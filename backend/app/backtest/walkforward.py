@@ -43,7 +43,7 @@ from app.backtest.stats import (
 )
 from app.backtest.strategies import Params, Strategy, params_label
 
-ENGINE_VERSION = "engine-v2"
+ENGINE_VERSION = "engine-v3"
 WARMUP_SESSIONS = 252
 MIN_TRAIN_YEARS = 2
 HOLDOUT_MONTHS = 12

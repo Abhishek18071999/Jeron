@@ -68,3 +68,11 @@ def test_bundled_holiday_file_is_valid():
         else:
             assert e.day.weekday() >= 5, f"{e.day} special session falls on a weekday"
     TradingCalendar.default()
+
+
+def test_shipped_file_covers_2026():
+    cal = TradingCalendar.default()
+    assert not cal.is_trading_day(date(2026, 10, 20))  # Dussehra
+    assert cal.is_trading_day(date(2026, 10, 19))
+    assert cal.is_trading_day(date(2026, 2, 1))  # Budget day, a Sunday
+    assert cal.next_trading_day(date(2026, 10, 19)) == date(2026, 10, 21)

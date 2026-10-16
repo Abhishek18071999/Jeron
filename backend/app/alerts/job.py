@@ -206,10 +206,16 @@ def run_alerts(
         log(NOT_SET_UP)
         return AlertOutcome(day, "not_configured")
     outcome = AlertOutcome(day, "ok")
+    held = store.held_drops(session, day)
     for record, key in day_signals(session, day):
         if record.late or (record.research_only and not settings.alert_research_signals):
             continue
         text = signal_message(record.payload, record.research_only, settings.web_url)
+        if record.ticker in held:
+            text = (
+                f"HELD, check by hand before buying: {record.ticker} {held[record.ticker]}, "
+                "possibly a demerger or rights issue the indicators don't reflect.\n\n" + text
+            )
         label = "Research only" if record.research_only else "Signal"
         _send(
             session,

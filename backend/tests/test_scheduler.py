@@ -6,7 +6,7 @@ from datetime import date, datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.calendar.nse import TradingCalendar
-from app.scheduler import build, daily_job, last_session_of_week, preopen_job
+from app.scheduler import build, catch_up, daily_job, last_session_of_week, preopen_job
 from app.signals.build import IST
 
 
@@ -40,3 +40,35 @@ def test_holidays_skip_and_weekly_after_the_last_session():
     assert ran == [["daily"]]
     preopen_job(run, lambda: date(2025, 3, 12))
     assert ran[-1] == ["preopen", "--date", "2025-03-12"]
+
+
+def test_catch_up_after_the_computer_was_off():
+    ran: list[list[str]] = []
+
+    def run(args):
+        ran.append(args)
+        return 0
+
+    def at(day, hour, minute=0):
+        return lambda: datetime(day.year, day.month, day.day, hour, minute, tzinfo=IST)
+
+    # Off over Monday evening (19 Oct 2026); on at 08:45 Wednesday, Dussehra was Tuesday.
+    wed = date(2026, 10, 21)
+    done = catch_up(run, at(wed, 8, 45), lambda: date(2026, 10, 16))
+    assert done == ["daily", "preopen"]
+    assert ran == [["daily"], ["preopen", "--date", "2026-10-21"]]
+
+    # Monday's scan exists, and it is evening before the daily time: nothing to do.
+    ran.clear()
+    assert catch_up(run, at(wed, 18, 0), lambda: date(2026, 10, 19)) == []
+
+    # Off on Friday evening, on Saturday: the daily run and the weekly one for Friday.
+    ran.clear()
+    assert catch_up(run, at(date(2026, 10, 24), 10), lambda: date(2026, 10, 22)) == [
+        "daily",
+        "weekly",
+    ]
+    assert ran[-1] == ["weekly", "--date", "2026-10-23"]
+
+    # A new install with no scan yet waits for the backfill.
+    assert catch_up(run, at(date(2026, 10, 24), 10), lambda: None) == []
