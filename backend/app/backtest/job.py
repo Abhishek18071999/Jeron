@@ -3,7 +3,7 @@
 `python -m app.cli backtest` runs every strategy (or `--strategy KEY`) over all
 stored history and saves one run per strategy with its trades and the log of every
 grid point tried. Runs are never overwritten, so the history of what was tried stays
-visible.
+visible. A combined book (`--strategy combined-book`) runs only when named.
 """
 
 import time
@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -27,8 +28,13 @@ from app.backtest.market import (
     StockData,
     build_market,
 )
-from app.backtest.strategies import STRATEGIES, Strategy
-from app.backtest.walkforward import Evaluation, evaluate
+from app.backtest.strategies import COMBINED, STRATEGIES, Strategy
+from app.backtest.walkforward import (
+    Evaluation,
+    all_trial_sharpes,
+    evaluate,
+    evaluate_combined,
+)
 from app.config import get_settings
 from app.data import store
 from app.data.adjust import adjust_bars, build_adjustments
@@ -377,15 +383,24 @@ def run_backtests(
     log: Log = _quiet,
     market: Market | None = None,
 ) -> list[BacktestRun]:
-    strategies: list[Strategy] = [STRATEGIES[k] for k in (keys or STRATEGIES)]
+    strategies: list[Strategy] = [STRATEGIES[k] for k in (keys or STRATEGIES) if k in STRATEGIES]
+    books = [COMBINED[k] for k in keys or () if k in COMBINED]
     started = time.perf_counter()
     if market is None:
         market = build_market(load_inputs(session, start, end, log=log))
         log(f"Market ready: {len(market.symbols)} stocks in {time.perf_counter() - started:.1f} s")
+    evaluations: list[Callable[[], Evaluation]] = [partial(evaluate, market, s) for s in strategies]
+    if books:
+        log(f"Training every variant of {len(STRATEGIES)} strategies for the deflated Sharpe")
+        trials = all_trial_sharpes(market, STRATEGIES.values())
+        evaluations += [
+            partial(evaluate_combined, market, b, all_trial_sharpes=trials) for b in books
+        ]
     runs = []
-    for strategy in strategies:
+    for evaluation in evaluations:
         mark = time.perf_counter()
-        ev = evaluate(market, strategy)
+        ev = evaluation()
+        strategy = ev.strategy
         run = save_evaluation(session, ev, time.perf_counter() - mark)
         oos = ev.summary["out_of_sample"]["trades"]
         log(
@@ -400,6 +415,19 @@ def run_backtests(
                 f"  results calendar: {_years(brains['results_calendar_years'])}; news from "
                 f"{brains['news_labeller'] or 'no labeller'}: {_years(brains['news_years'])}"
             )
+        combined = ev.summary.get("combined")
+        if combined:
+            for version, part in combined["by_strategy"].items():
+                o, h = part["out_of_sample"], part["holdout"]
+                log(
+                    f"  {version}: {o['trades']} trades at {o['expectancy_r']}R out of "
+                    f"sample, {h['trades']} at {h['expectancy_r']}R in the holdout"
+                )
+            if "deflated_sharpe_all" in combined:
+                log(
+                    f"  deflated Sharpe against all {combined['trials_all']} trials: "
+                    f"{combined['deflated_sharpe_all']}"
+                )
         for gate in ev.summary["gates"]:
             log(f"  [{'pass' if gate['passed'] else 'FAIL'}] {gate['label']}: {gate['value']}")
         runs.append(run)

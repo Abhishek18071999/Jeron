@@ -23,6 +23,9 @@ One pass over the sessions. Each day, in this order:
    the dividend, even if it is sold that day.
 4. New entries from today's signals, sized by the risk rules, become orders for
    tomorrow. From engine-v3, stocks in a 2% or 5% price band that day are skipped.
+   A combined book trades several strategies (`Book`s) in one account: the book with
+   fewer open positions places its orders first (a tie goes to the book listed first),
+   and a stock held or ordered by one book is skipped by the others.
 
 Prices are split- and bonus-adjusted, so a split mid-trade changes nothing; share
 counts are whole raw shares at entry. Every buy and sell pays slippage and the
@@ -98,6 +101,22 @@ class Variant:
     entries: Array  # bool (stocks, days)
 
 
+@dataclass(frozen=True)
+class Book:
+    """One strategy's schedule in a combined book: (first session, variant) pairs,
+    oldest first, as `simulate` takes for a single strategy."""
+
+    name: str
+    schedule: Sequence[tuple[int, Variant]]
+
+    def variant_for(self, day: int) -> Variant | None:
+        active = None
+        for first, variant in sorted(self.schedule, key=lambda x: x[0]):
+            if first <= day:
+                active = variant
+        return active
+
+
 @dataclass
 class Fill:
     day: int
@@ -133,6 +152,7 @@ class Trade:
     dividends: float = 0.0
     exits: list[Fill] = field(default_factory=list)
     open_at_end: bool = False
+    book: str = ""
 
     @property
     def risk(self) -> float:
@@ -179,6 +199,7 @@ class Order:
     raw_shares: int
     score: float
     slippage_pct: float
+    book: str = ""
 
 
 @dataclass
@@ -279,10 +300,16 @@ def correlation(m: Market, a: int, b: int, t: int, sessions: int) -> float:
     return float(np.corrcoef(x, y)[0, 1])
 
 
+def _books(schedule: Sequence[tuple[int, Variant]] | Sequence[Book]) -> list[Book]:
+    if all(isinstance(b, Book) for b in schedule):
+        return [b for b in schedule if isinstance(b, Book)]
+    return [Book("", [b for b in schedule if not isinstance(b, Book)])]
+
+
 def simulate(
     market: Market,
     tier: Tier,
-    schedule: Sequence[tuple[int, Variant]],
+    schedule: Sequence[tuple[int, Variant]] | Sequence[Book],
     start: int,
     end: int,
     rules: PortfolioRules | None = None,
@@ -293,6 +320,7 @@ def simulate(
 ) -> SimResult:
     """Run from session `start` to `end` (inclusive). `schedule` is (first session,
     variant) pairs, oldest first: the variant whose signals are traded from that day.
+    A list of `Book`s instead trades several strategies in one account.
 
     A backtest sells what is still open at the last close. Paper trading keeps it
     open (`close_at_end=False`) and places orders at the last close for the next
@@ -325,7 +353,7 @@ def simulate(
         idx = np.where(has.any(axis=1), before.shape[1] - 1 - np.argmax(has[:, ::-1], axis=1), -1)
         for k in np.flatnonzero(idx >= 0):
             last_close[k] = before[k, idx[k]]
-    schedule = sorted(schedule, key=lambda x: x[0])
+    books = _books(schedule)
 
     def sell(trade: Trade, day: int, price: float, shares: float, reason: str) -> None:
         nonlocal cash
@@ -336,13 +364,6 @@ def simulate(
         cash += value - charges
         trade.exits.append(Fill(day, fill_price, shares, charges, reason))
         trade.remaining -= shares
-
-    def variant_for(day: int) -> Variant | None:
-        active = None
-        for first, variant in schedule:
-            if first <= day:
-                active = variant
-        return active
 
     for t in range(start, end + 1):
         # 0. Interest on the cash held since the last session.
@@ -404,6 +425,7 @@ def simulate(
                 risk_off=bool(m.risk_off[order.signal_day]),
                 stop=order.stop,
                 remaining=shares,
+                book=order.book,
             )
             open_trades.append(trade)
         orders = []
@@ -513,17 +535,24 @@ def simulate(
         # 4. New signals at today's close, filled tomorrow.
         if (t == end and not orders_on_last_day) or m.quality_fail[t] or t < paused_until:
             continue
-        variant = variant_for(t)
-        if variant is None:
-            continue
-        candidates = [int(k) for k in np.flatnonzero(variant.entries[:, t])]
-        if len(candidates) == 0:
-            continue
         held = {tr.s for tr in open_trades}
-        ranked = sorted(
-            (s for s in candidates if s not in held),
-            key=lambda s: (-np.nan_to_num(m.score[s, t], nan=-1.0), m.symbols[s]),
-        )
+        queue: list[tuple[int, int, Book, Variant, list[int]]] = []
+        for i, book in enumerate(books):
+            variant = book.variant_for(t)
+            if variant is None:
+                continue
+            candidates = [int(k) for k in np.flatnonzero(variant.entries[:, t])]
+            if not candidates:
+                continue
+            ranked = sorted(
+                (s for s in candidates if s not in held),
+                key=lambda s: (-np.nan_to_num(m.score[s, t], nan=-1.0), m.symbols[s]),
+            )
+            in_book = sum(1 for tr in open_trades if tr.book == book.name)
+            queue.append((in_book, i, book, variant, ranked))
+        if not queue:
+            continue
+        queue.sort(key=lambda q: (q[0], q[1]))
         risk_mult = 1.0
         if m.risk_off[t]:
             risk_mult *= 0.5
@@ -540,7 +569,11 @@ def simulate(
                         sector_value.get(sector, 0.0) + tr.remaining * last_close[tr.s]
                     )
         holding = [tr.s for tr in open_trades]
-        for s in ranked:
+        ordered: dict[int, str] = {}
+        for book, variant, s in ((q[2], q[3], s) for q in queue for s in q[4]):
+            if s in ordered:
+                skipped.append(Skip(s, t, f"already ordered by {ordered[s]}"))
+                continue
             if (
                 rules.results_blackout
                 and m.results_blackout is not None
@@ -605,6 +638,7 @@ def simulate(
             if sector:
                 sector_value[sector] = sector_value.get(sector, 0.0) + zone_high * shares
             holding.append(s)
+            ordered[s] = book.name
             order = Order(
                 s,
                 variant.label,
@@ -614,6 +648,7 @@ def simulate(
                 raw,
                 float(np.nan_to_num(m.score[s, t], nan=0.0)),
                 slip,
+                book.name,
             )
             orders.append(order)
             placed.append(order)

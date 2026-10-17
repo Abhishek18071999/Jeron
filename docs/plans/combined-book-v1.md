@@ -1,8 +1,7 @@
 # Combined book v1: rs-pullback and results drift in one account
 
-Status: pre-registered on 2026-10-17, before any combined run. Not built yet: the
-engine trades one strategy at a time, so running this needs the change described under
-"Building it".
+Status: pre-registered on 2026-10-17, before any combined run. Built the same day (see
+"Building it"); run it once with `python -m app.cli backtest --strategy combined-book`.
 
 ## Why
 `rs-pullback-v1` is the only strategy that passes spec section 6, and it leaves a lot of
@@ -48,9 +47,21 @@ untested (`docs/backtests/strategies-v3-report.md`).
   `combined-book-v2` with its own plan.
 
 ## Building it
-- `simulate` takes a schedule of variants for one tier. The combined book needs both
-  strategies' entries each day, tagged with their strategy, and the order rule above
-  when slots are short. Every other rule (fills, exits, sizing, costs) stays the
-  engine's, so the golden tests in `tests/test_backtest_engine.py` must pass unchanged.
-- A test with two made-up strategies checks the busy-day order, the one-position-per-
-  stock rule and the shared limits before the real run.
+- `simulate` also takes a list of `Book`s, one per strategy, each with its own
+  schedule of variants; trades and orders carry their book. Each day the book with
+  fewer open positions orders first (a tie goes to the first listed), and a stock held
+  or ordered by one book is skipped by the other ("already ordered by ..."). The order
+  is applied every day; it only changes anything when slots or open risk run short.
+  Every other rule (fills, exits, sizing, costs) is the engine's, and the golden tests
+  in `tests/test_backtest_engine.py` pass unchanged.
+- `walkforward.evaluate_combined` lets each member pick its grid points exactly as its
+  own `evaluate` does (`walkforward.select`), then runs one simulation of both. The run
+  is saved like any other (`combined-book`, `combined-book-v1`), with each strategy's
+  out-of-sample and holdout trades under `summary.combined.by_strategy`.
+- The deflated Sharpe on the run page counts the members' 8 grid points. The one that
+  decides is `summary.combined.deflated_sharpe_all`: the 60 variants of every strategy
+  in `STRATEGIES` (training Sharpe over the whole pre-holdout period, as in the v2 and
+  v3 reports) plus this book's out-of-sample Sharpe, 61 trials.
+- `tests/test_combined_book.py` checks the busy-day order, one position per stock, the
+  shared position limit, and that each member keeps its own grid-point choices.
+- Paper trading opens no account for it yet: that waits for the result.

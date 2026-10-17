@@ -361,6 +361,61 @@ STRATEGIES = {
 }
 
 
+@dataclass(frozen=True)
+class Combined:
+    """Several strategies trading one account (a combined book), each with its own
+    entry, stop and exit rules and the grid points its own walk-forward picks. On a
+    busy day the strategy with fewer open positions orders first; a tie goes to the one
+    listed first. Not in `STRATEGIES`: paper trading opens no account for it."""
+
+    key: str
+    version: str
+    name: str
+    summary: str
+    members: tuple[Strategy, ...]
+
+    @property
+    def tier(self) -> Tier:
+        tiers = {s.tier for s in self.members}
+        if len(tiers) != 1:
+            raise ValueError(f"{self.key}: members trade different tiers")
+        return self.members[0].tier
+
+    def rules(self, params: dict[str, Params]) -> list[str]:
+        out = [
+            f"One account trades {', '.join(s.version for s in self.members)}, each by its "
+            "own rules below. A stock held or ordered by one is skipped by the others.",
+            "When there are more signals than free slots (or open-risk room), the strategy "
+            "with fewer open positions orders first; on a tie "
+            f"{self.members[0].version} goes first. Within a strategy, the highest "
+            "tech-v1 score first.",
+        ]
+        for s in self.members:
+            out += [f"{s.version}: {r}" for r in s.describe(params[s.key])]
+            out.append(
+                f"{s.version}: stop {params[s.key]['stop_atr']:g} x ATR(14) below the signal close."
+            )
+        tier = TIERS[self.tier]
+        return [
+            *out,
+            f"Skip a stop more than {tier.max_stop_pct:g}% away.",
+            *COMMON_RULES,
+            tier.time_stop_label + ".",
+        ]
+
+
+# Pre-registered in docs/plans/combined-book-v1.md.
+COMBINED_BOOK = Combined(
+    key="combined-book",
+    version="combined-book-v1",
+    name="Combined book: RS pullback and results drift in one account (positional)",
+    summary="rs-pullback-v1 and results-drift-v1 sharing one account, 8 positions, 6% heat.",
+    members=(RS_PULLBACK, RESULTS_DRIFT),
+)
+
+COMBINED = {COMBINED_BOOK.key: COMBINED_BOOK}
+
+
 def params_label(params: Params) -> str:
     return ", ".join(f"{k}={v:g}" for k, v in params.items())
 
