@@ -19,7 +19,7 @@ from app.plan.service import PlanError, tier_of
 
 router = APIRouter(tags=["plan"])
 SessionDep = Annotated[Session, Depends(get_session)]
-TierIn = Literal["swing", "positional"]
+TierIn = Literal["swing", "positional", "invest"]
 
 
 class CheckOut(BaseModel):

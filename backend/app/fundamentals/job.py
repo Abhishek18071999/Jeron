@@ -28,7 +28,7 @@ from app.data.fundamentals import (
 from app.data.http import FetchError, NotPublishedError
 from app.data.store import NSE_BARS
 from app.enums import Exchange
-from app.fundamentals.score import FundScore, Quarter, fund_score, pe_ratio
+from app.fundamentals.score import FundScore, Quarter, known_quarters, score_with_history
 from app.models import DailyBar, FinancialResult, Instrument
 from app.news.job import liquid_years
 
@@ -200,46 +200,50 @@ def _f(value: object) -> float | None:
     return None if value is None else float(value)  # type: ignore[arg-type]
 
 
+def quarter_of(row: FinancialResult) -> Quarter:
+    return Quarter(
+        period_end=row.period_end,
+        disseminated_at=row.disseminated_at,
+        consolidated=row.consolidated,
+        revenue=_f(row.revenue),
+        net_profit=_owners(row),
+        eps=_f(row.eps),
+        financial=row.standard != "Ind-AS New",
+        finance_costs=_f(row.finance_costs),
+        depreciation=_f(row.depreciation),
+        profit_before_tax=_f(row.profit_before_tax),
+        other_income=_f(row.other_income),
+        audit_opinion=row.audit_opinion,
+        shares=_shares(row),
+    )
+
+
+def filings(
+    session: Session, symbols: Sequence[str], before: datetime | None = None
+) -> dict[str, list[Quarter]]:
+    """Every stored filing of each stock (revisions included), oldest published first."""
+    query = select(FinancialResult).where(FinancialResult.symbol.in_(list(symbols)))
+    if before is not None:
+        query = query.where(FinancialResult.disseminated_at < before)
+    out: dict[str, list[Quarter]] = {}
+    for row in session.scalars(query.order_by(FinancialResult.disseminated_at)):
+        out.setdefault(row.symbol, []).append(quarter_of(row))
+    return out
+
+
+def results_loaded(session: Session) -> bool:
+    return session.scalar(select(FinancialResult.id).limit(1)) is not None
+
+
 def quarters_known(
     session: Session, symbols: Sequence[str], as_of: datetime
 ) -> dict[str, list[Quarter]]:
     """Each stock's quarters as known at `as_of`: per quarter the latest filing
     disseminated before it, consolidated preferred. Oldest first."""
-    rows = session.scalars(
-        select(FinancialResult)
-        .where(
-            FinancialResult.symbol.in_(list(symbols)),
-            FinancialResult.disseminated_at < as_of,
-        )
-        .order_by(FinancialResult.disseminated_at)
-    )
-    best: dict[tuple[str, date], FinancialResult] = {}
-    for row in rows:
-        k = (row.symbol, row.period_end)
-        old = best.get(k)
-        # Later filings replace earlier ones of the same kind; consolidated beats standalone.
-        if old is None or row.consolidated >= old.consolidated:
-            best[k] = row
-    out: dict[str, list[Quarter]] = {}
-    for (symbol, _), row in sorted(best.items(), key=lambda kv: kv[0]):
-        out.setdefault(symbol, []).append(
-            Quarter(
-                period_end=row.period_end,
-                disseminated_at=row.disseminated_at,
-                consolidated=row.consolidated,
-                revenue=_f(row.revenue),
-                net_profit=_owners(row),
-                eps=_f(row.eps),
-                financial=row.standard != "Ind-AS New",
-                finance_costs=_f(row.finance_costs),
-                depreciation=_f(row.depreciation),
-                profit_before_tax=_f(row.profit_before_tax),
-                other_income=_f(row.other_income),
-                audit_opinion=row.audit_opinion,
-                shares=_shares(row),
-            )
-        )
-    return out
+    return {
+        symbol: known_quarters(rows, as_of)
+        for symbol, rows in filings(session, symbols, as_of).items()
+    }
 
 
 # The stock page -----------------------------------------------------------------
@@ -287,13 +291,7 @@ def stock_fundamentals(
         return None
     filed = [q.disseminated_at.date() for q in quarters]
     closes = _closes(session, symbol, [*filed[-20:], day])
-    # P/E at each past filing, from what was known then (five years at most).
-    history = []
-    for i in range(max(3, len(quarters) - 20), len(quarters) - 1):
-        pe = pe_ratio(quarters[: i + 1], closes.get(filed[i]))
-        if pe is not None:
-            history.append(pe)
     price = closes.get(day)
     return StockFundamentals(
-        symbol, day, price, fund_score(quarters, day, price, history), quarters
+        symbol, day, price, score_with_history(quarters, day, closes), quarters
     )

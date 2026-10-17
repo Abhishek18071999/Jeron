@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { MoodBanner, SectorStrength } from "@/components/market";
 import { ActionBadge, HeatMeter, SectorBars } from "@/components/portfolio";
+import { StateBadge } from "@/components/sections";
 import { StatusBadge } from "@/components/status-badge";
 import {
   Badge,
@@ -25,6 +26,7 @@ import {
   type Holding,
   type MarketMood,
   type Portfolio,
+  type SectionSummary,
   type SignalBrief,
   type Watchlist,
   fetchHealth,
@@ -280,6 +282,35 @@ function YourRisk({ p }: { p: Portfolio | null }) {
   );
 }
 
+// The four sections at a glance: what each has to buy today.
+function SectionsStrip({ sections }: { sections: SectionSummary[] | null }) {
+  if (!sections) return null;
+  return (
+    <section aria-label="Sections" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {sections.map((s) => (
+        <Link
+          key={s.key}
+          href={`/trade/${s.key}`}
+          className="rounded-xl border border-line bg-surface px-3 py-2.5 transition-colors hover:border-line-strong hover:bg-surface-2"
+        >
+          <span className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold">{s.name}</span>
+            <StateBadge state={s.state} />
+          </span>
+          <span className="mt-0.5 block text-xs text-muted">
+            {s.live_signals > 0 ? (
+              <span className="font-medium text-fg">{s.live_signals} to buy</span>
+            ) : (
+              "Nothing to buy"
+            )}
+            {s.research_signals > 0 && ` · ${s.research_signals} research`}
+          </span>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
 // A slim line: watchlist stocks whose alert price the latest session reached.
 function WatchHits({ w }: { w: Watchlist | null }) {
   if (!w) return null;
@@ -395,12 +426,13 @@ function BehindTheScenes({ d }: { d: Dashboard }) {
 export default async function Home({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
   const { day } = await searchParams;
   const dayParam = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `?day=${day}` : "";
-  const [result, health, moodResult, portfolioResult, watchResult] = await Promise.all([
+  const [result, health, moodResult, portfolioResult, watchResult, sectionsResult] = await Promise.all([
     getJson<Dashboard>("/dashboard"),
     fetchHealth(),
     getJson<MarketMood>("/market/mood"),
     getJson<Portfolio>(`/portfolio${dayParam}`),
     getJson<Watchlist>("/watchlist"),
+    getJson<SectionSummary[]>("/sections"),
   ]);
   const db = health?.database === "ok";
   if (!result.ok) {
@@ -441,6 +473,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
         }
       />
       <MoodBanner mood={mood} />
+      <SectionsStrip sections={sectionsResult.ok ? sectionsResult.data : null} />
       <div className="grid items-start gap-4 lg:grid-cols-3">
         <ActionsDue d={d} p={p} />
         <NewSignals d={d} />

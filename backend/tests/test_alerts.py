@@ -13,6 +13,7 @@ from app.alerts.format import (
     Digest,
     DigestAccount,
     DigestPosition,
+    DigestSection,
     DigestSignal,
     digest_message,
     inr,
@@ -39,7 +40,7 @@ def test_signal_message_has_every_part_of_the_plan():
         "Buy between ₹100.00 and ₹101.00, valid until Sat 3 Oct 2026",
         "Stop ₹96.00 (2 x ATR)",
         "T1 ₹108.00 · T2 ₹112.00",
-        "Size 1,980 shares, ₹9,900 at risk",
+        "Size 1,980 shares (about ₹1,99,980), ₹9,900 at risk",
         "• one",
         "Cancel if: opens below the stop",
         "Event risk: not checked",
@@ -55,6 +56,8 @@ def test_signal_message_has_every_part_of_the_plan():
     assert "it stays as a limit for the day" in text  # an engine-v2 account's signal
     v3 = payload | {"invalidation": "Don't buy if it opens above ₹101.00 or below the stop"}
     assert "Not filled by 09:15: cancel it." in signal_message(v3, False, "")
+    headed = signal_message(payload, False, "", section="Swing")
+    assert headed.startswith("SWING · NEW SIGNAL: AAA (swing, conviction 5/5)")
 
 
 def digest(**kw):
@@ -68,8 +71,18 @@ def digest(**kw):
         regime="bull",
         risk_off=False,
         signals=[
-            DigestSignal("breakout-52w", "RAMRAT", True, 4, Decimal(100), Decimal(94)),
-            DigestSignal("breakout-52w", "WELSPUNLIV", True, 3, Decimal(150), Decimal(141)),
+            DigestSignal(
+                "breakout-52w", "RAMRAT", True, 4, Decimal(100), Decimal(94), "positional"
+            ),
+            DigestSignal(
+                "breakout-52w", "WELSPUNLIV", True, 3, Decimal(150), Decimal(141), "positional"
+            ),
+        ],
+        sections=[
+            DigestSection("Swing", "swing", "research"),
+            DigestSection("Intraday", None, "not_running"),
+            DigestSection("Positional", "positional", "research"),
+            DigestSection("Long-term", "invest", "untested"),
         ],
         accounts=[
             DigestAccount(
@@ -96,21 +109,30 @@ def test_daily_summary():
     assert "Data quality: WARN" in text and "  - and 1 more" in text
     assert "Market: bull regime; regime filter off" in text
     assert "Scan: 523 stocks scored; top AAA 92, BBB 90" in text
-    assert "New signals: none (no strategy has passed the backtest bar yet)" in text
-    assert "Research only, not trades (2):\n• breakout-52w: RAMRAT, WELSPUNLIV" in text
+    assert "Swing: nothing to buy (no strategy has passed the backtest bar)" in text
+    assert "Intraday: not running (no intraday prices yet)" in text
+    assert (
+        "Positional: nothing to buy (no strategy has passed the backtest bar)\n"
+        "Research only, not trades (2):\n• breakout-52w: RAMRAT, WELSPUNLIV"
+    ) in text
+    assert "Long-term: nothing to buy (waiting for its first backtest)" in text
     assert "• breakout-52w (research only): ₹10,00,063 (+0.01%), 6 open, heat 3.2%" in text
     assert "• 1 open: TCS +0.42R" in text
     assert "• 2 live signals waiting for a decision" in text
 
 
 def test_summary_of_a_blocked_day_with_live_signals():
-    live = DigestSignal("score-swing", "INFY", False, 5, Decimal(1500), Decimal(1450))
+    live = DigestSignal("score-swing", "INFY", False, 5, Decimal(1500), Decimal(1450), "swing")
     text = digest_message(
         digest(
             quality="fail",
             scan_status="blocked",
             scan_reasons=["Data quality FAILED"],
             signals=[live],
+            sections=[
+                DigestSection("Swing", "swing", "live"),
+                DigestSection("Positional", "positional", "live"),
+            ],
             risk_off=True,
             positions=[],
             pending=0,
@@ -118,7 +140,8 @@ def test_summary_of_a_blocked_day_with_live_signals():
     )
     assert "Scan: BLOCKED\n  - Data quality FAILED" in text
     assert "regime filter ON: risk per trade halved" in text
-    assert "New signals (1):\n• INFY (score-swing, conviction 5/5)" in text
+    assert "Swing: 1 to buy\n• INFY (score-swing, conviction 5/5)" in text
+    assert "Positional: nothing new to buy" in text
     assert "Research only" not in text and "• no open positions" in text
 
 

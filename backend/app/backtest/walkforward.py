@@ -223,7 +223,8 @@ def select(
     """Train every grid point on the history before each window and pick the best."""
     m = market
     variants = {
-        params_label(p): Variant(params_label(p), p, strategy.entries(m, p)) for p in strategy.grid
+        params_label(p): Variant(params_label(p), p, strategy.entries(m, p), strategy.exits(m, p))
+        for p in strategy.grid
     }
     default = params_label(strategy.default)
     pre_end = folds.holdout_start - 1
@@ -430,7 +431,7 @@ def all_trial_sharpes(
     for strategy in strategies:
         r = _rules_for(strategy, rules)
         for p in strategy.grid:
-            v = Variant(params_label(p), p, strategy.entries(market, p))
+            v = Variant(params_label(p), p, strategy.entries(market, p), strategy.exits(market, p))
             sim = simulate(
                 market,
                 strategy.tier,

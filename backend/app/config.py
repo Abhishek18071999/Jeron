@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     risk_pct: float = Field(default=1.0, ge=0.5, le=2.0)
     max_positions_swing: int = Field(default=5, ge=1)
     max_positions_positional: int = Field(default=8, ge=1)
+    max_positions_invest: int = Field(default=15, ge=1)
     sector_cap_pct: float = Field(default=30.0, gt=0, le=100)
     # Alerts (M5). Telegram first; email is the backup when Telegram is not set up or a
     # send fails. Secrets only in .env, never in the repo.

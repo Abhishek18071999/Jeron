@@ -18,9 +18,11 @@ One pass over the sessions. Each day, in this order:
    the position is sold at the +2R target (T1); the stop moves to breakeven.
 3. Close: stop to breakeven once a close is +1R; after T1, the rest trails at
    2 x ATR(14) below the highest close and is sold at the next open after a close
-   below the trail; the tier's time stop sells at the next open if +1R hasn't been
-   reached. Equity is marked to the close. A position held into an ex-date gets
-   the dividend, even if it is sold that day.
+   below the trail; a strategy's own exit rule (if it has one) sells at the next open;
+   the tier's time stop sells at the next open if +1R hasn't been reached. The invest
+   tier books half at +3R and trails at 4 x ATR (`TIERS`). Equity is marked to the
+   close. A position held into an ex-date gets the dividend, even if it is sold that
+   day.
 4. New entries from today's signals, sized by the risk rules, become orders for
    tomorrow. From engine-v3, stocks in a 2% or 5% price band that day are skipped.
    A combined book trades several strategies (`Book`s) in one account: the book with
@@ -41,7 +43,7 @@ import numpy as np
 from app.backtest.costs import CostModel
 from app.backtest.features import Array
 from app.backtest.market import Market, Regime
-from app.backtest.strategies import TIERS, Params, Tier
+from app.backtest.strategies import TIERS, ExitSignal, Params, Tier
 
 # A full-day circuit lock with no published band: the smallest band is 2%.
 DEFAULT_LOCK_MOVE_PCT = 1.9
@@ -99,6 +101,7 @@ class Variant:
     label: str
     params: Params
     entries: Array  # bool (stocks, days)
+    exit: ExitSignal | None = None  # the strategy's own exit rule, if it has one
 
 
 @dataclass(frozen=True)
@@ -153,6 +156,7 @@ class Trade:
     exits: list[Fill] = field(default_factory=list)
     open_at_end: bool = False
     book: str = ""
+    exit_rule: ExitSignal | None = None
 
     @property
     def risk(self) -> float:
@@ -200,6 +204,7 @@ class Order:
     score: float
     slippage_pct: float
     book: str = ""
+    exit_rule: ExitSignal | None = None
 
 
 @dataclass
@@ -325,9 +330,9 @@ def simulate(
     A backtest sells what is still open at the last close. Paper trading keeps it
     open (`close_at_end=False`) and places orders at the last close for the next
     session (`orders_on_last_day=True`)."""
-    rules = rules or PortfolioRules()
-    costs = costs or CostModel()
     tier_rules = TIERS[tier]
+    rules = tier_rules.apply(rules or PortfolioRules())
+    costs = costs or CostModel()
     max_positions = rules.max_positions or tier_rules.max_positions
     m = market
     cash = rules.capital
@@ -426,6 +431,7 @@ def simulate(
                 stop=order.stop,
                 remaining=shares,
                 book=order.book,
+                exit_rule=order.exit_rule,
             )
             open_trades.append(trade)
         orders = []
@@ -486,7 +492,13 @@ def simulate(
                 price = max(o, trade.t1) if trade.entry_day < t else trade.t1
                 half_raw = math.floor(trade.remaining * m.factor[s, t] / 2)
                 if half_raw >= 1:
-                    sell(trade, t, price, half_raw / m.factor[s, t], "target T1 (+2R), half")
+                    sell(
+                        trade,
+                        t,
+                        price,
+                        half_raw / m.factor[s, t],
+                        f"target T1 (+{rules.t1_r:g}R), half",
+                    )
                 trade.t1_done = True
                 trade.stop = max(trade.stop, trade.entry)
             r = trade.entry - trade.stop0
@@ -496,13 +508,19 @@ def simulate(
             atr = m.atr14[s, t]
             if trade.t1_done:
                 if not math.isnan(trade.trail) and c < trade.trail:
-                    trade.pending_exit = "trailing stop (2 x ATR, closing basis)"
+                    trade.pending_exit = f"trailing stop ({rules.trail_atr:g} x ATR, closing basis)"
                 elif not math.isnan(atr):
                     trade.trail = max(
                         np.nan_to_num(trade.trail, nan=-math.inf), c - rules.trail_atr * atr
                     )
             if trade.entry_day < t:
                 trade.sessions += 1
+            if (
+                trade.pending_exit is None
+                and trade.exit_rule is not None
+                and trade.exit_rule.when[s, t]
+            ):
+                trade.pending_exit = trade.exit_rule.reason
             if (
                 trade.pending_exit is None
                 and not trade.reached_1r
@@ -649,6 +667,7 @@ def simulate(
                 float(np.nan_to_num(m.score[s, t], nan=0.0)),
                 slip,
                 book.name,
+                variant.exit,
             )
             orders.append(order)
             placed.append(order)

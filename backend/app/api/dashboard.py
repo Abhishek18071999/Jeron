@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.alerts.job import PENDING_DAYS, account_rows, day_signals, regime_on
+from app.alerts.job import PENDING_DAYS, account_rows, regime_on
 from app.api.journal import EntryOut, SignalBrief, brief, entry_out
 from app.backtest.market import REGIME_RULES, Regime
 from app.data import store
@@ -31,7 +31,7 @@ from app.models import (
     ScanRun,
     SignalRecord,
 )
-from app.paper.job import latest_scan_date
+from app.paper.job import day_signals, latest_scan_date
 from app.scan.score import SCORE_VERSION
 from app.settings_store import effective_settings
 

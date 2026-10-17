@@ -7,7 +7,7 @@
 | <= 1% of 20-day average volume | test_order_at_most_1_pct_of_average_volume |
 | risk per trade 0.5-2% (setting, default 1%) | test_risk_setting_limits |
 | regime filter halves risk | test_regime_filter_halves_risk |
-| max open positions 5 swing / 8 positional, configurable | test_max_open_positions_* |
+| max positions 5 swing / 8 positional / 15 investing, configurable | test_max_open_positions_* |
 | sector cap <= 30% of capital | test_sector_cap |
 | correlation check (3 banks != 3 trades) | test_correlation_check |
 | heat: warn at 5% | test_heat_warning_at_5_pct |
@@ -104,6 +104,14 @@ def test_max_open_positions_per_tier():
         result = simulate(m, tier, [(0, signals_on(m, 0))], 0, 2, rules, NO_COSTS)
         assert len(result.orders) == expected
         assert sum(s.reason == "no free position slot" for s in result.skipped) == 10 - expected
+
+
+def test_max_open_positions_investing():
+    m = market_of({f"S{i:02d}": [SIGNAL, FILL, FLAT] for i in range(18)})
+    rules = PortfolioRules(cash_rate_pct=0, max_position_pct=3, heat_block_pct=100)
+    result = simulate(m, Tier.INVEST, [(0, signals_on(m, 0, 3.0))], 0, 2, rules, NO_COSTS)
+    assert len(result.orders) == 15
+    assert portfolio_rules(Settings(max_positions_invest=10), Tier.INVEST).max_positions == 10
 
 
 def test_max_open_positions_is_configurable():

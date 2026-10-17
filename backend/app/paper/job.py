@@ -66,6 +66,7 @@ def portfolio_rules(
     max_positions = {
         Tier.SWING: settings.max_positions_swing,
         Tier.POSITIONAL: settings.max_positions_positional,
+        Tier.INVEST: settings.max_positions_invest,
     }[tier]
     return PortfolioRules(
         capital=settings.capital,
@@ -115,6 +116,19 @@ def latest_scan_date(session: Session) -> date | None:
         .order_by(ScanRun.trade_date.desc())
         .limit(1)
     )
+
+
+def day_signals(session: Session, day: date) -> list[tuple[SignalRecord, str]]:
+    """The day's stored signals with their strategy key, live ones first."""
+    return [
+        (r, key)
+        for r, key in session.execute(
+            select(SignalRecord, PaperAccount.strategy_key)
+            .join(PaperAccount, PaperAccount.id == SignalRecord.account_id)
+            .where(SignalRecord.signal_date == day)
+            .order_by(SignalRecord.research_only, PaperAccount.id, SignalRecord.ticker)
+        )
+    ]
 
 
 def latest_backtest(session: Session, strategy: Strategy) -> BacktestRun | None:
@@ -288,7 +302,9 @@ def update_account(
     m = market
     start, end = m.day_index(account.start_date), m.day_index(day)
     params = {k: float(v) for k, v in account.params.items()}
-    variant = Variant(account.params_label, params, strategy.entries(m, params))
+    variant = Variant(
+        account.params_label, params, strategy.entries(m, params), strategy.exits(m, params)
+    )
     sim = simulate(
         m,
         strategy.tier,

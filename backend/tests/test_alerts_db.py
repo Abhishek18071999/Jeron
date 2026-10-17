@@ -98,10 +98,12 @@ def test_scan_signal_alert_journal(session):
     subjects = [s for s, _ in telegram.sent]
     assert subjects[-1] == f"Jeron daily summary {day}"
     first = signals[0]
-    text = next(t for _, t in telegram.sent if t.startswith(f"NEW SIGNAL: {first.ticker}"))
+    text = next(t for _, t in telegram.sent if t.startswith(f"SWING · NEW SIGNAL: {first.ticker}"))
     assert f"journal?signal={first.signal_id}" in text
     summary = telegram.sent[-1][1]
-    assert f"New signals ({len(signals)}):" in summary
+    assert f"Swing: {len(signals)} to buy" in summary
+    assert "Intraday: not running (no intraday prices yet)" in summary
+    assert "Long-term: nothing to buy (waiting for its first backtest)" in summary
     alert = session.scalar(select(Alert).where(Alert.key == f"signal:{first.signal_id}"))
     assert alert.status == "sent" and alert.attempts == 2 and alert.channel == "telegram"
 
@@ -110,8 +112,22 @@ def test_scan_signal_alert_journal(session):
     assert not again.sent and again.already_sent == len(signals) + 1
     assert send_test(session, settings=settings, channels=[telegram], now=NOW).status == "sent"
 
-    # The journal: the signal is pending until I decide; then fills and stats.
     client = TestClient(app)
+    # The four sections: swing holds the live signals with what, when, how much, why.
+    overview = {s["key"]: s for s in client.get("/sections").json()}
+    assert list(overview) == ["swing", "intraday", "positional", "invest"]
+    assert overview["swing"]["state"] == "live"
+    assert overview["intraday"]["state"] == "not_running" and overview["intraday"]["needs"]
+    assert overview["invest"]["state"] == "untested"
+    swing = client.get("/sections/swing", params={"date": str(day)}).json()
+    (card,) = [c for c in swing["signals"] if c["signal_id"] == str(first.signal_id)]
+    assert card["what"].startswith(f"Buy {first.ticker}: ")
+    assert card["when"].startswith("On ") and "LIMIT BUY" in card["when"]
+    assert f"{first.payload['shares']:,} shares" in card["how_much"]
+    assert card["why"] == first.payload["why"]
+    assert client.get("/sections/options").status_code == 404
+
+    # The journal: the signal is pending until I decide; then fills and stats.
     view = client.get("/journal", params={"pending_days": 3650}).json()
     assert str(first.signal_id) in {p["signal_id"] for p in view["pending"]}
     stop = Decimal(str(first.payload["stop"]["price"]))
@@ -180,7 +196,7 @@ def test_research_only_signals_are_only_in_the_summary(session):
     outcome = run_alerts(session, day, settings=Settings(), channels=[telegram], now=NOW)
     assert outcome.sent == [f"digest:{day}"]
     (summary,) = [t for _, t in telegram.sent]
-    assert "New signals: none (no strategy has passed the backtest bar yet)" in summary
+    assert "Swing: nothing to buy (no strategy has passed the backtest bar)" in summary
     assert f"Research only, not trades ({count}):" in summary
 
     # With the setting on they go out one by one, marked.
@@ -192,7 +208,7 @@ def test_research_only_signals_are_only_in_the_summary(session):
         now=NOW,
     )
     assert len(outcome.sent) == count
-    assert all(t.startswith("RESEARCH ONLY") for _, t in telegram.sent[1:])
+    assert all(t.startswith("SWING · RESEARCH ONLY") for _, t in telegram.sent[1:])
 
 
 def test_dashboard_and_alerts_before_any_data(empty_session):
@@ -200,6 +216,14 @@ def test_dashboard_and_alerts_before_any_data(empty_session):
     board = client.get("/dashboard").json()
     assert board["as_of"] is None and board["signals"] == [] and board["accounts"] == []
     assert client.get("/journal").json() == {"entries": [], "pending": [], "stats": []}
+    states = {s["key"]: s["state"] for s in client.get("/sections").json()}
+    assert states == {
+        "swing": "untested",
+        "intraday": "not_running",
+        "positional": "untested",
+        "invest": "untested",
+    }
+    assert client.get("/sections/positional").json()["signals"] == []
     outcome = run_alerts(empty_session, settings=Settings(), channels=[FakeChannel()])
     assert outcome.status == "no_scan"
 

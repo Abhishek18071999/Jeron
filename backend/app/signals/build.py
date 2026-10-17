@@ -23,8 +23,8 @@ from app.signals.schema import BacktestStats, Signal
 IST = ZoneInfo("Asia/Kolkata")
 MARKET_CLOSE = time(15, 30)
 # Expected holding per tier, in sessions (spec section 1: swing 3-15 trading days,
-# positional 1-6 months).
-HOLDING = {Tier.SWING: (3, 15), Tier.POSITIONAL: (21, 126)}
+# positional 1-6 months, investing 6-12+ months).
+HOLDING = {Tier.SWING: (3, 15), Tier.POSITIONAL: (21, 126), Tier.INVEST: (126, 252)}
 # Conviction 1-5 from the technical score: below 60, 60s, 70s, 80s, 90 and above.
 CONVICTION_STEPS = (60.0, 70.0, 80.0, 90.0)
 
@@ -103,6 +103,12 @@ def reasons(m: Market, s: int, t: int, strategy: Strategy, params: Params) -> li
             f"{params['rsi_level']:g}"
         )
         out.append(f"Trend is strong: ADX(14) {_value(m.adx14, s, t):.1f}")
+    elif strategy.key == "quality-trend" and m.fund_score is not None:
+        out.append(
+            f"Fundamental score (fund-v1) {_value(m.fund_score, s, t):.1f} of 100 from its "
+            f"latest results (needs {params['min_fund']:g})"
+        )
+        out.append("Long-term uptrend: close above the 50-day EMA, the 50-day above the 200-day")
     ema200 = _value(m.ema200, s, t)
     if not math.isnan(ema200) and c > ema200:
         out.append(f"Above its 200-day EMA ({_rs(ema200 / f)}): long-term uptrend")
@@ -122,8 +128,9 @@ def build_signal(
     """The signal for an order the engine placed at the close of `order.signal_day`.
     Raises `pydantic.ValidationError` if the result breaks the schema."""
     s, t = order.s, order.signal_day
-    strategy, rules, costs = ctx.strategy, ctx.rules, ctx.costs
+    strategy, costs = ctx.strategy, ctx.costs
     tier = TIERS[strategy.tier]
+    rules = tier.apply(ctx.rules)
     f = _value(m.factor, s, t)
     close = _value(m.close, s, t) / f
     atr = _value(m.atr14, s, t) / f
@@ -196,6 +203,7 @@ def build_signal(
             f"Stop to breakeven once a close is at or above +{rules.breakeven_r:g}R "
             f"({_rs(one_r)}); book 50% at T1; trail the rest by {rules.trail_atr:g} x ATR(14) "
             "on closing basis, selling at the next open"
+            + (f". {strategy.exit_rule.rstrip('.')}" if strategy.exit_rule else "")
         ),
         time_stop_days=time_stop,
         invalidation=(
@@ -213,7 +221,11 @@ def build_signal(
         conviction=conviction(order.score),
         brains_breakdown={
             "technical": _d(order.score, "0.1"),
-            "fundamental": None,
+            "fundamental": (
+                None
+                if m.fund_score is None or math.isnan(float(m.fund_score[s, t]))
+                else _d(float(m.fund_score[s, t]), "0.1")
+            ),
             "news": None if m.news_score is None else _d(float(m.news_score[s, t]), "0.1"),
             "combined": _d(order.score, "0.1"),
         },

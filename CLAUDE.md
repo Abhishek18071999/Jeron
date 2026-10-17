@@ -71,6 +71,12 @@ are part of done, never commit secrets.
   - `app/analytics/` `compare.py` (backtest vs paper vs real: gates, expected ranges,
     stages, causes of divergence, the 20-trade early warning; pure), `service.py` (database) and `weekly.py` (weekly
     summary and revalidation, which retires failing strategies' paper accounts).
+  - `app/sections/` the four sections (swing, intraday, positional, long-term;
+    `docs/plans/sections-v1.md`, decision 0014): `calc.py` (what each holds, its state,
+    a signal as what/when/how much/why; pure) and `service.py`. Served at `/sections`.
+    Long-term is the invest tier (`Tier.INVEST`, wider target and trail in `TIERS`) with
+    `quality-trend-v1`, the first strategy on `Market.fund_score` (point-in-time fund-v1)
+    and the first with its own exit rule. Intraday is "not running": no intraday data.
   - `app/market/` the market mood (decision 0009): `mood.py` (breadth above the 200-day
     EMA, 52-week highs/lows, the engine's regime filter, attack/normal/defend, sector
     strength; pure) and `service.py` (database). Served at `/market/mood`.
@@ -110,8 +116,9 @@ are part of done, never commit secrets.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `backup/backup.sh` the nightly `pg_dump` run by the `backup` service.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Navigation: Today (`/`),
-  Stocks (sector heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under
-  it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
+  Trade (`/trade`, one tab per section: `/trade/swing`, `/trade/intraday`,
+  `/trade/positional`, `/trade/invest`; `src/components/sections.tsx`), Stocks (sector
+  heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
   compare, data, spot check); phones get a bottom tab bar (`src/components/nav.tsx`).
   Ctrl+K opens the command palette (`src/components/command-palette.tsx`); the trade
   plan form recalculates through the read-only `/api/plan` route handler.
