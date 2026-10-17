@@ -96,11 +96,22 @@ are part of done, never commit secrets.
     monthly cap (decision 0012).
   - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
     days, `weekly` after the last session of the week; `catch_up` on start runs what was
-    missed while the computer was off. Runs as the `scheduler` service.
+    missed while the computer was off; the autopilot every minute. Runs as the
+    `scheduler` service.
+  - `app/autopilot.py` sets an install up without commands (`docs/plans/autopilot-v1.md`):
+    history, the first daily run, announcements from stored PR bundles, the news
+    backlog, a backtest of every untested strategy version, then `paper` (the market
+    lane, shared with the scheduler's jobs through `market_lock`); and imports files
+    dropped in `imports/` or uploaded (`PUT /imports/{name}`), recognised by their
+    columns, filed under `imports/done` or `imports/failed` with a log. Queues
+    `backend/seed/nse-results-2016-2026.zip` once when no results are loaded. Each step
+    is a CLI command in its own process. `GET /setup` (`app/api/setup.py`) says what is
+    done, running, or needs the owner.
   - `app/api/` routes; `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
     `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
     `stocks.py` `/stocks/ranked` (the latest scan, by industry), `plan.py`, `watchlist.py`;
-    `deals.py` `/stocks/{symbol}/deals`; `fundamentals.py` `/stocks/{symbol}/fundamentals`;
+    `deals.py` `/stocks/{symbol}/deals`; `news.py` `/stocks/{symbol}/news` and `/news/latest`
+    (subject-rule labels on read when no LLM label); `fundamentals.py` `/stocks/{symbol}/fundamentals`;
     `dashboard.py` serves `/dashboard`, `/stocks/search` (symbol or
     company name, for the search box), `/stocks/{symbol}`, `/alerts`.
   - `app/cli.py` jobs: `backfill`, `lists`, `crosscheck`, `quality`, `scan`,
@@ -119,7 +130,9 @@ are part of done, never commit secrets.
   Trade (`/trade`, one tab per section: `/trade/swing`, `/trade/intraday`,
   `/trade/positional`, `/trade/invest`; `src/components/sections.tsx`), Stocks (sector
   heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
-  compare, data, spot check); phones get a bottom tab bar (`src/components/nav.tsx`).
+  compare, data, spot check, setup), Learn (`/learn`, lessons in `src/lib/lessons.ts`
+  whose Jeron numbers mirror the backend); phones get a bottom tab bar (`src/components/nav.tsx`).
+  `/setup` shows the autopilot and takes uploads (`src/app/setup/actions.ts`).
   Ctrl+K opens the command palette (`src/components/command-palette.tsx`); the trade
   plan form recalculates through the read-only `/api/plan` route handler.
   Login (password + TOTP, decision 0012): `src/proxy.ts` guards every route,

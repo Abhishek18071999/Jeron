@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from alembic import command
 from app.backtest.job import load_inputs, run_backtests
 from app.backtest.market import build_market
+from app.backtest.strategies import COMBINED, STRATEGIES
 from app.config import get_settings
 from app.data import store
 from app.data.nse_lists import INDIA_VIX, NIFTY_50, NIFTY_500, IndexClose, SymbolChangeRecord
@@ -164,3 +165,16 @@ def test_backtest_runs_are_stored_and_served(session):
     assert all(r["segment"] == "oos" for r in rows)
     assert client.get("/backtests/999999").status_code == 404
     assert session.scalar(select(func.count()).select_from(BacktestRun)) == 2
+
+
+def test_every_strategy_runs_or_says_what_it_needs(session):
+    """`backtest` with no strategy named: each one either runs and is stored, or is
+    skipped with the input it lacks (no results calendar or fundamentals here)."""
+    lines: list[str] = []
+    runs = run_backtests(session, [*STRATEGIES, *COMBINED], log=lines.append)
+    tested = {r.strategy_key for r in runs}
+    skipped = {line.split(":")[0] for line in lines if ": skipped, " in line}
+    assert tested | skipped == {*STRATEGIES, *COMBINED}
+    assert skipped == {"results-drift", "quality-trend", "combined-book"}
+    assert any("run the events job" in line for line in lines)
+    assert any("fundamentals-import" in line for line in lines)

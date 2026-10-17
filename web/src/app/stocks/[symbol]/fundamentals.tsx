@@ -1,6 +1,8 @@
 // The fundamental brain: the score, what it is made of, and the quarters behind it
 // (NSE's XBRL filings, as known on each filing date).
-import { Badge, Card, EmptyState, Help, Stat, Table, Td, Th, cli, pctText, shortDate, signTone } from "@/components/ui";
+import Link from "next/link";
+
+import { Badge, Card, EmptyState, Help, Stat, Table, Td, Th, pctText, shortDate, signTone } from "@/components/ui";
 import type { StockFundamentals } from "@/lib/api";
 
 import { crore } from "./deals";
@@ -13,10 +15,16 @@ export function FundamentalsPanel({ data, error }: { data: StockFundamentals | n
   if (!data) {
     return (
       <Card title="Fundamentals">
-        <EmptyState command={cli("fundamentals-import CF-FR-equities-*.csv")}>
-          {error === "No results loaded for this stock" || !error
-            ? "No quarterly results loaded for this stock yet. Save the Financial Results CSVs from nseindia.com, then"
-            : error}
+        <EmptyState>
+          {error === "No results loaded for this stock" || !error ? (
+            <>
+              No quarterly results loaded for this stock yet. Jeron imports its bundled results lists by itself, and
+              newer ones you upload on <Link href="/setup" className="underline">Setup</Link>; that page shows
+              progress.
+            </>
+          ) : (
+            error
+          )}
         </EmptyState>
       </Card>
     );

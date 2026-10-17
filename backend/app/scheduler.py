@@ -2,7 +2,9 @@
 
 - 08:30 IST on trading days: `preopen` (pre-open check of open positions);
 - 19:00 IST on weekdays: `daily` (data, quality, scan, news, paper, alerts), then
-  `weekly` (summary and revalidation) after the last session of the week.
+  `weekly` (summary and revalidation) after the last session of the week;
+- every few minutes: the autopilot (app/autopilot.py), which sets up a new install and
+  imports files dropped in the imports folder.
 
 Every job is safe to re-run, so a missed or repeated run does no harm. Times come from
 `JERON_SCHEDULE_PREOPEN` and `JERON_SCHEDULE_DAILY` (HH:MM, IST).
@@ -16,19 +18,25 @@ latest session's scan is missing and the pre-open check if it is market hours.
 """
 
 import logging
+import threading
 from collections.abc import Callable
 from datetime import date, datetime, time, timedelta
+from typing import TYPE_CHECKING
 
 from apscheduler.schedulers.base import BaseScheduler
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
-from app import cli
+from app import autopilot, cli
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.exits.job import is_session, next_session
 from app.paper.job import latest_scan_date
 from app.signals.build import IST
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 log = logging.getLogger("jeron.scheduler")
 Runner = Callable[[list[str]], int]
@@ -36,6 +44,7 @@ Runner = Callable[[list[str]], int]
 # about 15:30, the daily run until the next morning.
 GRACE_SECONDS = {"preopen": 7 * 3600, "daily": 12 * 3600}
 MARKET_CLOSE = time(15, 30)
+AUTOPILOT_MINUTES = 1
 
 
 def last_session_of_week(calendar: TradingCalendar, day: date) -> bool:
@@ -96,7 +105,7 @@ def catch_up(
     everything since the last run) if the latest session whose daily time has passed
     has no scan, with the weekly job if that session ended the week; and the pre-open
     check if today trades and the market is open or about to. Returns the jobs run.
-    Before the first scan nothing is caught up: the history comes from `backfill`."""
+    Before the first scan nothing is caught up: the autopilot downloads the history."""
     settings = get_settings()
     calendar = TradingCalendar.default()
     at = now().astimezone(IST)
@@ -112,7 +121,7 @@ def catch_up(
         last = _previous_session(calendar, today)
     scanned = latest_scan()
     if scanned is None:
-        # A new install: the history comes from `backfill`, started by hand.
+        # A new install: app/autopilot.py downloads the history, then runs `daily`.
         log.info("No scan yet: nothing to catch up")
     elif scanned < last:
         log.info("Catching up: no scan for %s yet", last)
@@ -127,10 +136,15 @@ def catch_up(
     return ran
 
 
-def _safe(job: Callable[[], int | None], name: str) -> Callable[[], None]:
+def _safe(job: Callable[[], int | None], name: str, lock: bool = True) -> Callable[[], None]:
     def wrapped() -> None:
         try:
-            code = job()
+            if lock:
+                # One job at a time writes prices (app/autopilot.py's market lane).
+                with autopilot.market_lock:
+                    code = job()
+            else:
+                code = job()
             log.info("%s finished (exit code %s)", name, code)
         except Exception:  # a failed run must not stop the scheduler
             log.exception("%s failed", name)
@@ -153,13 +167,36 @@ def build(scheduler: BaseScheduler) -> BaseScheduler:
             misfire_grace_time=GRACE_SECONDS[name],
             coalesce=True,
         )
+    scheduler.add_job(
+        _safe(_autopilot_tick, "autopilot", lock=False),
+        IntervalTrigger(minutes=AUTOPILOT_MINUTES, timezone=IST),
+        id="autopilot",
+        name="autopilot",
+        max_instances=1,
+        coalesce=True,
+    )
     return scheduler
+
+
+def _session() -> "Session":
+    from sqlalchemy.orm import Session
+
+    from app.db import get_engine
+
+    return Session(get_engine())
+
+
+def _autopilot_tick() -> None:
+    autopilot.tick(_session)
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     scheduler = build(BlockingScheduler(timezone=IST))
+    autopilot.start()
     _safe(lambda: len(catch_up()), "catch-up")()
+    # Setup steps (a new install's history, imports, backtests) run in the background.
+    threading.Thread(target=_safe(_autopilot_tick, "autopilot", lock=False), daemon=True).start()
     for job in scheduler.get_jobs():
         log.info("Scheduled %s: %s", job.name, job.trigger)
     scheduler.start()

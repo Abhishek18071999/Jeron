@@ -4,6 +4,11 @@ import { Page, PageHeader } from "@/components/ui";
 
 const PAGES = [
   {
+    href: "/setup",
+    title: "Setup",
+    text: "What Jeron has set up by itself, what it's doing now, file uploads and the few things only you can do.",
+  },
+  {
     href: "/scanner",
     title: "Scanner",
     text: "Today's universe ranked by the technical score, with every component explained.",

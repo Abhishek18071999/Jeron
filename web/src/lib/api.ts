@@ -1137,3 +1137,57 @@ export type SectionSummary = {
 };
 
 export type SectionDetail = SectionSummary & { signals: SignalCard[]; positions: SectionPosition[] };
+
+// --- Setup page and news ------------------------------------------------------------
+
+export type SetupStep = {
+  key: string;
+  title: string;
+  state: "done" | "working" | "waiting" | "you";
+  detail: string;
+  todo: string[];
+};
+
+export type SetupStrategy = {
+  key: string;
+  version: string;
+  name: string;
+  tier: string;
+  tested: string | null;
+  live_eligible: boolean | null;
+  paper: boolean;
+};
+
+export type AutopilotStep = { step: string; why: string; since?: string; at?: string; code?: number; log: string[] };
+
+export type ImportsStatus = {
+  pending: string[];
+  running: { file: string; kind: string; since: string; log: string[] } | null;
+  finished: { file: string; outcome: "done" | "failed"; at: string; log: string[] }[];
+};
+
+export type SetupView = {
+  steps: SetupStep[];
+  strategies: SetupStrategy[];
+  autopilot: { now: AutopilotStep | null; last: AutopilotStep | null };
+  imports: ImportsStatus;
+};
+
+export type NewsItem = {
+  symbol: string;
+  day: string;
+  subject: string | null;
+  text: string;
+  event_type: string;
+  sentiment: number | null;
+  reason: string;
+  material: boolean;
+};
+
+export type NewsView = {
+  items: NewsItem[];
+  labeller: string;
+  labeller_ready: boolean;
+  note: string | null;
+  score: number | null;
+};
