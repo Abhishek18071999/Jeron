@@ -16,6 +16,7 @@ python -m app.cli news-label --limit 100        # label news (Claude or DeepSeek
 python -m app.cli news-testset                  # write headlines for you to label by hand
 python -m app.cli news-eval testset.csv         # the model's accuracy on your labels
 python -m app.cli backtest                      # walk-forward test of every strategy
+python -m app.cli backtest --strategy combined-book  # rs-pullback + results drift in one account
 python -m app.cli paper                         # signals and paper trades for the newest scan
 python -m app.cli alerts                        # send the newest day's signals and summary
 python -m app.cli telegram --setup              # find your chat id after messaging the bot
@@ -41,7 +42,7 @@ from app.alerts.channels import AlertError, TelegramChannel
 from app.alerts.job import NOT_SET_UP, run_alerts, send_test
 from app.analytics.weekly import run_weekly
 from app.backtest.job import run_backtests
-from app.backtest.strategies import STRATEGIES
+from app.backtest.strategies import COMBINED, STRATEGIES
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.data import pipeline, store
@@ -157,9 +158,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("backtest", help="walk-forward backtest of the strategies, saved as runs")
     p.add_argument(
         "--strategy",
-        choices=sorted(STRATEGIES),
+        choices=sorted([*STRATEGIES, *COMBINED]),
         action="append",
-        help="strategy to test (repeatable; default: all)",
+        help="strategy to test (repeatable; default: all; combined-book only when named)",
     )
     p.add_argument("--start", type=_date, help="first price date to use (default: all)")
     p.add_argument("--end", type=_date, help="last price date to use (default: newest)")

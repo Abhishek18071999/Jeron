@@ -34,7 +34,10 @@ are part of done, never commit secrets.
     filter; `trend-breakout` and `rs-pullback` are the v2 research, see
     `docs/backtests/strategies-v2-report.md`; `results-drift` and `sector-rotation` are
     the v3 research, both research only, see `docs/backtests/strategies-v3-report.md`;
-    their inputs, the results reaction and the measured sector, are built in `market.py`),
+    their inputs, the results reaction and the measured sector, are built in `market.py`;
+    `COMBINED_BOOK` trades rs-pullback-v1 and results-drift-v1 in one account through
+    the engine's `Book`s, run only by `backtest --strategy combined-book`, see
+    `docs/plans/combined-book-v1.md`),
     `walkforward.py` (folds, holdout, gates), `stats.py`, `job.py` (database).
     Changing a strategy's rules means a new strategy version; runs are never
     overwritten. The engine is also the risk manager (spec section 5); the sector cap,
