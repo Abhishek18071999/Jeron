@@ -3,10 +3,11 @@ it, day by day since the first buy, and what that means for tomorrow's open.
 
 The rules are the engine's, with its constants (`PortfolioRules`, `TIERS`):
 - a stop hit during the day (or an open below it) ends the trade;
-- half is booked at T1, +2R from the average entry; the stop moves to breakeven;
+- half is booked at T1, +2R from the average entry (+3R for the invest tier); the
+  stop moves to breakeven;
 - once a close is +1R, the stop moves to breakeven;
-- after T1 the rest trails at 2 x ATR(14) below the highest close, closing basis: a
-  close below the trail sells at the next open;
+- after T1 the rest trails at 2 x ATR(14) (4 x for invest) below the highest close,
+  closing basis: a close below the trail sells at the next open;
 - the tier's time stop sells at the next open if +1R hasn't been reached in time.
 
 Prices are split/bonus-adjusted to today's basis, so today's numbers are raw rupees.
@@ -82,6 +83,7 @@ def exit_plan(
     if stop >= entry:
         raise ValueError(f"Stop {stop} is not below the entry {entry}")
     tier_rules = TIERS[tier]
+    rules = tier_rules.apply(rules)
     r = entry - stop
     t1 = entry + rules.t1_r * r
     one_r = entry + rules.breakeven_r * r

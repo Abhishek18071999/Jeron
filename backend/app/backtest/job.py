@@ -42,6 +42,7 @@ from app.data.nse_lists import INDIA_VIX, NIFTY_50, NIFTY_500
 from app.data.pipeline import BOARD_MEETINGS_SOURCE
 from app.data.provider import Bar, CorporateActionRecord
 from app.enums import CorporateActionType, QualityStatus
+from app.fundamentals import job as fund_job
 from app.models import (
     BacktestRun,
     BacktestTrade,
@@ -284,6 +285,11 @@ def load_inputs(
         ),
         news_labeller=labeller if news_job.labels_exist(session, labeller) else None,
         sector_indices={name: closes(name) for name in SECTOR_INDICES},
+        fundamentals=(
+            fund_job.filings(session, [s.symbol for s in stocks])
+            if fund_job.results_loaded(session)
+            else None
+        ),
     )
 
 
@@ -390,12 +396,11 @@ def run_backtests(
         market = build_market(load_inputs(session, start, end, log=log))
         log(f"Market ready: {len(market.symbols)} stocks in {time.perf_counter() - started:.1f} s")
     evaluations: list[Callable[[], Evaluation]] = [partial(evaluate, market, s) for s in strategies]
-    if books:
-        log(f"Training every variant of {len(STRATEGIES)} strategies for the deflated Sharpe")
-        trials = all_trial_sharpes(market, STRATEGIES.values())
-        evaluations += [
-            partial(evaluate_combined, market, b, all_trial_sharpes=trials) for b in books
-        ]
+    for b in books:
+        counted = [STRATEGIES[k] for k in b.trial_keys] if b.trial_keys else STRATEGIES.values()
+        log(f"Training every variant of {len(counted)} strategies for the deflated Sharpe")
+        trials = all_trial_sharpes(market, counted)
+        evaluations.append(partial(evaluate_combined, market, b, all_trial_sharpes=trials))
     runs = []
     for evaluation in evaluations:
         mark = time.perf_counter()

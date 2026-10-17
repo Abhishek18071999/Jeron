@@ -8,7 +8,7 @@ import type { PlanCheck, PlanResult, PlanView } from "@/lib/api";
 type Props = {
   symbol: string;
   signalId: string | null;
-  initial: { entry: string; stop: string; tier: "swing" | "positional"; reason: string };
+  initial: { entry: string; stop: string; tier: "swing" | "positional" | "invest"; reason: string };
   stopHint: string;
   plan: PlanResult | null;
   checklist: PlanView["checklist"];
@@ -167,7 +167,7 @@ export function PlanForm({ symbol, signalId, initial, stopHint, plan: first, che
             Tier
           </span>
           <div role="radiogroup" aria-labelledby="tier-label" className="flex rounded-lg border border-line-strong p-0.5">
-            {(["swing", "positional"] as const).map((t) => (
+            {(["swing", "positional", "invest"] as const).map((t) => (
               <label
                 key={t}
                 className={`flex-1 cursor-pointer rounded-md px-3 py-1.5 text-center text-sm font-medium capitalize ${
@@ -182,7 +182,7 @@ export function PlanForm({ symbol, signalId, initial, stopHint, plan: first, che
                   onChange={() => setTier(t)}
                   className="sr-only"
                 />
-                {t}
+                {t === "invest" ? "long-term" : t}
               </label>
             ))}
           </div>

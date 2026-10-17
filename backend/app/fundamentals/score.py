@@ -203,3 +203,33 @@ def fund_score(
     notes.append("Not covered yet: ROE, ROCE, debt, cash flow and pledges.")
     score = round(quality + valuation, 1)
     return FundScore(score, quality, valuation, rejected, facts, notes)
+
+
+def known_quarters(filings: Sequence[Quarter], before: datetime) -> list[Quarter]:
+    """The quarters known at `before`: per quarter the latest filing published before
+    it, consolidated preferred over standalone. `filings` are oldest published first;
+    the result is oldest quarter first."""
+    best: dict[date, Quarter] = {}
+    for q in filings:
+        if q.disseminated_at >= before:
+            continue
+        old = best.get(q.period_end)
+        if old is None or q.consolidated >= old.consolidated:
+            best[q.period_end] = q
+    return [best[k] for k in sorted(best)]
+
+
+def score_with_history(
+    quarters: Sequence[Quarter], as_of: date, close_on: dict[date, float]
+) -> FundScore:
+    """fund-v1 on `as_of` from `quarters` (as `known_quarters` gives them), with the
+    P/E at each earlier filing (five years at most) from the raw close on its
+    publication day (`close_on`, by date) as the valuation history. The stock page and
+    the backtest's point-in-time series both score this way."""
+    filed = [q.disseminated_at.date() for q in quarters]
+    history = []
+    for i in range(max(3, len(quarters) - 20), len(quarters) - 1):
+        pe = pe_ratio(quarters[: i + 1], close_on.get(filed[i]))
+        if pe is not None:
+            history.append(pe)
+    return fund_score(quarters, as_of, close_on.get(as_of), history)

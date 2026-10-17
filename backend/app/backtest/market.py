@@ -9,16 +9,19 @@ stocks the scan would have shown.
 Pure module: the database job (`app.backtest.job`) builds the inputs.
 """
 
+from bisect import bisect_right
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from enum import StrEnum
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
 from app import indicators as ind
 from app.backtest.features import NAN, Array, percentile_ranks, stock_features
 from app.data.events import ResultsDate, blackout_signal_days
+from app.fundamentals.score import STALE_DAYS, Quarter, known_quarters, score_with_history
 from app.news.labels import SCORE_HORIZON_HALF_LIVES, SCORE_SCALE, SCORE_WEIGHTS, DatedLabel
 from app.scan.score import MAX_POINTS
 from app.scan.universe import UniverseRules
@@ -111,6 +114,8 @@ class MarketInputs:
     news_labeller: str | None = None
     # Closes of the sectoral indices in `SECTOR_INDICES`, by index name.
     sector_indices: Mapping[str, Mapping[date, float]] = field(default_factory=dict)
+    # Every results filing per symbol, oldest published first; None = none loaded.
+    fundamentals: Mapping[str, Sequence[Quarter]] | None = None
 
 
 @dataclass
@@ -168,6 +173,9 @@ class Market:
     results_reaction: Array | None = None
     # The higher volume ratio of the meeting session and the session after it.
     results_volume_ratio: Array | None = None
+    # sections-v1: fund-v1 from the filings published before each day (`fund_scores`);
+    # NaN = unknown. None = no results loaded.
+    fund_score: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -435,6 +443,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         sector_rank=sector_ranks(close, nifty500, sector_closes),
         results_reaction=None if reactions is None else reactions[0],
         results_volume_ratio=None if reactions is None else reactions[1],
+        fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
     )
 
 
@@ -600,3 +609,54 @@ def market_state(
     regime = _regimes(_index_series(days, nifty500))[-1]
     risk_off = _risk_off(_index_series(days, nifty50), _index_series(days, vix))[-1]
     return MarketState(days[-1], regime, bool(risk_off))
+
+
+_IST = ZoneInfo("Asia/Kolkata")
+
+
+def fund_scores(
+    days: Sequence[date],
+    symbols: Sequence[str],
+    fundamentals: Mapping[str, Sequence[Quarter]] | None,
+    raw_close: Array,
+) -> Array | None:
+    """fund-v1 per stock and day, point in time (docs/plans/sections-v1.md): scored on
+    each day a filing was published, from the filings published up to that day and the
+    raw close of that day, and used from the next session until the next filing. NaN
+    before the first score, when there is too little data, and once the newest quarter
+    ended more than `STALE_DAYS` ago; a hard reject (qualified audit opinion) scores 0."""
+    if fundamentals is None:
+        return None
+    out = np.full((len(symbols), len(days)), NAN)
+    for s, symbol in enumerate(symbols):
+        rows = fundamentals.get(symbol)
+        if not rows:
+            continue
+        traded = [int(t) for t in np.flatnonzero(~np.isnan(raw_close[s]))]
+        traded_days = [days[t] for t in traded]
+        published = sorted({q.disseminated_at.date() for q in rows})
+        for k, filed in enumerate(published):
+            quarters = known_quarters(
+                rows, datetime.combine(filed + timedelta(days=1), time(0), _IST)
+            )
+            first = bisect_right(days, filed)  # the next session
+            last = bisect_right(days, published[k + 1]) if k + 1 < len(published) else len(days)
+            if first >= last or not quarters:
+                continue
+            dates = {q.disseminated_at.date() for q in quarters[-20:]} | {filed}
+            closes: dict[date, float] = {}
+            for d in dates:
+                # The raw close on or before the day.
+                i = bisect_right(traded_days, d) - 1
+                if i >= 0:
+                    closes[d] = float(raw_close[s, traded[i]])
+            scored = score_with_history(quarters, filed, closes)
+            value = 0.0 if scored.rejected else scored.score
+            if value is None:
+                continue
+            stale_from = quarters[-1].period_end + timedelta(days=STALE_DAYS + 1)
+            for t in range(first, last):
+                if days[t] >= stale_from:
+                    break
+                out[s, t] = value
+    return out

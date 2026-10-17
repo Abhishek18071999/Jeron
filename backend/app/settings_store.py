@@ -34,6 +34,9 @@ EDITABLE: dict[str, Editable] = {
     "max_positions_positional": Editable(
         "Positional positions at most", "Open positional trades at once."
     ),
+    "max_positions_invest": Editable(
+        "Long-term positions at most", "Open long-term investments at once."
+    ),
     "sector_cap_pct": Editable("Sector cap (%)", "Most of capital in one sector."),
     "alert_research_signals": Editable(
         "Alert research-only signals",

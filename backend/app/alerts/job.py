@@ -17,6 +17,7 @@ from app.alerts.format import (
     Digest,
     DigestAccount,
     DigestPosition,
+    DigestSection,
     digest_message,
     digest_signals,
     signal_message,
@@ -33,10 +34,11 @@ from app.models import (
     PaperAccount,
     ScanResult,
     ScanRun,
-    SignalRecord,
 )
-from app.paper.job import latest_scan_date
+from app.paper.job import day_signals, latest_scan_date
 from app.scan.score import SCORE_VERSION
+from app.sections.calc import BY_KEY, section_for_tier
+from app.sections.service import sections
 from app.settings_store import effective_settings
 from app.signals.build import IST
 from app.watchlist.service import hits as watchlist_hits
@@ -101,18 +103,6 @@ def account_rows(session: Session) -> list[DigestAccount]:
     return rows
 
 
-def day_signals(session: Session, day: date) -> list[tuple[SignalRecord, str]]:
-    return [
-        (r, key)
-        for r, key in session.execute(
-            select(SignalRecord, PaperAccount.strategy_key)
-            .join(PaperAccount, PaperAccount.id == SignalRecord.account_id)
-            .where(SignalRecord.signal_date == day)
-            .order_by(SignalRecord.research_only, PaperAccount.id, SignalRecord.ticker)
-        )
-    ]
-
-
 def build_digest(session: Session, day: date, web_url: str) -> Digest:
     report = session.scalar(select(DataQualityReport).where(DataQualityReport.trade_date == day))
     run = session.scalar(
@@ -144,6 +134,10 @@ def build_digest(session: Session, day: date, web_url: str) -> Digest:
         [(key, r.research_only, r.payload) for r, key in day_signals(session, day)]
     )
     digest.accounts = account_rows(session)
+    digest.sections = [
+        DigestSection(v.section.name, v.section.tier and v.section.tier.value, v.status.state.value)
+        for v in sections(session)
+    ]
     digest.positions = [
         DigestPosition(v.entry.ticker, v.position.held, v.position.r_multiple)
         for v in entry_views(session, as_of=day)
@@ -210,7 +204,12 @@ def run_alerts(
     for record, key in day_signals(session, day):
         if record.late or (record.research_only and not settings.alert_research_signals):
             continue
-        text = signal_message(record.payload, record.research_only, settings.web_url)
+        text = signal_message(
+            record.payload,
+            record.research_only,
+            settings.web_url,
+            BY_KEY[section_for_tier(record.payload["tier"])].name,
+        )
         if record.ticker in held:
             text = (
                 f"HELD, check by hand before buying: {record.ticker} {held[record.ticker]}, "

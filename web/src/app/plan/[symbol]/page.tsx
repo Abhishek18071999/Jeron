@@ -64,7 +64,7 @@ export default async function PlanPage({
   if (sp.signal) query.set("signal_id", sp.signal);
   if (sp.entry && Number(sp.entry) > 0) query.set("entry", sp.entry);
   if (sp.stop && Number(sp.stop) > 0) query.set("stop", sp.stop);
-  if (sp.tier === "swing" || sp.tier === "positional") query.set("tier", sp.tier);
+  if (sp.tier === "swing" || sp.tier === "positional" || sp.tier === "invest") query.set("tier", sp.tier);
   const [result, watch] = await Promise.all([
     getJson<PlanView>(`/plan/${encodeURIComponent(symbol)}?${query}`),
     getJson<Watchlist>("/watchlist"),

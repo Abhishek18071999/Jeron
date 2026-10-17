@@ -16,6 +16,11 @@ type Item = {
 
 const PAGES: { label: string; href: string; keywords?: string }[] = [
   { label: "Today", href: "/", keywords: "home dashboard actions signals" },
+  { label: "Trade", href: "/trade", keywords: "sections what to buy signals" },
+  { label: "Swing", href: "/trade/swing", keywords: "swing trades short term" },
+  { label: "Intraday", href: "/trade/intraday", keywords: "intraday day trading" },
+  { label: "Positional", href: "/trade/positional", keywords: "positional trades months" },
+  { label: "Long-term", href: "/trade/invest", keywords: "long term investing invest" },
   { label: "Stocks", href: "/stocks", keywords: "heatmap sectors industries ranked list" },
   { label: "Watchlist", href: "/watchlist", keywords: "alerts star watch" },
   { label: "Portfolio", href: "/portfolio", keywords: "positions risk heat holdings" },

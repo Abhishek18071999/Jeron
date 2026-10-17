@@ -15,6 +15,7 @@ from app.api import (
     plan,
     portfolio,
     scan,
+    sections,
     settings,
     stocks,
     watchlist,
@@ -45,3 +46,4 @@ app.include_router(portfolio.router)
 app.include_router(plan.router)
 app.include_router(watchlist.router)
 app.include_router(settings.router)
+app.include_router(sections.router)

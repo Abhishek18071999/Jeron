@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import product
-from typing import Any
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -23,6 +23,10 @@ Params = dict[str, float]
 class Tier(StrEnum):
     SWING = "swing"
     POSITIONAL = "positional"
+    INVEST = "invest"
+
+
+_Rules = TypeVar("_Rules")
 
 
 @dataclass(frozen=True)
@@ -31,12 +35,46 @@ class TierRules:
     max_stop_pct: float  # spec section 4: entry-to-stop at most 12% swing / 20% positional
     time_stop_sessions: int  # exit if +1R not reached within this many sessions
     time_stop_label: str
+    # The tier's targets and trail; None keeps `PortfolioRules`' (spec section 5: book
+    # half at +2R, T2 +3R, trail 2 x ATR).
+    t1_r: float | None = None
+    t2_r: float | None = None
+    trail_atr: float | None = None
+
+    def apply(self, rules: _Rules) -> _Rules:
+        """`rules` (a `PortfolioRules`) with this tier's targets and trail."""
+        overrides = {
+            k: v
+            for k, v in (("t1_r", self.t1_r), ("t2_r", self.t2_r), ("trail_atr", self.trail_atr))
+            if v is not None
+        }
+        return replace(rules, **overrides) if overrides else rules  # type: ignore[type-var]
 
 
 TIERS = {
     Tier.SWING: TierRules(5, 12.0, 15, "Swing: exit if not +1R within 15 sessions"),
     Tier.POSITIONAL: TierRules(8, 20.0, 60, "Positional: exit at the 60-session review if not +1R"),
+    # docs/plans/sections-v1.md: investing holds for months, so the target and the
+    # trail are wider and the time stop is a year.
+    Tier.INVEST: TierRules(
+        15,
+        20.0,
+        250,
+        "Invest: exit if not +1R within 250 sessions",
+        t1_r=3.0,
+        t2_r=5.0,
+        trail_atr=4.0,
+    ),
 }
+
+
+@dataclass(frozen=True)
+class ExitSignal:
+    """bool (stocks, days): sell a held position at the next open."""
+
+    when: Array
+    reason: str
+
 
 # Score needed on risk-off days (spec section 3: require >= 85 when the regime filter
 # is on).
@@ -65,6 +103,11 @@ class Strategy:
     # news score is below this (recent bad news). Off in the M3 versions.
     results_blackout: bool = False
     min_news_score: float | None = None
+    # A rule that sells at the next open (sections-v1: results weakened), with the
+    # reason the trade records and the sentence `rules` adds.
+    exit_condition: Callable[[Market, Params], Array] | None = None
+    exit_reason: str = ""
+    exit_rule: str = ""
 
     @property
     def grid(self) -> list[Params]:
@@ -81,14 +124,22 @@ class Strategy:
                 entries &= market.news_score >= self.min_news_score
             return np.asarray(entries, dtype=bool)
 
+    def exits(self, market: Market, params: Params) -> ExitSignal | None:
+        if self.exit_condition is None:
+            return None
+        with np.errstate(invalid="ignore"):
+            when = np.asarray(self.exit_condition(market, params), dtype=bool)
+        return ExitSignal(when, self.exit_reason)
+
     def rules(self, params: Params) -> list[str]:
         tier = TIERS[self.tier]
         return [
             *self.describe(params),
             f"Stop {params['stop_atr']:g} x ATR(14) below the signal close; skip if that is "
             f"more than {tier.max_stop_pct:g}% away.",
-            *COMMON_RULES,
+            *common_rules(self.tier),
             *self.event_rules(),
+            *([self.exit_rule] if self.exit_rule else []),
             tier.time_stop_label + ".",
         ]
 
@@ -114,14 +165,22 @@ COMMON_RULES = [
     "opens above that, opens below the stop, or is locked at the upper circuit.",
     "No entry in a stock in a 2% or 5% price band that day (it can lock at the lower "
     "circuit for days).",
-    "Book half at +2R, stop to breakeven at +1R (closing basis), trail the rest by "
-    "2 x ATR(14) on closing basis, exiting at the next open.",
+    "Book half at +{t1:g}R, stop to breakeven at +1R (closing basis), trail the rest by "
+    "{trail:g} x ATR(14) on closing basis, exiting at the next open.",
     "Size: 1% of equity at risk (halved when Nifty 50 is below its 200-day EMA or VIX is "
     "in its top decile, halved again in a 10% drawdown), at most 20% of equity and 1% of "
     "20-day average volume; no new entries above 6% total open risk or for 20 sessions "
     "after a 15% drawdown.",
     "Most candidates on a day go to the highest tech-v1 score first.",
 ]
+
+
+def common_rules(tier: Tier) -> list[str]:
+    """`COMMON_RULES` with the tier's target and trail."""
+    rules = TIERS[tier]
+    t1 = 2.0 if rules.t1_r is None else rules.t1_r
+    trail = 2.0 if rules.trail_atr is None else rules.trail_atr
+    return [r.format(t1=t1, trail=trail) if "{t1" in r else r for r in COMMON_RULES]
 
 
 def _score_condition(m: Market, p: Params) -> Array:
@@ -326,6 +385,51 @@ SECTOR_ROTATION = Strategy(
     condition=_sector_rotation_condition,
 )
 
+# sections-v1 (docs/plans/sections-v1.md): the investing tier's first strategy.
+FUND_EXIT_BELOW = 50.0
+
+
+def _fund_score(m: Market) -> Array:
+    if m.fund_score is None:
+        raise ValueError("this strategy needs the fundamental scores (run fundamentals-import)")
+    return m.fund_score
+
+
+def _quality_trend_condition(m: Market, p: Params) -> Array:
+    fund = np.nan_to_num(_fund_score(m), nan=-1.0)
+    ok = ((fund >= p["min_fund"]) & (m.close > m.ema50) & (m.ema50 > m.ema200)).astype(float)
+    before = np.nan_to_num(_shift(ok), nan=0.0)
+    return np.asarray((ok == 1.0) & (before == 0.0), dtype=bool)
+
+
+def _quality_trend_exit(m: Market, p: Params) -> Array:
+    # An unknown score (no filing yet, or stale) is not an exit.
+    return np.asarray(np.nan_to_num(_fund_score(m), nan=100.0) < FUND_EXIT_BELOW, dtype=bool)
+
+
+QUALITY_TREND = Strategy(
+    key="quality-trend",
+    version="quality-trend-v1",
+    name="Strong results in a long-term uptrend (invest)",
+    tier=Tier.INVEST,
+    summary="Own companies with a high fund-v1 score while the 50-day EMA is above the 200-day.",
+    grid_axes={"min_fund": (60.0, 70.0), "stop_atr": (3.0, 4.0)},
+    default={"min_fund": 70.0, "stop_atr": 4.0},
+    describe=lambda p: [
+        f"Enter on the first day the stock's fundamental score (fund-v1, from the results "
+        f"filings published before that day) is at least {p['min_fund']:g}, the close is "
+        "above the 50-day EMA and the 50-day EMA is above the 200-day EMA. No market-regime "
+        "filter."
+    ],
+    condition=_quality_trend_condition,
+    exit_condition=_quality_trend_exit,
+    exit_reason=f"results weakened (fund-v1 below {FUND_EXIT_BELOW:g})",
+    exit_rule=(
+        f"Sell at the next open after a new results filing takes fund-v1 below "
+        f"{FUND_EXIT_BELOW:g} (a qualified audit opinion scores 0)."
+    ),
+)
+
 # Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
 # back above 40 after about 26 days.
 MIN_NEWS_SCORE = 40.0
@@ -357,6 +461,7 @@ STRATEGIES = {
         RS_PULLBACK,
         RESULTS_DRIFT,
         SECTOR_ROTATION,
+        QUALITY_TREND,
     )
 }
 
@@ -373,6 +478,8 @@ class Combined:
     name: str
     summary: str
     members: tuple[Strategy, ...]
+    # The strategies whose variants its plan counted as trials for the deflated Sharpe.
+    trial_keys: tuple[str, ...] = ()
 
     @property
     def tier(self) -> Tier:
@@ -399,7 +506,7 @@ class Combined:
         return [
             *out,
             f"Skip a stop more than {tier.max_stop_pct:g}% away.",
-            *COMMON_RULES,
+            *common_rules(self.tier),
             tier.time_stop_label + ".",
         ]
 
@@ -411,6 +518,19 @@ COMBINED_BOOK = Combined(
     name="Combined book: RS pullback and results drift in one account (positional)",
     summary="rs-pullback-v1 and results-drift-v1 sharing one account, 8 positions, 6% heat.",
     members=(RS_PULLBACK, RESULTS_DRIFT),
+    # The 60 variants registered before it (docs/plans/combined-book-v1.md).
+    trial_keys=(
+        "score-swing",
+        "breakout-52w",
+        "pullback-trend",
+        "score-swing-events",
+        "breakout-52w-events",
+        "pullback-trend-events",
+        "trend-breakout",
+        "rs-pullback",
+        "results-drift",
+        "sector-rotation",
+    ),
 )
 
 COMBINED = {COMBINED_BOOK.key: COMBINED_BOOK}

@@ -42,7 +42,7 @@ def journal_link(web_url: str, signal_id: str) -> str:
     return f"{web_url.rstrip('/')}/journal?signal={signal_id}"
 
 
-def _order_line(p: Mapping[str, Any]) -> str:
+def order_line(p: Mapping[str, Any]) -> str:
     """How to place the buy in the pre-open auction (09:00-09:07): a limit at the top of
     the zone fills at the auction price whenever that is at or below it."""
     line = (
@@ -56,8 +56,11 @@ def _order_line(p: Mapping[str, Any]) -> str:
     return line + "Not filled by 09:15: it stays as a limit for the day."
 
 
-def signal_message(payload: Mapping[str, Any], research_only: bool, web_url: str) -> str:
-    """One signal (spec section 4 payload) as an alert."""
+def signal_message(
+    payload: Mapping[str, Any], research_only: bool, web_url: str, section: str = ""
+) -> str:
+    """One signal (spec section 4 payload) as an alert, headed with its section's name
+    (docs/plans/sections-v1.md) when given."""
     p = payload
     zone, stop, targets, bt = p["entry_zone"], p["stop"], p["targets"], p["backtest_stats"]
     head = (
@@ -66,18 +69,21 @@ def signal_message(payload: Mapping[str, Any], research_only: bool, web_url: str
         else f"NEW SIGNAL: {p['ticker']}"
     )
     pf = bt["profit_factor"]
+    cost = Decimal(str(zone["high"])) * int(p["shares"])
     lines = [
-        f"{head} ({p['tier']}, conviction {p['conviction']}/5)",
+        (f"{section.upper()} · " if section else "")
+        + f"{head} ({p['tier']}, conviction {p['conviction']}/5)",
         f"{p['setup_name']} · {p['strategy_version']}",
         "",
         f"Buy between {inr(zone['low'])} and {inr(zone['high'])}, "
         f"valid until {_day(zone['valid_until'])}",
-        _order_line(p),
+        order_line(p),
         f"Stop {inr(stop['price'])} ({stop['reason']})",
         f"T1 {inr(targets['t1'])} · T2 {inr(targets['t2'])} ({targets['basis']}); "
         f"reward:risk {_num(p['risk_reward_t1'], 1)} / {_num(p['risk_reward_t2'], 1)} "
         "after costs",
-        f"Size {int(p['shares']):,} shares, {inr(p['capital_at_risk'], 0)} at risk",
+        f"Size {int(p['shares']):,} shares (about {inr(cost, 0)}), "
+        f"{inr(p['capital_at_risk'], 0)} at risk",
         f"Hold {p['expected_holding']['min_days']}-{p['expected_holding']['max_days']} "
         f"sessions; time stop {p['time_stop_days']} sessions",
         "",
@@ -109,6 +115,17 @@ class DigestSignal:
     conviction: int
     entry_low: Decimal
     stop: Decimal
+    tier: str
+
+
+@dataclass(frozen=True)
+class DigestSection:
+    """One of the four sections (`app.sections.calc`): its name, tier (None: intraday)
+    and state ("live", "research", "untested", "not_running")."""
+
+    name: str
+    tier: str | None
+    state: str
 
 
 @dataclass(frozen=True)
@@ -145,6 +162,7 @@ class Digest:
     positions: list[DigestPosition] = field(default_factory=list)
     pending: int = 0
     web_url: str = ""
+    sections: list[DigestSection] = field(default_factory=list)
 
 
 def _signal_line(s: DigestSignal) -> str:
@@ -175,24 +193,8 @@ def digest_message(d: Digest) -> str:
         top = ", ".join(f"{s} {_num(v, 0)}" for s, v in d.top[:5])
         lines.append(f"Scan: {d.universe:,} stocks scored" + (f"; top {top}" if top else ""))
 
-    live = [s for s in d.signals if not s.research_only]
-    research = [s for s in d.signals if s.research_only]
-    lines.append("")
-    if live:
-        lines.append(f"New signals ({len(live)}):")
-        lines += [_signal_line(s) for s in live]
-    else:
-        lines.append(
-            "New signals: none"
-            if any(a.stage == "paper" for a in d.accounts)
-            else "New signals: none (no strategy has passed the backtest bar yet)"
-        )
-    if research:
-        by_key: dict[str, list[str]] = {}
-        for s in research:
-            by_key.setdefault(s.strategy_key, []).append(s.ticker)
-        lines.append(f"Research only, not trades ({len(research)}):")
-        lines += [f"• {key}: {', '.join(tickers)}" for key, tickers in by_key.items()]
+    for section in d.sections:
+        lines += ["", *_section_lines(section, [s for s in d.signals if s.tier == section.tier])]
 
     if d.accounts:
         lines += ["", "Paper accounts:"]
@@ -217,6 +219,32 @@ def digest_message(d: Digest) -> str:
     if d.web_url:
         lines += ["", d.web_url]
     return "\n".join(lines)
+
+
+_NOTHING = {
+    "research": "nothing to buy (no strategy has passed the backtest bar)",
+    "untested": "nothing to buy (waiting for its first backtest)",
+    "not_running": "not running (no intraday prices yet)",
+}
+
+
+def _section_lines(section: DigestSection, signals: Sequence[DigestSignal]) -> list[str]:
+    live = [s for s in signals if not s.research_only]
+    research = [s for s in signals if s.research_only]
+    if live:
+        head = f"{section.name}: {len(live)} to buy"
+    elif section.state == "live":
+        head = f"{section.name}: nothing new to buy"
+    else:
+        head = f"{section.name}: {_NOTHING.get(section.state, 'nothing to buy')}"
+    lines = [head, *[_signal_line(s) for s in live]]
+    if research:
+        by_key: dict[str, list[str]] = {}
+        for s in research:
+            by_key.setdefault(s.strategy_key, []).append(s.ticker)
+        lines.append(f"Research only, not trades ({len(research)}):")
+        lines += [f"• {key}: {', '.join(tickers)}" for key, tickers in by_key.items()]
+    return lines
 
 
 def _signed_r(r: Decimal) -> str:
@@ -255,6 +283,7 @@ def digest_signals(rows: Sequence[tuple[str, bool, Mapping[str, Any]]]) -> list[
             int(p["conviction"]),
             Decimal(str(p["entry_zone"]["low"])),
             Decimal(str(p["stop"]["price"])),
+            str(p["tier"]),
         )
         for key, research, p in rows
     ]

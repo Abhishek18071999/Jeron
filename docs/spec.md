@@ -36,8 +36,13 @@ payments, marketing pages or compliance flows now.
 | Tier | Holding period | Starting brain weights (Tech / Fund / News) |
 |---|---|---|
 | Swing | 3–15 trading days | 60 / 15 / 25 |
+| Intraday | same session | not set (no intraday data yet) |
 | Positional | 1–6 months | 40 / 35 / 25 |
 | Investing | 6–12+ months | 20 / 60 / 20 |
+
+Each tier is its own section of the app with its own strategies (added 2026-10-17 at
+my request; `docs/plans/sections-v1.md`). Intraday needs intraday prices from a source
+I approve (section 0, rule 6) before any intraday strategy is built.
 
 Weights are starting points; the backtester picks the final ones per tier using
 walk-forward tests and logs them.

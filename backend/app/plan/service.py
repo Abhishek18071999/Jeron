@@ -193,7 +193,9 @@ def context(
 
 
 def tier_of(value: str | None) -> Tier:
-    """The plan's tier; a signal's "invest" tier uses the positional limits."""
+    """The plan's tier (swing when not given)."""
+    if value == "invest":
+        return Tier.INVEST
     return Tier.SWING if value in (None, "", "swing") else Tier.POSITIONAL
 
 

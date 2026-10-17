@@ -819,7 +819,7 @@ export type PlanCheck = {
 export type PlanResult = {
   entry: string;
   stop: string;
-  tier: "swing" | "positional";
+  tier: "swing" | "positional" | "invest";
   shares: number;
   sized_by: string;
   risk_per_share: string;
@@ -853,7 +853,7 @@ export type SavedPlan = {
   ticker: string;
   signal_id: string | null;
   supersedes_id: number | null;
-  tier: "swing" | "positional";
+  tier: "swing" | "positional" | "invest";
   entry: string;
   stop: string;
   target1: string;
@@ -885,7 +885,7 @@ export type PlanView = {
     in_scan: boolean;
   };
   signal: SignalBrief | null;
-  defaults: { entry: string | null; stop: string | null; tier: "swing" | "positional"; reason: string; stop_hint: string };
+  defaults: { entry: string | null; stop: string | null; tier: "swing" | "positional" | "invest"; reason: string; stop_hint: string };
   mood: { day: string; mode: MoodMode; reason: string; risk_multiplier: number } | null;
   events: { results_date: string | null; results_line: string; blackout: boolean | null; ex_dates: string[] };
   capital: string;
@@ -1045,3 +1045,95 @@ export type StockFundamentals = {
   notes: string[];
   quarters: FundQuarter[];
 };
+
+// --- The four sections (docs/plans/sections-v1.md) ----------------------------------
+
+export type SectionKey = "swing" | "intraday" | "positional" | "invest";
+export type SectionState = "live" | "research" | "untested" | "not_running";
+
+export type SectionStrategy = {
+  key: string;
+  version: string;
+  name: string;
+  summary: string;
+  tier: string;
+  backtested: boolean;
+  passed: boolean;
+  gates_passed: number;
+  gates_total: number;
+  failed_gates: string[];
+  oos_trades: number | null;
+  oos_expectancy_r: number | null;
+  run_id: number | null;
+  account_id: number | null;
+  account_status: string | null;
+  retired_reason: string | null;
+  paper_closed_trades: number;
+  paper_return_pct: number | null;
+  paper_open_positions: number;
+  stage: string;
+};
+
+export type SignalCard = {
+  signal_id: string;
+  ticker: string;
+  signal_date: string;
+  strategy_key: string;
+  research_only: boolean;
+  setup_name: string;
+  strategy_version: string;
+  conviction: number;
+  entry_low: string;
+  entry_high: string;
+  valid_until: string;
+  stop: string;
+  t1: string;
+  t2: string;
+  shares: number;
+  cost: string;
+  cost_pct: string;
+  at_risk: string;
+  at_risk_pct: string;
+  what: string;
+  when: string;
+  how_much: string;
+  cancel_if: string;
+  why: string[];
+  exit_plan: string;
+  holding: string;
+  event_risk: string;
+  backtest: string;
+  notes: string[];
+};
+
+export type SectionPosition = {
+  account_id: number;
+  strategy_key: string;
+  research_only: boolean;
+  ticker: string;
+  entry_date: string;
+  entry_price: string;
+  current_stop: string | null;
+  last_close: string | null;
+  shares_held: number;
+  r_multiple: string;
+};
+
+export type SectionSummary = {
+  key: SectionKey;
+  name: string;
+  holding: string;
+  about: string;
+  tier: string | null;
+  state: SectionState;
+  headline: string;
+  as_of: string | null;
+  max_positions: number | null;
+  live_signals: number;
+  research_signals: number;
+  open_positions: number;
+  strategies: SectionStrategy[];
+  needs: string[];
+};
+
+export type SectionDetail = SectionSummary & { signals: SignalCard[]; positions: SectionPosition[] };

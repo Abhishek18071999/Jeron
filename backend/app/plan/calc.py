@@ -138,8 +138,8 @@ def sized_by(
 
 
 def build_plan(p: PlanInputs) -> Plan:
-    rules = rules_for(p.risk_pct)
     tier = TIERS[p.tier]
+    rules = tier.apply(rules_for(p.risk_pct))
     entry, stop = float(p.entry), float(p.stop)
     distance = entry - stop
     capital = float(p.capital)
