@@ -381,6 +381,18 @@ def save_evaluation(session: Session, ev: Evaluation, duration: float) -> Backte
     return run
 
 
+def missing_inputs(market: Market, strategy: Strategy) -> str | None:
+    """Why `strategy` can't be tested on `market` (results calendar or fundamentals not
+    loaded yet), or None. A strategy says so by raising ValueError on its inputs."""
+    try:
+        strategy.condition(market, strategy.default)
+        if strategy.exit_condition is not None:
+            strategy.exit_condition(market, strategy.default)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
 def run_backtests(
     session: Session,
     keys: Sequence[str] | None = None,
@@ -395,8 +407,19 @@ def run_backtests(
     if market is None:
         market = build_market(load_inputs(session, start, end, log=log))
         log(f"Market ready: {len(market.symbols)} stocks in {time.perf_counter() - started:.1f} s")
-    evaluations: list[Callable[[], Evaluation]] = [partial(evaluate, market, s) for s in strategies]
+    ready = []
+    for s in strategies:
+        missing = missing_inputs(market, s)
+        if missing:
+            log(f"{s.key}: skipped, {missing}")
+        else:
+            ready.append(s)
+    evaluations: list[Callable[[], Evaluation]] = [partial(evaluate, market, s) for s in ready]
     for b in books:
+        missing = next(filter(None, (missing_inputs(market, s) for s in b.members)), None)
+        if missing:
+            log(f"{b.key}: skipped, {missing}")
+            continue
         counted = [STRATEGIES[k] for k in b.trial_keys] if b.trial_keys else STRATEGIES.values()
         log(f"Training every variant of {len(counted)} strategies for the deflated Sharpe")
         trials = all_trial_sharpes(market, counted)

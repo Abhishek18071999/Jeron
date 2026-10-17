@@ -4,10 +4,12 @@ x-backend-env: &backend-env
   JERON_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jeron}:${POSTGRES_PASSWORD:-jeron}@db:5432/${POSTGRES_DB:-jeron}
   JERON_CORS_ORIGINS: http://localhost:3000
   JERON_DATA_DIR: /data
+  JERON_IMPORTS_DIR: /imports
   JERON_CAPITAL: ${JERON_CAPITAL:-1000000}
   JERON_RISK_PCT: ${JERON_RISK_PCT:-1}
   JERON_MAX_POSITIONS_SWING: ${JERON_MAX_POSITIONS_SWING:-5}
   JERON_MAX_POSITIONS_POSITIONAL: ${JERON_MAX_POSITIONS_POSITIONAL:-8}
+  JERON_MAX_POSITIONS_INVEST: ${JERON_MAX_POSITIONS_INVEST:-15}
   JERON_SECTOR_CAP_PCT: ${JERON_SECTOR_CAP_PCT:-30}
   # Alerts (M5): set these in .env, never in this file.
   JERON_TELEGRAM_BOT_TOKEN: ${JERON_TELEGRAM_BOT_TOKEN:-}
@@ -57,6 +59,9 @@ services:
     volumes:
       # Downloaded NSE files, kept so history can be re-read without downloading again.
       - marketdata:/data
+      # Drop NSE CSVs (results, deals, board meetings) or a tradebook here, or upload
+      # them on the Setup page: the scheduler imports them (app/autopilot.py).
+      - ./imports:/imports
     depends_on:
       db:
         condition: service_healthy
@@ -69,7 +74,8 @@ services:
       retries: 20
 
   # Runs the daily job at 19:00 IST, the pre-open check at 08:30 IST and the weekly
-  # summary after Friday's run (app/scheduler.py).
+  # summary after Friday's run (app/scheduler.py), and sets up a new install by itself:
+  # history, news, imports, backtests (app/autopilot.py; progress on the Setup page).
   scheduler:
     build: ./backend
     command: ["python", "-m", "app.scheduler"]
@@ -77,6 +83,7 @@ services:
       <<: *backend-env
     volumes:
       - marketdata:/data
+      - ./imports:/imports
     depends_on:
       backend:
         condition: service_healthy
