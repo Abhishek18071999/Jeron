@@ -11,7 +11,7 @@ from app.backtest.strategies import STRATEGIES
 from app.config import Settings
 from app.journal.service import add_fill, decide, update_entry
 from app.main import app
-from app.models import Alert, PaperAccount, PaperDay
+from app.models import Alert, BacktestTrade, PaperAccount, PaperDay
 from app.paper.job import retired_account
 from app.signals.build import IST
 from tests.conftest import requires_db
@@ -81,6 +81,16 @@ def test_revalidation_retires_and_paper_stops(empty_session):
     account.strategy_version = STRATEGIES["score-swing"].version
     for i in range(ROLLING_TRADES):
         s.add(_paper_trade(account, i, None, f"S{i}", date(2025, 1, 1), -0.2))
+    for i in range(40):
+        s.add(
+            BacktestTrade(
+                run_id=account.backtest_run_id, seq=i, segment="oos", symbol="X", variant="v",
+                signal_date=FRIDAY, entry_date=FRIDAY, exit_date=FRIDAY, entry_price=1,
+                stop_price=1, target_price=1, exit_price=1, shares=1, exit_reason="stop",
+                gross_pnl=0, charges=0, dividends=0, net_pnl=0, r_multiple=(2, -1)[i % 2],
+                regime="bull", score=90, sessions=1,
+            )
+        )  # fmt: skip
     s.add(
         PaperDay(account_id=account.id, trade_date=FRIDAY, equity=1,
                  drawdown_pct=Decimal("16"), heat_pct=0, open_positions=0)
@@ -97,6 +107,9 @@ def test_revalidation_retires_and_paper_stops(empty_session):
     assert retired_account(s, STRATEGIES["score-swing"]) is not None
     assert outcome.sent == ["weekly:2025-W11"]
     assert "RETIRED BY THE WEEKLY REVALIDATION" in channel.sent[0][1]
+    (early,) = w.early_warnings
+    assert early.startswith("score-swing-v") and "Last 20 trades average -0.20R" in early
+    assert "EARLY WARNINGS" in channel.sent[0][1]
     run_weekly(s, FRIDAY, settings=Settings(web_url=""), channels=[channel], now=now)
     assert len(channel.sent) == 1  # once per week
     assert s.scalar(select(Alert.kind).where(Alert.key == "weekly:2025-W11")) == "weekly"
@@ -108,6 +121,16 @@ def test_weekly_api_is_read_only(empty_session):
     account = make_account(s, live=True, summary=SUMMARY)
     for i in range(ROLLING_TRADES):
         s.add(_paper_trade(account, i, None, f"S{i}", date(2025, 1, 1), -0.2))
+    for i in range(40):
+        s.add(
+            BacktestTrade(
+                run_id=account.backtest_run_id, seq=i, segment="oos", symbol="X", variant="v",
+                signal_date=FRIDAY, entry_date=FRIDAY, exit_date=FRIDAY, entry_price=1,
+                stop_price=1, target_price=1, exit_price=1, shares=1, exit_reason="stop",
+                gross_pnl=0, charges=0, dividends=0, net_pnl=0, r_multiple=(2, -1)[i % 2],
+                regime="bull", score=90, sessions=1,
+            )
+        )  # fmt: skip
     s.commit()
     body = TestClient(app).get("/analytics/weekly", params={"day": "2025-03-14"}).json()
     assert body["week_start"] == "2025-03-10" and "MY REAL EDGE" in body["text"]

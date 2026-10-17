@@ -17,6 +17,7 @@ from app.analytics.compare import (
     Pair,
     Record,
     divergence,
+    early_warning,
     paper_gate,
     real_gate,
     record,
@@ -44,6 +45,7 @@ class StrategyCompare:
     real_range: tuple[float, float] | None
     stage: str
     divergence: Divergence | None
+    early_warning: str | None = None  # the paper record's last 20 trades
 
 
 def _num(value: Any) -> float | None:
@@ -202,6 +204,9 @@ def compare(session: Session, as_of: date | None = None) -> list[StrategyCompare
                 r_range,
                 stage(account.live_eligible, p_gate, r_gate),
                 divergence(pairs, skipped_rs) if (pairs or skipped_rs) else None,
+                early_warning(
+                    [t.r for t in sorted(paper_closed, key=lambda t: t.closed)], backtest_rs
+                ),
             )
         )
     if own:

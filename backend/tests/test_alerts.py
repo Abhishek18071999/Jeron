@@ -51,6 +51,10 @@ def test_signal_message_has_every_part_of_the_plan():
     research = signal_message(payload, research_only=True, web_url="http://x")
     assert research.startswith("RESEARCH ONLY, not a trade: AAA")
     assert "not passed the backtest bar" in research
+    assert "How: 09:00-09:07, LIMIT BUY 1,980 at ₹101.00" in text
+    assert "it stays as a limit for the day" in text  # an engine-v2 account's signal
+    v3 = payload | {"invalidation": "Don't buy if it opens above ₹101.00 or below the stop"}
+    assert "Not filled by 09:15: cancel it." in signal_message(v3, False, "")
 
 
 def digest(**kw):

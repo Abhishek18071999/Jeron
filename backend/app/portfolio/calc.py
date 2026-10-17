@@ -11,6 +11,11 @@ Definitions (the engine's, `app.backtest.engine`):
 - sector exposure = shares x last close per sector, as a % of capital; the sector cap is
   `JERON_SECTOR_CAP_PCT`. Stocks without a known sector are grouped as "Unknown".
 
+- idle cash = capital - open positions at cost - the cost of the next session's live
+  signals not yet taken. The backtests credit idle cash with a liquid-fund rate (6.5% a
+  year, about 30% of rs-pullback's backtest gain), which a broker balance doesn't earn,
+  so idle cash above `IDLE_CASH_MIN` gets a line saying to park it.
+
 Capital is `JERON_CAPITAL`: the journal does not know the account's cash.
 """
 
@@ -20,6 +25,8 @@ from datetime import date
 from decimal import Decimal
 
 ZERO = Decimal(0)
+# Below this, idle cash isn't worth a reminder.
+IDLE_CASH_MIN = Decimal("50000")
 UNKNOWN_SECTOR = "Unknown"
 
 
@@ -68,6 +75,10 @@ class Holding:
         return _q(max(ZERO, self.avg_entry - self.stop) * self.shares)
 
     @property
+    def cost(self) -> Decimal:
+        return _q(self.avg_entry * self.shares)
+
+    @property
     def give_back(self) -> Decimal | None:
         if self.stop is None or self.last_close is None:
             return None
@@ -109,6 +120,25 @@ class PortfolioTotals:
     capital: Decimal
     sectors: list[SectorExposure]
     warnings: list[str]
+    invested: Decimal = ZERO  # open positions at cost
+    pending_cost: Decimal = ZERO  # the next session's live signals not yet taken
+    idle_cash: Decimal = ZERO
+    cash_action: str | None = None  # park idle cash, or free some up
+
+
+def idle_cash_line(idle: Decimal) -> str | None:
+    """What to do with idle cash: park it in a liquid fund, or free some up."""
+    if idle >= IDLE_CASH_MIN:
+        return (
+            f"₹{idle:,.0f} is idle: park it in a liquid fund or liquid ETF (such as "
+            "LIQUIDBEES). The backtests assume idle cash earns 6.5% a year."
+        )
+    if idle < 0:
+        return (
+            f"Open positions and the next session's signals need ₹{-idle:,.0f} more than "
+            "capital: sell that much of the liquid fund before buying, or skip a signal."
+        )
+    return None
 
 
 def totals(
@@ -117,6 +147,7 @@ def totals(
     heat_warn_pct: Decimal,
     heat_block_pct: Decimal,
     sector_cap_pct: Decimal,
+    pending_cost: Decimal = ZERO,
 ) -> PortfolioTotals:
     value = sum((h.value or ZERO for h in holdings), ZERO)
     pnl = sum((h.pnl or ZERO for h in holdings), ZERO)
@@ -163,6 +194,8 @@ def totals(
             f"{without_stop} open position{'s' if without_stop > 1 else ''} without a stop: "
             "its risk is unknown. Add a stop in the journal."
         )
+    invested = sum((h.cost for h in holdings), ZERO)
+    idle = capital - invested - pending_cost
     return PortfolioTotals(
         positions=len(holdings),
         value=_q(value),
@@ -177,4 +210,8 @@ def totals(
         capital=capital,
         sectors=sectors,
         warnings=warnings,
+        invested=_q(invested),
+        pending_cost=_q(pending_cost),
+        idle_cash=_q(idle),
+        cash_action=idle_cash_line(idle),
     )
