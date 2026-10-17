@@ -232,7 +232,8 @@ export function LinkButton({
   );
 }
 
-// "Run this to fill it": every empty screen says which command fills it.
+// Every empty screen says what fills it: Jeron runs these jobs by itself (the Setup
+// page shows progress); the command is there for running one by hand.
 export function EmptyState({
   children,
   command,
@@ -245,7 +246,8 @@ export function EmptyState({
       <p>{children}</p>
       {command && (
         <p className="mt-1.5">
-          Run <code>{command}</code>
+          Jeron does this by itself while it runs; <Link href="/setup" className="underline">Setup</Link> shows
+          progress. To run it now by hand: <code>{command}</code>
         </p>
       )}
     </div>

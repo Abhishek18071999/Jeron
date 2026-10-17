@@ -84,8 +84,7 @@ def _view(items: list[NewsItemOut], labeller: str) -> NewsOut:
     note = None
     if not ready:
         note = (
-            missing_key(settings).split(":")[0]
-            + ", so headlines show without good or bad labels. The Setup page says how to add one."
+            missing_key(settings).split(":")[0] + ", so headlines show without good or bad labels."
         )
     elif items and all(i.sentiment is None for i in items if i.material):
         note = "Not labelled yet: the news labeller reads new announcements after each daily run."

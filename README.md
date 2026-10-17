@@ -44,7 +44,16 @@ Drive, iCloud) to keep a copy off this computer. One backup now:
 
 ## Load market data
 
-With Jeron running, open a second terminal in the `Jeron` folder.
+**You don't have to.** While Jeron runs, its scheduler sets itself up: it downloads the
+price history, reads the company announcements, imports the bundled quarterly results
+(2016 to 2024), labels news when a key is set, and backtests every strategy. The
+**Setup** page (Research > Setup) shows what is done, what is running and the few things
+only you can do (API keys and the Telegram bot in `.env`). Files from nseindia.com or
+Kite (newer results, deals, insider trades, a tradebook) can be uploaded there or copied
+into the `imports` folder; Jeron recognises each by its columns.
+
+The steps below do the same by hand. With Jeron running, open a second terminal in the
+`Jeron` folder.
 
 1. Download NSE's price history since 2016 (about 1.5 hours; if it stops, run it
    again and it continues where it left off):
