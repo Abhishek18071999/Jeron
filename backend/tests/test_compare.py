@@ -11,6 +11,7 @@ from app.analytics.compare import (
     ClosedTrade,
     Pair,
     divergence,
+    early_warning,
     expected_range,
     paper_gate,
     real_gate,
@@ -49,6 +50,16 @@ def test_expected_range_narrows_with_more_trades():
     assert short[0] < long[0] < 0.375 < long[1] < short[1]
     assert expected_range(ref, 10) == short  # seeded: reproducible
     assert expected_range([], 10) is None
+
+
+def test_early_warning_after_20_trades_below_the_backtest():
+    backtest = [2.0, -1.0, -1.0, 1.5, 0.5] * 40  # +0.40R a trade
+    assert early_warning([-0.6] * 19, backtest) is None  # too few trades
+    assert early_warning([0.3] * 20, backtest) is None  # inside the range
+    warning = early_warning([5.0] * 10 + [-0.6] * 20, backtest)  # only the newest 20 count
+    assert warning is not None and warning.startswith("Last 20 trades average -0.60R")
+    assert "A warning only" in warning
+    assert early_warning([-0.6] * 20, []) is None
 
 
 def test_paper_gate():

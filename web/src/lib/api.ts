@@ -710,6 +710,7 @@ export type StrategyCompare = {
     skipped_winners: number;
     causes: string[];
   } | null;
+  early_warning: string | null; // last 20 paper trades below the backtest's 5th percentile
 };
 
 // --- Market mood and portfolio (UI phase 1) --------------------------------------------
@@ -798,6 +799,10 @@ export type Portfolio = {
     capital: string;
     sectors: { sector: string; positions: number; value: string; pct_of_capital: string; over_cap: boolean }[];
     warnings: string[];
+    invested: string;
+    pending_cost: string;
+    idle_cash: string;
+    cash_action: string | null; // park idle cash in a liquid fund, or free some up
   };
 };
 

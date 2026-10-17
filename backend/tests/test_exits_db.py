@@ -104,6 +104,8 @@ def test_sent_once_per_day(empty_session):
     settings = Settings(web_url="")
     _, outcome = run_preopen(s, DAYS[45], settings=settings, channels=[channel], now=now)
     assert outcome.sent == [f"preopen:{DAYS[45]}"]
+    # Two small positions on the default ₹10 lakh capital: most of it is idle.
+    assert "\nCASH\n- ₹" in channel.sent[0][1] and "is idle: park it" in channel.sent[0][1]
     _, again = run_preopen(s, DAYS[45], settings=settings, channels=[channel], now=now)
     assert again.already_sent == 1 and len(channel.sent) == 1
     alert = s.scalar(select(Alert).where(Alert.kind == "preopen"))

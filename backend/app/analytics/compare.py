@@ -11,6 +11,12 @@ Each strategy moves through four stages, each with a gate:
 replacement) from the reference trades, n being the number of trades compared. A short
 paper record gets a wide range, a long one a narrow range.
 
+Early warning: when the last `EARLY_TRADES` closed trades average below the 5th
+percentile of what that many backtest trades give, the strategy may have stopped working.
+It is a warning only (consider half risk); retirement stays the weekly revalidation's
+50-trade rule. Checked every week on a rolling window, it will sometimes fire on a
+strategy that is fine.
+
 When my real trades differ from paper, the likely causes are measured from the signals
 both traded: entry slippage, late entries, different exits, and skipped signals.
 """
@@ -29,6 +35,7 @@ SIMULATIONS = 2000
 SLIPPAGE_R = 0.1
 LATE_DAYS = 1.0
 EXIT_GAP_R = 0.2
+EARLY_TRADES = 20
 
 
 @dataclass(frozen=True)
@@ -128,6 +135,24 @@ def expected_range(
     lo = means[int(len(means) * RANGE_PCT[0] / 100)]
     hi = means[min(int(len(means) * RANGE_PCT[1] / 100), len(means) - 1)]
     return lo, hi
+
+
+def early_warning(recent_rs: Sequence[float], backtest_rs: Sequence[float]) -> str | None:
+    """A warning if the newest `EARLY_TRADES` trades (oldest first in `recent_rs`) average
+    below the backtest's 5th percentile for that many trades."""
+    if len(recent_rs) < EARLY_TRADES:
+        return None
+    band = expected_range(backtest_rs, EARLY_TRADES)
+    if band is None:
+        return None
+    mean = sum(recent_rs[-EARLY_TRADES:]) / EARLY_TRADES
+    if mean >= band[0]:
+        return None
+    return (
+        f"Last {EARLY_TRADES} trades average {mean:+.2f}R, below the backtest's 5th "
+        f"percentile for {EARLY_TRADES} trades ({band[0]:+.2f}R): consider half risk until "
+        "it recovers. A warning only; nothing changes automatically."
+    )
 
 
 def _within(value: float, band: tuple[float, float] | None) -> bool:

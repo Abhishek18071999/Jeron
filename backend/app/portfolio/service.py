@@ -1,9 +1,11 @@
 """The portfolio from the database: open journal positions with the pre-open check's
 exit plan (`app.exits.job`), sectors and the section 5 limits from settings."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,9 +14,9 @@ from app.backtest.engine import PortfolioRules
 from app.calendar.nse import TradingCalendar
 from app.config import Settings
 from app.enums import Exchange
-from app.exits.job import PositionCheck, build_preopen, check_day
+from app.exits.job import PositionCheck, PreOpen, build_preopen, check_day
 from app.journal.service import EntryView, entry_views
-from app.models import Instrument, JournalEntry
+from app.models import Instrument, JournalEntry, SignalRecord
 from app.portfolio.calc import Holding, PortfolioTotals, totals
 from app.settings_store import effective_settings
 from app.signals.build import IST
@@ -73,18 +75,41 @@ def holding(check: PositionCheck, view: EntryView, sector: str | None) -> Holdin
     )
 
 
+def pending_cost(session: Session, signal_day: date | None) -> Decimal:
+    """What the live signals issued at `signal_day`'s close, with no journal entry yet,
+    would cost at the top of their entry zones."""
+    if signal_day is None:
+        return Decimal(0)
+    payloads: Iterable[dict[str, Any]] = session.scalars(
+        select(SignalRecord.payload)
+        .outerjoin(JournalEntry, JournalEntry.signal_id == SignalRecord.signal_id)
+        .where(
+            JournalEntry.id.is_(None),
+            SignalRecord.signal_date == signal_day,
+            SignalRecord.research_only.is_(False),
+        )
+    )
+    return sum(
+        (Decimal(str(p["entry_zone"]["high"])) * int(p["shares"]) for p in payloads), Decimal(0)
+    )
+
+
 def portfolio(
     session: Session,
     day: date | None = None,
     *,
     settings: Settings | None = None,
     now: datetime | None = None,
+    pre: PreOpen | None = None,
 ) -> Portfolio:
-    """Open positions as the next pre-open check (or `day`'s) sees them."""
+    """Open positions as the next pre-open check (or `day`'s) sees them. `pre` reuses a
+    pre-open check already built."""
     settings = settings or effective_settings(session)
     calendar = TradingCalendar.default()
-    day = day or check_day(calendar, now or datetime.now(IST))
-    p = build_preopen(session, day, calendar)
+    if pre is None:
+        day = day or check_day(calendar, now or datetime.now(IST))
+        pre = build_preopen(session, day, calendar)
+    p = pre
     ids = [c.entry_id for c in p.positions]
     entries = session.scalars(select(JournalEntry).where(JournalEntry.id.in_(ids))).all()
     views = {v.entry.id: v for v in entry_views(session, entries, as_of=p.data_as_of)}
@@ -109,5 +134,6 @@ def portfolio(
             Decimal(str(RULES.heat_warn_pct)),
             Decimal(str(RULES.heat_block_pct)),
             Decimal(str(settings.sector_cap_pct)),
+            pending_cost(session, p.data_as_of),
         ),
     )

@@ -7,6 +7,9 @@ Summary, after the last session of each week:
   trades I marked as deviating from the plan;
 - what strict rule-following would have made: the paper results of the same signals.
 
+Early warnings (`app.analytics.compare.early_warning`): an active account whose last 20
+paper trades average below the backtest's 5th percentile is listed, with no change made.
+
 Revalidation: a strategy whose rolling 50-trade expectancy (paper, or my real trades)
 falls below 0, or whose paper drawdown exceeds 1.5 x its backtest maximum, is retired:
 its paper account stops issuing signals, and the summary says so. Retired accounts are
@@ -24,9 +27,10 @@ from sqlalchemy.orm import Session
 from app.alerts.channels import Channel, channels_from
 from app.alerts.format import inr
 from app.alerts.job import NOT_SET_UP, AlertOutcome, _send
+from app.analytics.compare import EARLY_TRADES, early_warning
 from app.config import Settings, get_settings
 from app.journal.service import EntryView, entry_views
-from app.models import BacktestRun, PaperAccount, PaperDay, PaperTrade
+from app.models import BacktestRun, BacktestTrade, PaperAccount, PaperDay, PaperTrade
 from app.signals.build import IST
 
 Log = Callable[[str], None]
@@ -80,6 +84,7 @@ class Weekly:
     strict_count: int = 0
     retired: list[Retirement] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    early_warnings: list[str] = field(default_factory=list)
 
 
 def week_start(day: date) -> date:
@@ -156,6 +161,29 @@ def revalidate(session: Session, day: date, retire: bool = True) -> list[Retirem
                 account.retired_reason = reason[:300]
                 account.retired_on = day
     session.commit()
+    return out
+
+
+def early_warnings(session: Session) -> list[str]:
+    """Active accounts whose last 20 paper trades fell below the backtest's range."""
+    out = []
+    for account in session.scalars(
+        select(PaperAccount).where(PaperAccount.status == "active").order_by(PaperAccount.id)
+    ):
+        newest = session.scalars(
+            select(PaperTrade.r_multiple)
+            .where(PaperTrade.account_id == account.id, PaperTrade.status == "closed")
+            .order_by(PaperTrade.exit_date.desc(), PaperTrade.seq.desc())
+            .limit(EARLY_TRADES)
+        ).all()
+        backtest = session.scalars(
+            select(BacktestTrade.r_multiple).where(
+                BacktestTrade.run_id == account.backtest_run_id, BacktestTrade.segment == "oos"
+            )
+        ).all()
+        warning = early_warning([float(r) for r in reversed(newest)], [float(r) for r in backtest])
+        if warning:
+            out.append(f"{account.strategy_version}: {warning}")
     return out
 
 
@@ -254,6 +282,7 @@ def build_weekly(session: Session, day: date, retire: bool = True) -> Weekly:
         if r > 0:
             what = "skipped" if mine is not None else "not acted on"
             w.mistakes.append(f"{paper.ticker}: {what}; paper made {r:+.2f}R")
+    w.early_warnings = early_warnings(session)
     w.retired = revalidate(session, day, retire)
     return w
 
@@ -277,6 +306,9 @@ def weekly_message(w: Weekly, web_url: str = "") -> str:
         )
     else:
         lines.append("No signals of live strategies closed this week.")
+    if w.early_warnings:
+        lines += ["", "EARLY WARNINGS"]
+        lines += [f"- {e}" for e in w.early_warnings]
     if w.retired:
         lines += ["", "RETIRED BY THE WEEKLY REVALIDATION"]
         lines += [f"- {r.strategy_version}: {r.reason}" for r in w.retired]

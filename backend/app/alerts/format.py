@@ -42,6 +42,20 @@ def journal_link(web_url: str, signal_id: str) -> str:
     return f"{web_url.rstrip('/')}/journal?signal={signal_id}"
 
 
+def _order_line(p: Mapping[str, Any]) -> str:
+    """How to place the buy in the pre-open auction (09:00-09:07): a limit at the top of
+    the zone fills at the auction price whenever that is at or below it."""
+    line = (
+        f"How: 09:00-09:07, LIMIT BUY {int(p['shares']):,} at {inr(p['entry_zone']['high'])} "
+        "in the pre-open auction (it fills at the auction price if that is lower). "
+    )
+    # engine-v3 signals skip a buy that opens above the zone ("opens above" in the
+    # invalidation); accounts on engine-v2's rules still buy if the day trades down to it.
+    if "opens above" in p["invalidation"]:
+        return line + "Not filled by 09:15: cancel it."
+    return line + "Not filled by 09:15: it stays as a limit for the day."
+
+
 def signal_message(payload: Mapping[str, Any], research_only: bool, web_url: str) -> str:
     """One signal (spec section 4 payload) as an alert."""
     p = payload
@@ -58,6 +72,7 @@ def signal_message(payload: Mapping[str, Any], research_only: bool, web_url: str
         "",
         f"Buy between {inr(zone['low'])} and {inr(zone['high'])}, "
         f"valid until {_day(zone['valid_until'])}",
+        _order_line(p),
         f"Stop {inr(stop['price'])} ({stop['reason']})",
         f"T1 {inr(targets['t1'])} · T2 {inr(targets['t2'])} ({targets['basis']}); "
         f"reward:risk {_num(p['risk_reward_t1'], 1)} / {_num(p['risk_reward_t2'], 1)} "

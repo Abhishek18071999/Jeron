@@ -243,6 +243,21 @@ export function PlanForm({ symbol, signalId, initial, stopHint, plan: first, che
           </div>
 
           <div>
+            <h3 className="mb-1.5 text-sm font-semibold">Placing the order in Kite</h3>
+            <ol className="list-decimal space-y-1 rounded-lg border border-line py-2 pl-8 pr-3 text-sm">
+              <li>
+                Between 09:00 and 09:07, a LIMIT BUY for {plan.shares.toLocaleString("en-IN")} shares at {inr(plan.entry)}.
+                In the pre-open auction it fills at the auction price whenever that is at or below your limit.
+              </li>
+              <li>
+                Not filled when trading starts at 09:15? Cancel it: it would only fill if the stock falls back to it
+                after opening higher, the buy the backtests skip.
+              </li>
+              <li>After the buy, a GTT stop-loss order at {inr(plan.stop)}: the stop counts during the day.</li>
+            </ol>
+          </div>
+
+          <div>
             <h3 className="mb-1.5 text-sm font-semibold">Checks</h3>
             <ul className="divide-y divide-line rounded-lg border border-line">
               {[...hard, ...soft].map((c) => {

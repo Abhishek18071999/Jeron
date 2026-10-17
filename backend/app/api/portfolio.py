@@ -57,6 +57,10 @@ class TotalsOut(BaseModel):
     capital: Decimal
     sectors: list[SectorExposure]
     warnings: list[str]
+    invested: Decimal
+    pending_cost: Decimal
+    idle_cash: Decimal
+    cash_action: str | None
 
 
 class PortfolioOut(BaseModel):

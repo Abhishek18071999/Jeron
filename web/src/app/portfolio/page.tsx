@@ -77,6 +77,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
           {w}
         </Notice>
       ))}
+      {t.cash_action && <Notice>{t.cash_action}</Notice>}
 
       {t.positions === 0 ? (
         <Card>

@@ -87,3 +87,19 @@ def test_sector_exposure_and_cap():
     assert not t.sectors[0].over_cap
     assert t.warnings == ["IT is 35.0% of capital, above the 30% sector cap."]
     assert t.positions == 4 and t.value == Decimal("85000.00") and t.pnl == Decimal("4000.00")
+
+
+def test_idle_cash_is_flagged_both_ways():
+    # 100 shares at 100 = 10,000 invested; 20,000 of signals to buy at the next open.
+    t = totals([_h()], Decimal("100000"), Decimal(5), Decimal(6), Decimal(30), Decimal("20000"))
+    assert (t.invested, t.pending_cost, t.idle_cash) == (
+        Decimal("10000.00"),
+        Decimal("20000.00"),
+        Decimal("70000.00"),
+    )
+    assert t.cash_action is not None and t.cash_action.startswith("₹70,000 is idle: park it")
+    small = totals([_h()], Decimal("50000"), Decimal(5), Decimal(6), Decimal(30), Decimal("1000"))
+    assert small.cash_action is None  # 39,000 idle: under the line
+    short = totals([_h()], Decimal("25000"), Decimal(5), Decimal(6), Decimal(30), Decimal("20000"))
+    assert short.cash_action is not None
+    assert short.cash_action.startswith("Open positions and the next session's signals need ₹5,000")

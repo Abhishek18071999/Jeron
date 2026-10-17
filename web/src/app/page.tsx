@@ -271,6 +271,11 @@ function YourRisk({ p }: { p: Portfolio | null }) {
           ))}
         </div>
       )}
+      {t.cash_action && (
+        <div className="mt-4">
+          <Notice>{t.cash_action}</Notice>
+        </div>
+      )}
     </Card>
   );
 }

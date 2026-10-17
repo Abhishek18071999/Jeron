@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { Card } from "@/components/ui";
+import { Card, Notice } from "@/components/ui";
 import { type CompareGate, type CompareRecord, getJson, type StrategyCompare } from "@/lib/api";
 
 import { num, pct, signClass } from "../backtests/format";
@@ -90,6 +90,11 @@ export default async function ComparePage() {
               <GateNote gate={s.paper_gate} />
               <GateNote gate={s.real_gate} />
             </ul>
+            {s.early_warning && (
+              <div className="mt-3">
+                <Notice tone="warn">{s.early_warning}</Notice>
+              </div>
+            )}
             {s.divergence && (
               <div className="mt-3 text-sm">
                 <div className="font-medium">Real vs paper on the same signals ({s.divergence.pairs} traded)</div>

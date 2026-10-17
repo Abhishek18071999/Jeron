@@ -66,13 +66,13 @@ are part of done, never commit secrets.
     rules on one position; pure, checked against the engine) and `job.py` (the pre-open
     check: action per open position, results and ex-dates ahead, stale-data guard).
   - `app/analytics/` `compare.py` (backtest vs paper vs real: gates, expected ranges,
-    stages, causes of divergence; pure), `service.py` (database) and `weekly.py` (weekly
+    stages, causes of divergence, the 20-trade early warning; pure), `service.py` (database) and `weekly.py` (weekly
     summary and revalidation, which retires failing strategies' paper accounts).
   - `app/market/` the market mood (decision 0009): `mood.py` (breadth above the 200-day
     EMA, 52-week highs/lows, the engine's regime filter, attack/normal/defend, sector
     strength; pure) and `service.py` (database). Served at `/market/mood`.
   - `app/portfolio/` my real portfolio: `calc.py` (open risk, heat, give-back, sector
-    exposure vs settings; pure) and `service.py` (journal positions + the pre-open exit
+    exposure vs settings, idle cash to park in a liquid fund; pure) and `service.py` (journal positions + the pre-open exit
     plan). Served at `/portfolio`.
   - `app/plan/` trade plans (decision 0010): `calc.py` (the engine's `position_size` and
     `reward_risk`, spec section 4 checks, heat and sector after the buy, the 5-item

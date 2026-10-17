@@ -19,7 +19,7 @@ from app.alerts.format import inr
 from app.alerts.job import NOT_SET_UP, AlertOutcome, _send
 from app.backtest.strategies import Tier
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
-from app.config import Settings, get_settings
+from app.config import Settings
 from app.data import store
 from app.data.adjust import AdjustedBar, adjust_bars, build_adjustments
 from app.data.events import next_results
@@ -28,6 +28,7 @@ from app.exits.rules import Action, ExitBar, ExitPlan, exit_plan
 from app.indicators import atr
 from app.journal.service import EntryView, entry_views
 from app.models import DailyBar, JournalEntry, PaperTrade
+from app.settings_store import effective_settings
 from app.signals.build import IST
 
 Log = Callable[[str], None]
@@ -260,7 +261,7 @@ def _line(c: PositionCheck) -> str:
     return "\n".join([text, *(f"  {n}" for n in extra)])
 
 
-def preopen_message(p: PreOpen, web_url: str = "") -> str:
+def preopen_message(p: PreOpen, web_url: str = "", cash_action: str | None = None) -> str:
     lines = [f"Jeron pre-open check, {p.day:%a %-d %b %Y}"]
     if p.stale:
         when = f"{p.data_as_of:%a %-d %b}" if p.data_as_of else "never"
@@ -285,6 +286,8 @@ def preopen_message(p: PreOpen, web_url: str = "") -> str:
     if events:
         lines += ["", f"EVENTS (next {EVENT_SESSIONS} sessions)"]
         lines += [f"- {t}: {e}" for t, e in events]
+    if cash_action and not p.stale:
+        lines += ["", "CASH", f"- {cash_action}"]
     if p.paper_open:
         lines += [
             "",
@@ -306,12 +309,15 @@ def run_preopen(
     send: bool = True,
     log: Log = _quiet,
 ) -> tuple[PreOpen, AlertOutcome]:
-    settings = settings or get_settings()
+    settings = settings or effective_settings(session)
     now = now or datetime.now(IST)
     calendar = TradingCalendar.default()
     day = day or check_day(calendar, now)
     p = build_preopen(session, day, calendar)
-    text = preopen_message(p, settings.web_url)
+    from app.portfolio.service import portfolio  # it builds on this module
+
+    cash = portfolio(session, settings=settings, pre=p).totals.cash_action
+    text = preopen_message(p, settings.web_url, cash)
     log(text)
     outcome = AlertOutcome(day, "ok")
     if not send:
