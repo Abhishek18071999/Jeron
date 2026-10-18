@@ -54,8 +54,10 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma4:31b"
     ollama_base_url: str = "https://ollama.com"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    # The free tier allows 5 a minute; a paid key can go higher.
+    gemini_requests_per_minute: float = Field(default=5, gt=0)
     # Monthly cap on the news labeller's estimated spend, US$ (spec section 10). The
     # labeller stops for the month once it is reached; 0 turns the cap off.
     news_monthly_budget_usd: float = Field(default=20.0, ge=0)

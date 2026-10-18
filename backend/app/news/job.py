@@ -564,7 +564,10 @@ def make_labeller(settings: Settings, model: str | None = None) -> Labeller | No
         if not settings.gemini_api_key:
             return None
         return GeminiLabeller(
-            settings.gemini_api_key, model or settings.gemini_model, settings.gemini_base_url
+            settings.gemini_api_key,
+            model or settings.gemini_model,
+            settings.gemini_base_url,
+            requests_per_minute=settings.gemini_requests_per_minute,
         )
     if settings.news_provider == "deepseek":
         if not settings.deepseek_api_key:
