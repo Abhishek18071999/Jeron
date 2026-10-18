@@ -95,6 +95,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
                 label="P&L"
                 value={<span className={signTone(t.pnl)}>{inrSigned(t.pnl)}</span>}
                 help="Realised and open profit or loss of the open positions, after charges."
+                how="For each open position: what you sold for plus the shares still held at the last close, minus what you paid and every charge in the journal. Added up over the positions."
               />
               <Stat
                 label="Open risk"
@@ -102,11 +103,13 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
                 tone={heat >= Number(t.heat_warn_pct) ? "warn" : "neutral"}
                 sub={`${pctText(heat, 1)} of capital`}
                 help="Entry minus today's stop, times shares, summed. A stop at breakeven or above adds nothing."
+                how={`Shown as a share of your capital (${inr(t.capital, 0)}): that share is the portfolio heat. Above ${pctText(t.heat_warn_pct, 0)} Jeron warns; at ${pctText(t.heat_block_pct, 0)} a new trade plan is blocked.`}
               />
               <Stat
                 label="If every stop is hit"
                 value={inrSigned(-Number(t.give_back))}
                 help="What you would give back from today's close if every position hit its current stop."
+                how="For each position: (last close minus its current stop) times the shares held, added up. It is the worst case if every stop fills exactly; a gap down can cost more. It is not a loss you have now."
                 sub={t.without_stop ? `${t.without_stop} without a stop` : "all positions have a stop"}
               />
             </div>
