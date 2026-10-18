@@ -13,12 +13,12 @@ import {
   Td,
   Th,
   buttonClass,
-  cli,
   inputClass,
   inr,
   pctText,
   shortDate,
   signTone,
+  RunCommand,
 } from "@/components/ui";
 import { type WatchItem, type Watchlist, getJson } from "@/lib/api";
 
@@ -136,7 +136,7 @@ export default async function WatchlistPage({ searchParams }: { searchParams: Pr
               ))}
             </ul>
             <div className="hidden md:block">
-              <Table>
+              <Table stack>
                 <thead>
                   <tr>
                     <Th>Stock</Th>
@@ -159,28 +159,28 @@ export default async function WatchlistPage({ searchParams }: { searchParams: Pr
                 <tbody>
                   {list.items.map((w) => (
                     <tr key={w.ticker} className={w.hit ? "bg-accent-bg/60" : ""}>
-                      <Td>
+                      <Td label="Stock">
                         <Link href={`/stocks/${w.ticker}`} className="font-semibold hover:underline">
                           {w.ticker}
                         </Link>
                         <span className="block max-w-[14rem] truncate text-xs text-muted">{w.name ?? ""}</span>
                       </Td>
-                      <Td num>{inr(w.last_close)}</Td>
-                      <Td num className={signTone(w.change_pct)}>
+                      <Td label="Close" num>{inr(w.last_close)}</Td>
+                      <Td label="Day" num className={signTone(w.change_pct)}>
                         {pctText(w.change_pct, 1, true)}
                       </Td>
-                      <Td>
+                      <Td label="Alert">
                         <AlertCell w={w} />
                         {w.alerted_on && <span className="block text-xs text-muted">alerted {shortDate(w.alerted_on)}</span>}
                       </Td>
-                      <Td num>{toAlert(w)}</Td>
-                      <Td num>{w.below_52w_high_pct === null ? "-" : `-${Number(w.below_52w_high_pct).toFixed(1)}%`}</Td>
-                      <Td num>
+                      <Td label="To alert" num>{toAlert(w)}</Td>
+                      <Td label="From 52w high" num>{w.below_52w_high_pct === null ? "-" : `-${Number(w.below_52w_high_pct).toFixed(1)}%`}</Td>
+                      <Td label="Score" num>
                         {w.score === null ? "-" : Number(w.score).toFixed(0)}
                         {w.rank !== null && <span className="ml-1 text-xs text-muted">#{w.rank}</span>}
                       </Td>
-                      <Td className="max-w-[16rem] text-xs">{w.note}</Td>
-                      <Td num>
+                      <Td label="Note" className="max-w-[16rem] text-xs">{w.note}</Td>
+                      <Td label="" num>
                         <span className="inline-flex items-center gap-3">
                           <Link href={`/plan/${w.ticker}`} className="text-xs font-medium text-accent hover:underline">
                             Plan
@@ -200,7 +200,7 @@ export default async function WatchlistPage({ searchParams }: { searchParams: Pr
         )}
         {list && list.items.length > 0 && !list.day && (
           <p className="mt-3 text-xs text-muted">
-            No prices yet: run <code>{cli("daily")}</code>
+            No prices yet. <RunCommand job="daily" />
           </p>
         )}
       </Card>

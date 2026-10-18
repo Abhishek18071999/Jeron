@@ -2,14 +2,14 @@ import Link from "next/link";
 
 import { MoodBanner, SectorStrength } from "@/components/market";
 import { NewsCard } from "@/components/news";
-import { ActionBadge, HeatMeter, SectorBars } from "@/components/portfolio";
+import { BriefingList } from "@/components/briefing";
+import { HeatMeter, SectorBars } from "@/components/portfolio";
 import { StateBadge } from "@/components/sections";
 import { StatusBadge } from "@/components/status-badge";
 import {
   Badge,
   Card,
   EmptyState,
-  LinkButton,
   Notice,
   Page,
   PageHeader,
@@ -21,10 +21,10 @@ import {
   pctText,
   shortDate,
   signTone,
+  RunCommand,
 } from "@/components/ui";
 import {
   type Dashboard,
-  type Holding,
   type MarketMood,
   type NewsView,
   type Portfolio,
@@ -35,6 +35,7 @@ import {
   fetchHealth,
   getJson,
 } from "@/lib/api";
+import { briefing } from "@/lib/briefing";
 
 export const dynamic = "force-dynamic";
 
@@ -53,19 +54,14 @@ function SystemLine({ ok, db }: { ok: boolean; db: boolean }) {
   );
 }
 
-const ACTION_ORDER: Record<string, number> = { "sell all": 0, "sell half": 1 };
-
-function ActionsDue({ d, p }: { d: Dashboard; p: Portfolio | null }) {
-  const due = (p?.holdings ?? [])
-    .filter((h) => h.problem || h.action === "sell all" || h.action === "sell half")
-    .sort((a, b) => (ACTION_ORDER[a.action ?? ""] ?? 2) - (ACTION_ORDER[b.action ?? ""] ?? 2));
-  const events = (p?.holdings ?? []).flatMap((h) => h.events.map((e) => ({ ticker: h.ticker, e })));
+// The morning briefing: one line per thing to do before the open, ticked off as done.
+function MorningBriefing({ d, p }: { d: Dashboard; p: Portfolio | null }) {
+  const { items, events, headline } = briefing(d, p);
   const holding = (p?.holdings ?? []).filter((h) => h.action === "hold" && !h.problem).length;
   const stale = !!p?.stale && p.holdings.length > 0;
-  const nothing = !stale && due.length === 0 && events.length === 0 && d.pending.length === 0;
   return (
     <Card
-      title="Actions due"
+      title="Morning briefing"
       subtitle={p ? `Before the open on ${shortDate(p.day)}` : undefined}
       action={
         <Link href="/portfolio" className="text-muted hover:text-fg hover:underline">
@@ -74,63 +70,26 @@ function ActionsDue({ d, p }: { d: Dashboard; p: Portfolio | null }) {
       }
     >
       <div className="space-y-3">
+        <p className="text-sm font-medium">{headline}</p>
         {stale && p && (
           <Notice tone="warn">
             Prices for {shortDate(p.expected)} are not loaded (latest: {shortDate(p.data_as_of)}), so no exit
-            actions yet. Run <code>{cli("daily")}</code>
+            actions yet. <RunCommand job="daily" />
           </Notice>
         )}
-        {!stale && due.length > 0 && (
-          <ul className="space-y-2.5">
-            {due.map((h: Holding) => (
-              <li key={h.entry_id} className="text-sm">
-                <div className="flex items-center gap-2">
-                  <Link href={`/journal/${h.entry_id}`} className="font-semibold hover:underline">
-                    {h.ticker}
-                  </Link>
-                  <ActionBadge h={h} />
-                  <span className="ml-auto text-xs text-muted">{h.shares} sh</span>
-                </div>
-                <p className="mt-0.5 text-xs text-muted">{h.problem ?? h.reason}</p>
-              </li>
-            ))}
-          </ul>
-        )}
+        {items.length > 0 && <BriefingList day={p?.day ?? d.as_of ?? "today"} items={items} />}
         {events.length > 0 && (
           <ul className="space-y-1 text-xs">
-            {events.map(({ ticker, e }) => (
-              <li key={`${ticker}-${e}`} className="text-warn">
-                <span className="font-semibold">{ticker}</span>: {e}
+            {events.map((e) => (
+              <li key={e} className="text-warn">
+                {e}
               </li>
             ))}
           </ul>
         )}
-        {d.pending.length > 0 && (
-          <div>
-            <p className="mb-1.5 text-xs font-medium text-muted">
-              Record your fill or skip ({d.pending.length})
-            </p>
-            <ul className="space-y-2">
-              {d.pending.map((s) => (
-                <li key={s.signal_id} className="flex items-center gap-2 text-sm">
-                  <Link href={`/stocks/${s.ticker}`} className="font-semibold hover:underline">
-                    {s.ticker}
-                  </Link>
-                  <span className="truncate text-xs text-muted">
-                    {shortDate(s.signal_date)} · buy {inr(s.entry_low, 0)}–{inr(s.entry_high, 0)}
-                  </span>
-                  <LinkButton href={`/journal/signal/${s.signal_id}`} variant="primary" className="ml-auto">
-                    Record
-                  </LinkButton>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {nothing && (
+        {items.length === 0 && holding > 0 && (
           <p className="text-sm text-muted">
-            Nothing to do before the open.
-            {holding > 0 ? ` ${holding} position${holding > 1 ? "s" : ""} on hold.` : ""}
+            {holding} position{holding > 1 ? "s" : ""} on hold: their stops stay as they are.
           </p>
         )}
         {!p && <Notice tone="bad">Exit plans could not be loaded from the backend.</Notice>}
@@ -500,7 +459,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
       <MoodBanner mood={mood} />
       <SectionsStrip sections={sectionsResult.ok ? sectionsResult.data : null} />
       <div className="grid items-start gap-4 lg:grid-cols-3">
-        <ActionsDue d={d} p={p} />
+        <MorningBriefing d={d} p={p} />
         <NewSignals d={d} />
         <YourRisk p={p} />
       </div>

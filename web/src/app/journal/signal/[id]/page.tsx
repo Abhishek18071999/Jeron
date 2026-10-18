@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { Card, ErrorNote, LinkButton, ResearchBadge, inr } from "@/components/ui";
+import { RRuler } from "@/components/trade-picture";
+import { Card, ErrorNote, LinkButton, ResearchBadge, inr, shortDate } from "@/components/ui";
 import { type SavedPlan, type SignalJournal, getJson } from "@/lib/api";
 
 import { decideSignal } from "../../actions";
@@ -48,10 +49,10 @@ export default async function SignalDecision({
       <Card title="The plan">
         <div className="space-y-2 text-sm">
           <p className="text-muted">
-            {p.setup_name} · {p.strategy_version} · {s.signal_date} · conviction {s.conviction}/5
+            {p.setup_name} · {p.strategy_version} · {shortDate(s.signal_date)} · conviction {s.conviction}/5
           </p>
           <p>
-            Buy between {inr(s.entry_low)} and {inr(s.entry_high)}, valid until {s.valid_until}
+            Buy between {inr(s.entry_low)} and {inr(s.entry_high)}, valid until {shortDate(s.valid_until)}
           </p>
           <p>
             Stop {inr(s.stop)} ({p.stop.reason}) · T1 {inr(s.t1)} · T2 {inr(s.t2)} · reward:risk{" "}
@@ -61,6 +62,7 @@ export default async function SignalDecision({
             {s.shares.toLocaleString("en-IN")} shares, {inr(s.capital_at_risk, 0)} at risk · hold{" "}
             {p.expected_holding.min_days}-{p.expected_holding.max_days} sessions
           </p>
+          <RRuler entry={s.entry_high} stop={s.stop} price={null} t1={s.t1} t2={s.t2} />
           <ul className="list-disc pl-5">
             {p.why.map((w) => (
               <li key={w}>{w}</li>

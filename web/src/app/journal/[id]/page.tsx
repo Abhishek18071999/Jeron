@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { Card, ErrorNote, ResearchBadge, inr, rMultiple } from "@/components/ui";
+import { RRuler } from "@/components/trade-picture";
+import { Card, ErrorNote, ResearchBadge, inr, rMultiple, shortDate } from "@/components/ui";
 import { type JournalEntry, type SavedPlan, getJson } from "@/lib/api";
 
 import { signClass } from "../../backtests/format";
@@ -68,7 +69,7 @@ export default async function EntryPage({
           </div>
           <div>
             <dt className="text-muted">
-              Open P&amp;L{e.last_close_date ? ` at the ${e.last_close_date} close` : ""}
+              Open P&amp;L{e.last_close_date ? ` at the ${shortDate(e.last_close_date)} close` : ""}
             </dt>
             <dd className={signClass(p.open_pnl ?? 0)}>{inr(p.open_pnl)}</dd>
           </div>
@@ -79,12 +80,22 @@ export default async function EntryPage({
         </dl>
         {e.signal && (
           <p className="mt-3 text-sm text-muted">
-            Signal {e.signal.signal_date}: buy {inr(e.signal.entry_low)}-{inr(e.signal.entry_high)}, stop{" "}
+            Signal {shortDate(e.signal.signal_date)}: buy {inr(e.signal.entry_low)}-{inr(e.signal.entry_high)}, stop{" "}
             {inr(e.signal.stop)}, T1 {inr(e.signal.t1)}, {e.signal.shares} shares ·{" "}
             <Link href={`/stocks/${e.ticker}`} className="underline">
               chart
             </Link>
           </p>
+        )}
+        {p.status === "open" && (
+          <RRuler
+            entry={p.avg_entry}
+            stop={e.signal?.stop ?? e.stop}
+            price={e.last_close}
+            t1={e.signal?.t1}
+            t2={e.signal?.t2}
+            priceLabel={e.last_close_date ? `The ${shortDate(e.last_close_date)} close` : "Last close"}
+          />
         )}
       </Card>
 
@@ -104,7 +115,7 @@ export default async function EntryPage({
             <tbody>
               {e.fills.map((f) => (
                 <tr key={f.id} className="border-t border-line">
-                  <td className="py-1">{f.trade_date}</td>
+                  <td className="py-1">{shortDate(f.trade_date)}</td>
                   <td>{f.side}</td>
                   <td className="text-right">{f.shares}</td>
                   <td className="text-right">{inr(f.price)}</td>

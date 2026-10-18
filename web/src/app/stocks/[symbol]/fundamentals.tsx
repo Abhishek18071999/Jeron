@@ -60,7 +60,7 @@ export function FundamentalsPanel({ data, error }: { data: StockFundamentals | n
         </ul>
       )}
       <div className="mt-4 overflow-x-auto">
-        <Table>
+        <Table stack>
           <thead>
             <tr>
               <Th>Quarter</Th>
@@ -73,16 +73,16 @@ export function FundamentalsPanel({ data, error }: { data: StockFundamentals | n
           <tbody>
             {data.quarters.map((q) => (
               <tr key={`${q.period_end}-${q.filed}`}>
-                <Td>
+                <Td label="Quarter">
                   {shortDate(q.period_end)}
                   {!q.consolidated && <span className="ml-1 text-xs text-muted">standalone</span>}
                 </Td>
-                <Td num>{crore(q.revenue)}</Td>
-                <Td num className={signTone(q.net_profit)}>
+                <Td label="Revenue" num>{crore(q.revenue)}</Td>
+                <Td label="Profit" num className={signTone(q.net_profit)}>
                   {crore(q.net_profit)}
                 </Td>
-                <Td num>{plain(q.eps, 2)}</Td>
-                <Td num>{shortDate(q.filed)}</Td>
+                <Td label="EPS" num>{plain(q.eps, 2)}</Td>
+                <Td label="Filed" num>{shortDate(q.filed)}</Td>
               </tr>
             ))}
           </tbody>

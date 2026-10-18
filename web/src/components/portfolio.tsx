@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import type { Holding, Portfolio } from "@/lib/api";
 
-import { Badge, Help, type Tone, inr, inrSigned, pctText, rMultiple, signTone } from "./ui";
+import { RRuler } from "./trade-picture";
+import { Badge, Help, type Tone, inr, inrSigned, pctText, rMultiple, shortDate, signTone } from "./ui";
 
 export const actionTone = (action: Holding["action"]): Tone =>
   action === "sell all" || action === "sell half" ? "accent" : "neutral";
@@ -99,7 +100,7 @@ const stopText = (h: Holding) =>
 const daysText = (h: Holding) => `${h.days_held}d`;
 
 const daysTitle = (h: Holding) =>
-  `${h.days_held} calendar days since the first buy on ${h.first_date}` +
+  `${h.days_held} calendar days since the first buy on ${shortDate(h.first_date)}` +
   (h.sessions_held === null ? "" : ` (${h.sessions_held} sessions after the entry day)`);
 
 // Phones: one card per position.
@@ -132,6 +133,7 @@ export function HoldingCard({ h }: { h: Holding }) {
         </span>
         <ActionBadge h={h} />
       </div>
+      <RRuler entry={h.avg_entry} stop={h.initial_stop ?? h.stop} price={h.last_close} />
       {(h.problem || (h.action && h.action !== "hold")) && (
         <p className="mt-1 text-xs text-muted">{h.problem ?? h.reason}</p>
       )}

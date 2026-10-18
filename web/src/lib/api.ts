@@ -462,7 +462,7 @@ export type JournalFill = {
   price: string;
   charges: string;
   charges_estimated: boolean;
-  source: "manual" | "tradebook";
+  source: "manual" | "tradebook" | "telegram";
 };
 
 export type TradebookImport = {

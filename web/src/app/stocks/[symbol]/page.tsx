@@ -1,7 +1,8 @@
 import Link from "next/link";
 
+import { RRuler } from "@/components/trade-picture";
 import { WatchStar } from "@/components/watch-star";
-import { Card, LinkButton, ResearchBadge, inr, rMultiple } from "@/components/ui";
+import { Card, LinkButton, ResearchBadge, inr, rMultiple, shortDate } from "@/components/ui";
 import { NewsCard } from "@/components/news";
 import {
   type NewsView,
@@ -39,15 +40,29 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
   const s = result.data;
   const watched = watch.ok && watch.data.items.some((i) => i.ticker === s.symbol);
   const latest = s.signals[0];
-  const levels: Level[] = latest
+  // An open position of mine comes first: its average entry and stop, and its signal's
+  // targets. Otherwise the latest signal's zone, stop and targets.
+  const held = s.journal.find((e) => e.position.status === "open" && e.position.avg_entry);
+  const levels: Level[] = held
     ? [
-        { price: Number(latest.chart.entry_high), title: "Entry high", color: "#2563eb", dashed: true },
-        { price: Number(latest.chart.entry_low), title: "Entry low", color: "#2563eb", dashed: true },
-        { price: Number(latest.chart.stop), title: "Stop", color: "#dc2626" },
-        { price: Number(latest.chart.t1), title: "T1", color: "#16a34a" },
-        { price: Number(latest.chart.t2), title: "T2", color: "#16a34a", dashed: true },
+        { price: Number(held.position.avg_entry), title: "My entry", color: "#2563eb" },
+        ...(held.stop ? [{ price: Number(held.stop), title: "Stop", color: "#dc2626" }] : []),
+        ...(held.signal
+          ? [
+              { price: Number(held.signal.t1), title: "T1", color: "#16a34a" },
+              { price: Number(held.signal.t2), title: "T2", color: "#16a34a", dashed: true },
+            ]
+          : []),
       ]
-    : [];
+    : latest
+      ? [
+          { price: Number(latest.chart.entry_high), title: "Entry high", color: "#2563eb", dashed: true },
+          { price: Number(latest.chart.entry_low), title: "Entry low", color: "#2563eb", dashed: true },
+          { price: Number(latest.chart.stop), title: "Stop", color: "#dc2626" },
+          { price: Number(latest.chart.t1), title: "T1", color: "#16a34a" },
+          { price: Number(latest.chart.t2), title: "T2", color: "#16a34a", dashed: true },
+        ]
+      : [];
   const last = s.candles[s.candles.length - 1];
   const scan = s.latest_scan;
 
@@ -62,7 +77,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
           </h1>
           <p className="text-sm text-muted">
             {[s.series, s.sector, s.industry].filter(Boolean).join(" · ")}
-            {last && ` · close ${inr(last.close)} on ${last.time}`}
+            {last && ` · close ${inr(last.close)} on ${shortDate(last.time)}`}
             {scan && ` · technical score ${Number(scan.score).toFixed(1)} (rank ${scan.rank})`}
           </p>
         </div>
@@ -78,10 +93,32 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
         <PriceChart candles={s.candles} levels={levels} />
         <p className="mt-2 text-xs text-muted">
           Blue: EMA 50, purple: EMA 200.
-          {latest
-            ? ` Lines: the ${latest.signal.signal_date} signal's entry zone, stop and targets.`
-            : " No signal for this stock yet."}
+          {held
+            ? " Lines: my open position's entry and stop, and its signal's targets."
+            : latest
+              ? ` Lines: the ${shortDate(latest.signal.signal_date)} signal's entry zone, stop and targets.`
+              : " No signal for this stock yet."}
         </p>
+        {held ? (
+          <RRuler
+            entry={held.position.avg_entry}
+            stop={held.signal?.stop ?? held.stop}
+            price={held.last_close}
+            t1={held.signal?.t1}
+            t2={held.signal?.t2}
+          />
+        ) : (
+          latest &&
+          last && (
+            <RRuler
+              entry={latest.signal.entry_high}
+              stop={latest.signal.stop}
+              price={last.close}
+              t1={latest.signal.t1}
+              t2={latest.signal.t2}
+            />
+          )
+        )}
       </Card>
 
       {latest && (
@@ -91,13 +128,13 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
               <ResearchBadge research={latest.signal.research_only} />
               <span className="font-medium">{latest.payload.setup_name}</span>
               <span className="text-muted">
-                {latest.payload.strategy_version} · {latest.signal.signal_date} · conviction{" "}
+                {latest.payload.strategy_version} · {shortDate(latest.signal.signal_date)} · conviction{" "}
                 {latest.signal.conviction}/5
               </span>
             </p>
             <p>
               Buy {inr(latest.signal.entry_low)}-{inr(latest.signal.entry_high)} until{" "}
-              {latest.signal.valid_until} · stop {inr(latest.signal.stop)} · T1 {inr(latest.signal.t1)} · T2{" "}
+              {shortDate(latest.signal.valid_until)} · stop {inr(latest.signal.stop)} · T1 {inr(latest.signal.t1)} · T2{" "}
               {inr(latest.signal.t2)} · {latest.signal.shares} shares, {inr(latest.signal.capital_at_risk, 0)}{" "}
               at risk
             </p>
@@ -158,7 +195,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
             {s.signals.length === 0 && <p className="text-muted">No signals.</p>}
             {s.signals.map((x) => (
               <p key={x.signal.signal_id} className="flex flex-wrap items-center gap-2">
-                <span>{x.signal.signal_date}</span>
+                <span>{shortDate(x.signal.signal_date)}</span>
                 <ResearchBadge research={x.signal.research_only} />
                 <span className="text-muted">{x.signal.strategy_key}</span>
                 <Link href={`/journal/signal/${x.signal.signal_id}`} className="underline">
@@ -168,8 +205,8 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
             ))}
             {s.paper_trades.map((t) => (
               <p key={`${t.account_id}-${t.entry_date}`}>
-                Paper ({t.strategy_key}): {t.entry_date} at {inr(t.entry_price)}
-                {t.exit_date ? `, out ${t.exit_date} (${t.exit_reason})` : ", open"}{" "}
+                Paper ({t.strategy_key}): {shortDate(t.entry_date)} at {inr(t.entry_price)}
+                {t.exit_date ? `, out ${shortDate(t.exit_date)} (${t.exit_reason})` : ", open"}{" "}
                 <span className={signClass(t.r_multiple)}>{rMultiple(t.r_multiple)}</span>
               </p>
             ))}

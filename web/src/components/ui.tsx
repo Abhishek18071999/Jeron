@@ -1,7 +1,9 @@
 // The design system: small building blocks every page shares. Colours come from the
 // tokens in globals.css (good/bad for gains and losses, accent for "act now", warn for
-// limits). Server components only; no client state here.
+// limits). Server components; the interactive parts live in explain.tsx.
 import Link from "next/link";
+
+import { Command, Explain } from "@/components/explain";
 
 import type { SignalBrief } from "@/lib/api";
 
@@ -43,14 +45,41 @@ export const signTone = (value: number | string | null | undefined) => {
   return n > 0 ? "text-good" : n < 0 ? "text-bad" : "";
 };
 
+// One date style everywhere: "Fri, 9 Oct", with the year only when it isn't this year.
 export const shortDate = (iso: string | null | undefined) => {
   if (!iso) return "-";
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const thisYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    ...(thisYear ? {} : { year: "numeric" }),
+  });
 };
 
 // The command that fills an empty screen, as typed on the machine running Jeron.
 export const cli = (job: string) => `docker compose exec backend python -m app.cli ${job}`;
+
+// "Run <command>" on a computer; on a phone, which can't run it, a plain sentence.
+export function RunCommand({
+  job,
+  lead = "Run",
+  phone = "Jeron's evening run fills this in.",
+}: {
+  job: string;
+  lead?: string;
+  phone?: string;
+}) {
+  return (
+    <>
+      <span className="sm:hidden">{phone}</span>
+      <span className="hidden sm:inline">{lead} </span>
+      <Command command={cli(job)} />
+    </>
+  );
+}
 
 // --- Layout ---------------------------------------------------------------------------
 
@@ -148,17 +177,14 @@ export function Badge({
   );
 }
 
-// A small "?" whose tooltip explains a number in plain English.
-export function Help({ text }: { text: string }) {
+// A "?" that opens the plain-English explanation; a phone-sized tap target.
+export function Help({ text, title = "What this means", how }: { text: string; title?: React.ReactNode; how?: string }) {
   return (
-    <span
-      title={text}
-      aria-label={text}
-      tabIndex={0}
-      className="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line-strong align-middle text-[0.6rem] font-semibold text-muted"
-    >
-      ?
-    </span>
+    <Explain title={title} text={text} how={how} className="-my-1 ml-0.5 inline-flex h-6 w-6 items-center justify-center align-middle no-underline hover:no-underline">
+      <span aria-label={text} className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-line-strong text-[0.6rem] font-semibold text-muted">
+        ?
+      </span>
+    </Explain>
   );
 }
 
@@ -176,20 +202,29 @@ export function Stat({
   sub,
   tone = "neutral",
   help,
+  how,
 }: {
   label: React.ReactNode;
   value: React.ReactNode;
   sub?: React.ReactNode;
   tone?: Tone;
   help?: string;
+  how?: string;
 }) {
+  const shown = <span className={`block truncate text-xl font-semibold tracking-tight ${statTones[tone]}`}>{value}</span>;
   return (
     <div className="min-w-0">
-      <p className="text-xs text-muted">
-        {label}
-        {help && <Help text={help} />}
-      </p>
-      <p className={`mt-0.5 truncate text-xl font-semibold tracking-tight ${statTones[tone]}`}>{value}</p>
+      <p className="text-xs text-muted">{label}</p>
+      {/* Tap the number itself to see what it means. */}
+      <div className="mt-0.5 min-w-0">
+        {help ? (
+          <Explain title={<>{label}: {value}</>} text={help} how={how} className="block max-w-full">
+            {shown}
+          </Explain>
+        ) : (
+          shown
+        )}
+      </div>
       {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
     </div>
   );
@@ -247,7 +282,9 @@ export function EmptyState({
       {command && (
         <p className="mt-1.5">
           Jeron does this by itself while it runs; <Link href="/setup" className="underline">Setup</Link> shows
-          progress. To run it now by hand: <code>{command}</code>
+          progress.<span className="sm:hidden"> Nothing to type on your phone.</span>
+          <span className="hidden sm:inline"> To run it now by hand: </span>
+          <Command command={command} />
         </p>
       )}
     </div>
@@ -268,10 +305,20 @@ export function Notice({ tone = "neutral", children }: { tone?: Tone; children: 
 
 // --- Tables ---------------------------------------------------------------------------
 
-export function Table({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+// `stack`: on phones each row becomes a small card (give every Td a `label`), so the
+// table never scrolls sideways.
+export function Table({
+  children,
+  className = "",
+  stack = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  stack?: boolean;
+}) {
   return (
-    <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
-      <table className={`w-full border-collapse text-sm ${className}`}>{children}</table>
+    <div className={stack ? "sm:-mx-5 sm:overflow-x-auto sm:px-5" : "-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5"}>
+      <table className={`w-full border-collapse text-sm ${stack ? "stack-table" : ""} ${className}`}>{children}</table>
     </div>
   );
 }
@@ -302,15 +349,19 @@ export function Td({
   num = false,
   className = "",
   title,
+  label,
 }: {
   children?: React.ReactNode;
   num?: boolean;
   className?: string;
   title?: string;
+  // The column's name, shown beside the value when a `stack` table is a card.
+  label?: string;
 }) {
   return (
     <td
       title={title}
+      data-label={label ?? ""}
       className={`border-b border-line py-2 pr-3 align-top last:pr-0 ${num ? "whitespace-nowrap text-right" : ""} ${className}`}
     >
       {children}
@@ -341,7 +392,7 @@ export function SignalRow({ s, action = "Decide" }: { s: SignalBrief; action?: s
         </Link>
         <ResearchBadge research={s.research_only} />
         <span className="text-xs text-muted">
-          {s.strategy_key} · conviction {s.conviction}/5 · {s.signal_date}
+          {s.strategy_key} · conviction {s.conviction}/5 · {shortDate(s.signal_date)}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-sm">
