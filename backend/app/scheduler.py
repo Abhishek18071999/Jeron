@@ -4,7 +4,8 @@
 - 19:00 IST on weekdays: `daily` (data, quality, scan, news, paper, alerts), then
   `weekly` (summary and revalidation) after the last session of the week;
 - every few minutes: the autopilot (app/autopilot.py), which sets up a new install and
-  imports files dropped in the imports folder.
+  imports files dropped in the imports folder;
+- every minute, when Telegram is set up: the buttons pressed under signal alerts.
 
 Every job is safe to re-run, so a missed or repeated run does no harm. Times come from
 `JERON_SCHEDULE_PREOPEN` and `JERON_SCHEDULE_DAILY` (HH:MM, IST).
@@ -45,6 +46,7 @@ Runner = Callable[[list[str]], int]
 GRACE_SECONDS = {"preopen": 7 * 3600, "daily": 12 * 3600}
 MARKET_CLOSE = time(15, 30)
 AUTOPILOT_MINUTES = 1
+TELEGRAM_MINUTES = 1
 
 
 def last_session_of_week(calendar: TradingCalendar, day: date) -> bool:
@@ -175,6 +177,16 @@ def build(scheduler: BaseScheduler) -> BaseScheduler:
         max_instances=1,
         coalesce=True,
     )
+    if settings.telegram_ready:
+        # Buttons pressed under signal alerts (app/alerts/bot.py).
+        scheduler.add_job(
+            _safe(_telegram_tick, "telegram buttons", lock=False),
+            IntervalTrigger(minutes=TELEGRAM_MINUTES, timezone=IST),
+            id="telegram",
+            name="telegram buttons",
+            max_instances=1,
+            coalesce=True,
+        )
     return scheduler
 
 
@@ -188,6 +200,13 @@ def _session() -> "Session":
 
 def _autopilot_tick() -> None:
     autopilot.tick(_session)
+
+
+def _telegram_tick() -> None:
+    from app.alerts.bot import poll
+
+    with _session() as session:
+        poll(session, log=log.info)
 
 
 def main() -> None:

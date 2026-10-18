@@ -593,6 +593,19 @@ class Alert(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class BotUpdate(Base):
+    """A Telegram button press or reply Jeron has handled (app/alerts/bot.py), stored
+    once by Telegram's update id so a re-read never records a skip or a buy twice."""
+
+    __tablename__ = "bot_updates"
+
+    update_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    kind: Mapped[str] = mapped_column(String(16))  # "skip" / "buy" / "bought" / "ignored"...
+    signal_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
+    outcome: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class JournalEntry(Base):
     """What I did with a signal (spec section 8), or a trade I took without one. Every
     signal without an entry counts as pending."""
