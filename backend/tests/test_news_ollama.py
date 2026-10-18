@@ -111,3 +111,11 @@ def test_parse_group():
     assert parse_group(json.dumps({"labels": "x"}), 2) == [None, None]
     assert parse_group("[]", 1) == [None]
     assert parse_group(json.dumps({"labels": [_label(id=1, extra=1)]}), 1) == [None]
+
+
+def test_openai_style_base_url_reaches_the_native_chat_api():
+    # Tools set up for Ollama's OpenAI-compatible API give "https://ollama.com/v1".
+    for base in ("https://ollama.com/v1", "https://ollama.com/v1/", "https://ollama.com", None):
+        labeller = OllamaLabeller("secret", "glm-5.3-flash", base, client=FakeOllama())  # type: ignore[arg-type]
+        assert labeller.url == "https://ollama.com/api/chat"
+        assert labeller.name == "glm-5.3-flash"

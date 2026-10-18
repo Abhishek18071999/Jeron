@@ -83,13 +83,30 @@ def parse_group(text: str, size: int) -> list[NewsLabel | None]:
     return found
 
 
+def native_base_url(base_url: str | None) -> str | None:
+    """Ollama's own API root. Tools set up for the OpenAI-compatible API give
+    "https://ollama.com/v1"; the native chat API is beside it, at /api/chat."""
+    if not base_url:
+        return base_url
+    base = base_url.rstrip("/")
+    return base[: -len("/v1")] if base.endswith("/v1") else base
+
+
 class OllamaLabeller(DeepSeekLabeller):
     provider = "Ollama"
     path = "/api/chat"
     default_base_url = DEFAULT_BASE_URL
 
-    def __init__(self, *args: Any, group_size: int = GROUP_SIZE, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        api_key: str,
+        model: str = DEFAULT_MODEL,
+        base_url: str | None = None,
+        *args: Any,
+        group_size: int = GROUP_SIZE,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(api_key, model, native_base_url(base_url), *args, **kwargs)
         self.group_size = max(1, group_size)
         # Enough announcements per save for every worker to have a group.
         self.save_every = self.group_size * self.workers

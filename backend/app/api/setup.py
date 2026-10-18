@@ -60,7 +60,9 @@ class SetupView(BaseModel):
 
 
 def _env_line(settings: Any) -> str:
-    name = {"deepseek": "DEEPSEEK", "ollama": "OLLAMA"}.get(settings.news_provider, "ANTHROPIC")
+    name = {"deepseek": "DEEPSEEK", "ollama": "OLLAMA", "gemini": "GEMINI"}.get(
+        settings.news_provider, "ANTHROPIC"
+    )
     return f"JERON_{name}_API_KEY=your-key"
 
 
