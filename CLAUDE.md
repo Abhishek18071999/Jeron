@@ -38,7 +38,9 @@ are part of done, never commit secrets.
     `COMBINED_BOOK` trades rs-pullback-v1 and results-drift-v1 in one account through
     the engine's `Book`s, run only by `backtest --strategy combined-book`, see
     `docs/plans/combined-book-v1.md`),
-    `walkforward.py` (folds, holdout, gates), `stats.py`, `job.py` (database).
+    `walkforward.py` (folds, holdout, gates), `stats.py` (also the Nifty 500 cash-sweep
+    line reported beside the gates, M8 part 2), `job.py` (database). A strategy may set
+    `single_regime` (Gate 5 judged in its own regimes) only if registered from 2026-10-18.
     Changing a strategy's rules means a new strategy version; runs are never
     overwritten. The engine is also the risk manager (spec section 5); the sector cap,
     correlation check and position-limit override are opt-in `PortfolioRules`, used by
@@ -59,7 +61,10 @@ are part of done, never commit secrets.
     strategies that failed section 6 are research only. See `docs/decisions/0006`.
   - `app/alerts/` alerts: `format.py` (signal message, daily summary; pure),
     `channels.py` (Telegram Bot API, SMTP email backup), `job.py` (what is due; every
-    alert stored once in `alerts`, so re-runs never send twice). Research-only signals
+    alert stored once in `alerts`, so re-runs never send twice), `buttons.py` (the
+    signal alert's Telegram buttons; pure) and `bot.py` (reads the presses every minute:
+    skip with a reason, "I bought it" and the fill typed back; each update stored once in
+    `bot_updates`; `docs/plans/ui-v2.md`). Research-only signals
     are only in the summary unless `JERON_ALERT_RESEARCH_SIGNALS` is on.
   - `app/journal/` the journal: `calc.py` (positions from fills, stats; pure) and
     `service.py` (database). Every signal without an entry is pending. `tradebook.py`
@@ -137,6 +142,10 @@ are part of done, never commit secrets.
   plan form recalculates through the read-only `/api/plan` route handler.
   Login (password + TOTP, decision 0012): `src/proxy.ts` guards every route,
   `src/lib/auth.ts`, `src/app/login/`; `/settings` changes risk and alert settings.
+  Today opens with the morning briefing (`src/lib/briefing.ts`, ticks in
+  `src/components/briefing.tsx`); `src/components/trade-picture.tsx` is the R ruler;
+  `src/components/explain.tsx` the tap-to-explain sheet and the copyable command (hidden
+  on phones). `Table stack` turns rows into cards on phones (`docs/plans/ui-v2.md`).
   Colours are tokens in `src/app/globals.css` (`text-muted`, `border-line`, `text-good`,
   `text-bad`, `bg-accent`...); shared parts in `src/components/ui.tsx` (Card, Stat, Badge,
   Button, Table, EmptyState with the command that fills it). Server components call the

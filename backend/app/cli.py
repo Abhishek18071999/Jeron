@@ -449,6 +449,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"{imported.new_entries} new entries without a signal), {imported.already} "
                 "already imported."
             )
+            if imported.replaced:
+                _log(f"  Replaced {imported.replaced} buys recorded from Telegram.")
             for segment, count in sorted(imported.skipped.items()):
                 _log(f"  Skipped {count} {segment} trades (only equity cash is journalled).")
             for problem in imported.problems:

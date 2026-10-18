@@ -376,6 +376,20 @@ def test_telegram_buttons_record_skips_and_buys(session):
     assert session.get(JournalEntry, entry.id).decision == "taken"
     assert session.scalar(select(func.count()).select_from(BotUpdate)) == 7
 
+    # The broker's tradebook later replaces the typed fill with its own.
+    from app.journal.importer import import_tradebook
+    from tests.test_tradebook import HEADER
+
+    day = NOW.date()
+    rows = [
+        f"{second.ticker},,{day},NSE,EQ,EQ,buy,false,6,101.40,5001,7001,{day}T09:15:01",
+        f"{second.ticker},,{day},NSE,EQ,EQ,buy,false,4,101.40,5002,7001,{day}T09:15:02",
+    ]
+    result = import_tradebook(session, "\n".join([HEADER, *rows]) + "\n")
+    assert (result.added, result.replaced) == (2, 1)
+    fills = session.scalars(select(JournalFill).where(JournalFill.entry_id == entry.id)).all()
+    assert sorted((f.source, f.shares) for f in fills) == [("tradebook", 4), ("tradebook", 6)]
+
 
 def test_signal_alerts_carry_buttons(session):
     day = _signal_day(session, live=True)

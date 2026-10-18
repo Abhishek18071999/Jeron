@@ -30,8 +30,8 @@ number the engine computes; it changes how they are shown.
    - Skip swaps the buttons for six reasons; a tap records the skip in the journal.
    - I bought it records the signal as taken and asks for "shares price" in a forced
      reply naming the signal; the reply adds the buy fill (today, charges estimated
-     like a tradebook import). The tradebook import later adds the broker's own fill,
-     so check the journal then and delete one of the two.
+     like a tradebook import). A tradebook import later replaces it with the broker's
+     own fills for that day.
    - The scheduler reads presses every minute while Telegram is set up
      (`app/alerts/bot.py`). Only the configured chat counts; each update is stored once
      in `bot_updates`, so nothing is recorded twice. A signal with a buy recorded can't
