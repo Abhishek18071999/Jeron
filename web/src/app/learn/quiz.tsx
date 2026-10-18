@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import type { Question } from "@/lib/lessons";
@@ -79,4 +80,47 @@ export function DoneMark({ slug }: { slug: string }) {
     () => false,
   );
   return done ? <span className="text-xs font-medium text-good">✓ done</span> : null;
+}
+
+const readRaw = () => {
+  try {
+    return localStorage.getItem(KEY) ?? "[]";
+  } catch {
+    return "[]";
+  }
+};
+
+// "7 of 34 done" with a bar, and a link to the first lesson not done yet.
+export function Progress({ lessons }: { lessons: { slug: string; title: string }[] }) {
+  const raw = useSyncExternalStore(noSubscribe, readRaw, () => null);
+  if (raw === null) return null;
+  let done: string[] = [];
+  try {
+    const value = JSON.parse(raw);
+    done = Array.isArray(value) ? value : [];
+  } catch {
+    done = [];
+  }
+  const count = lessons.filter((l) => done.includes(l.slug)).length;
+  const next = lessons.find((l) => !done.includes(l.slug));
+  const pct = Math.round((count / lessons.length) * 100);
+  return (
+    <div className="space-y-2 rounded-xl border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+        <span className="font-medium">
+          {count} of {lessons.length} lessons done
+        </span>
+        {next ? (
+          <Link href={`/learn/${next.slug}`} className="font-medium text-accent hover:underline">
+            {count === 0 ? "Start" : "Continue"}: {next.title} →
+          </Link>
+        ) : (
+          <span className="text-good">All done. Revisit any lesson when a signal puzzles you.</span>
+        )}
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
 }

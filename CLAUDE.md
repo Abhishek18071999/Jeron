@@ -136,8 +136,9 @@ are part of done, never commit secrets.
   Trade (`/trade`, one tab per section: `/trade/swing`, `/trade/intraday`,
   `/trade/positional`, `/trade/invest`; `src/components/sections.tsx`), Stocks (sector
   heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
-  compare, data, spot check, setup), Learn (`/learn`, lessons in `src/lib/lessons.ts`
-  whose Jeron numbers mirror the backend); phones get a bottom tab bar (`src/components/nav.tsx`).
+  compare, data, spot check, setup), Learn (`/learn`, lessons in `src/lib/learn/`, one
+  file per track, assembled in `src/lib/lessons.ts`; their Jeron numbers mirror the backend;
+  `/learn/glossary`); phones get a bottom tab bar (`src/components/nav.tsx`).
   `/setup` shows the autopilot and takes uploads (`src/app/setup/actions.ts`).
   Ctrl+K opens the command palette (`src/components/command-palette.tsx`); the trade
   plan form recalculates through the read-only `/api/plan` route handler.
