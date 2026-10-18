@@ -84,6 +84,46 @@ function BlockView({ block }: { block: Block }) {
         </tbody>
       </Table>
     );
+  if ("analogy" in block)
+    return (
+      <div className="rounded-xl border border-line bg-surface-2/60 px-4 py-3 text-sm leading-6">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Think of it like this</p>
+        <Rich text={block.analogy} />
+      </div>
+    );
+  if ("try" in block) {
+    const t = block.try;
+    return (
+      <Card title="Your turn" subtitle="Work it out first, then check." className="border-accent/40">
+        <p className="leading-7"><Rich text={t.q} /></p>
+        <details className="group mt-3">
+          <summary className="cursor-pointer select-none text-sm font-medium text-accent">
+            <span className="group-open:hidden">Show the working</span>
+            <span className="hidden group-open:inline">Hide the working</span>
+          </summary>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6">
+            {t.work.map((line) => (
+              <li key={line}><Rich text={line} /></li>
+            ))}
+          </ol>
+          <p className="mt-3 border-t border-line pt-3 text-sm font-medium"><Rich text={t.a} /></p>
+        </details>
+      </Card>
+    );
+  }
+  if ("recap" in block)
+    return (
+      <Card title="Remember" className="bg-surface-2/50">
+        <ul className="space-y-1.5 text-sm leading-6">
+          {block.recap.map((item) => (
+            <li key={item} className="flex gap-2">
+              <span aria-hidden className="text-good">✓</span>
+              <span><Rich text={item} /></span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    );
   if ("tip" in block)
     return (
       <Notice tone="accent">
@@ -109,6 +149,8 @@ export default async function LessonPage({ params }: { params: Promise<{ slug: s
   const prev = LESSONS[index - 1];
   const next = LESSONS[index + 1];
   const track = TRACKS.find((t) => t.key === lesson.track);
+  const inTrack = LESSONS.filter((l) => l.track === lesson.track);
+  const position = inTrack.indexOf(lesson) + 1;
 
   return (
     <Page width="narrow">
@@ -116,7 +158,7 @@ export default async function LessonPage({ params }: { params: Promise<{ slug: s
         <Link href="/learn" className="hover:underline">
           Learn
         </Link>{" "}
-        · {track?.title}
+        · {track?.title} · lesson {position} of {inTrack.length}
       </nav>
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{lesson.title}</h1>
@@ -124,13 +166,21 @@ export default async function LessonPage({ params }: { params: Promise<{ slug: s
           {lesson.summary} · {lesson.minutes} min
         </p>
       </header>
+      <Notice tone="accent">
+        <p className="font-semibold">By the end you can</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-5">
+          {lesson.goals.map((g) => (
+            <li key={g}>{g}</li>
+          ))}
+        </ul>
+      </Notice>
       <article className="space-y-4">
         {lesson.blocks.map((b, i) => (
           <BlockView key={i} block={b} />
         ))}
       </article>
-      {lesson.quiz ? (
-        <Card title="Check yourself">
+      {lesson.quiz.length > 0 ? (
+        <Card title="Check yourself" subtitle="Answer every question correctly to mark the lesson done.">
           <Quiz slug={lesson.slug} questions={lesson.quiz} />
         </Card>
       ) : (
