@@ -32,6 +32,8 @@ const PAGES: { label: string; href: string; keywords?: string }[] = [
   { label: "Compare", href: "/compare", keywords: "backtest paper real" },
   { label: "Data quality", href: "/data", keywords: "quality coverage" },
   { label: "Spot check", href: "/spot-check", keywords: "prices adjusted" },
+  { label: "Setup", href: "/setup", keywords: "import upload files results news keys status" },
+  { label: "Learn", href: "/learn", keywords: "lessons learn technicals fundamentals strategies basics" },
   { label: "Settings", href: "/settings", keywords: "capital risk limits alerts cap log out" },
 ];
 

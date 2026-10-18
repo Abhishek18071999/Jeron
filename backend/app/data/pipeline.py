@@ -189,9 +189,11 @@ def ingest_day(session: Session, archive: NseArchive, day: date, today: date) ->
                 sha256=hashlib.sha256(pr).hexdigest(),
                 rows=actions,
             )
-            # Board meetings are extra: the day's prices and actions stand without them.
+            # Board meetings and announcements are extra: the day's prices and actions
+            # stand without them, and one unreadable file doesn't lose the other.
             with contextlib.suppress(zipfile.BadZipFile, ValueError):
                 save_pr_board_meetings(session, pr, day)
+            with contextlib.suppress(zipfile.BadZipFile, ValueError):
                 save_pr_announcements(session, pr, day)
     return IngestResult(day, "ok", len(parsed.bars), actions)
 

@@ -11,12 +11,14 @@ from app.api import (
     health,
     journal,
     market,
+    news,
     paper,
     plan,
     portfolio,
     scan,
     sections,
     settings,
+    setup,
     stocks,
     watchlist,
 )
@@ -47,3 +49,5 @@ app.include_router(plan.router)
 app.include_router(watchlist.router)
 app.include_router(settings.router)
 app.include_router(sections.router)
+app.include_router(news.router)
+app.include_router(setup.router)

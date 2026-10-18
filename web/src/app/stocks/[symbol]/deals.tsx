@@ -1,5 +1,7 @@
 // Who bought and sold this stock in size: bulk and block deals and insider trades.
 // Information, not a signal (docs/decisions/0011).
+import Link from "next/link";
+
 import { Badge, Card, EmptyState, Help, Table, Td, Th, cli, shortDate, signTone } from "@/components/ui";
 import type { DealParty, StockDeals } from "@/lib/api";
 
@@ -149,9 +151,9 @@ export function DealsPanel({ data, error }: { data: StockDeals | null; error?: s
             <Help text="Promoters, directors and employees must disclose their trades within 2 trading days to the company, which tells NSE within 2 more. Buys on the market, with their own money, say the most." />
           </h3>
           {d.insider_coverage.first === null ? (
-            <EmptyState command={cli("deals-import insider.csv")}>
+            <EmptyState>
               No insider trades stored. Save the CSV from nseindia.com (Corporate filings, Insider
-              trading) and load it.
+              trading) and upload it on <Link href="/setup" className="underline">Setup</Link>.
             </EmptyState>
           ) : d.insider_count === 0 ? (
             <p className="text-muted">

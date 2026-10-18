@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Kolkata"
     # Downloaded exchange files are kept here, unchanged, so history can be re-read.
     data_dir: str = "data"
+    # Files dropped here (or uploaded on the Setup page) are imported by the scheduler
+    # (app/autopilot.py); Docker Compose maps it to the `imports` folder next to it.
+    imports_dir: str = "imports"
     # Seconds between requests, to stay polite to NSE and Yahoo.
     nse_request_interval: float = 1.0
     yahoo_request_interval: float = 0.5

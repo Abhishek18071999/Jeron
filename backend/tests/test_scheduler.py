@@ -13,7 +13,7 @@ from app.signals.build import IST
 def test_jobs_run_at_ist_times_on_weekdays():
     scheduler = build(BackgroundScheduler(timezone=IST))
     jobs = {j.id: j for j in scheduler.get_jobs()}
-    assert set(jobs) == {"preopen", "daily"}
+    assert set(jobs) == {"preopen", "daily", "autopilot"}
     start = datetime(2025, 3, 14, 12, 0, tzinfo=IST)  # a Friday
     fire = jobs["preopen"].trigger.get_next_fire_time(None, start)
     assert (fire.date(), fire.hour, fire.minute) == (date(2025, 3, 17), 8, 30)  # Monday

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { MoodBanner, SectorStrength } from "@/components/market";
+import { NewsCard } from "@/components/news";
 import { ActionBadge, HeatMeter, SectorBars } from "@/components/portfolio";
 import { StateBadge } from "@/components/sections";
 import { StatusBadge } from "@/components/status-badge";
@@ -25,8 +26,10 @@ import {
   type Dashboard,
   type Holding,
   type MarketMood,
+  type NewsView,
   type Portfolio,
   type SectionSummary,
+  type SetupView,
   type SignalBrief,
   type Watchlist,
   fetchHealth,
@@ -240,8 +243,9 @@ function YourRisk({ p }: { p: Portfolio | null }) {
       }
     >
       {t.positions === 0 ? (
-        <EmptyState command={cli("tradebook FILE")}>
-          No open positions. Record fills on a signal in the journal, or import your Zerodha tradebook.
+        <EmptyState>
+          No open positions. Record fills on a signal in the journal, or upload your Zerodha tradebook on the
+          Journal or Setup page.
         </EmptyState>
       ) : (
         <div className="space-y-4">
@@ -422,17 +426,37 @@ function BehindTheScenes({ d }: { d: Dashboard }) {
   );
 }
 
+// Shown until Jeron has set itself up, and when something needs me.
+function SetupBanner({ setup }: { setup: SetupView | null }) {
+  if (!setup) return null;
+  const you = setup.steps.filter((s) => s.state === "you");
+  const working = setup.steps.filter((s) => s.state === "working" || s.state === "waiting");
+  if (!you.length && !working.length) return null;
+  return (
+    <Notice tone={you.length ? "warn" : "accent"}>
+      {working.length > 0 && <>Jeron is setting itself up ({working.map((s) => s.title.toLowerCase()).join(", ")}). </>}
+      {you.length > 0 && <>Needs you: {you.map((s) => s.title.toLowerCase()).join(", ")}. </>}
+      <Link href="/setup" className="font-medium underline">
+        See Setup
+      </Link>
+    </Notice>
+  );
+}
+
 // `?day=YYYY-MM-DD` shows the exit plans as that session's pre-open check saw them.
 export default async function Home({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
   const { day } = await searchParams;
   const dayParam = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `?day=${day}` : "";
-  const [result, health, moodResult, portfolioResult, watchResult, sectionsResult] = await Promise.all([
+  const [result, health, moodResult, portfolioResult, watchResult, sectionsResult, newsResult, setupResult] =
+    await Promise.all([
     getJson<Dashboard>("/dashboard"),
     fetchHealth(),
     getJson<MarketMood>("/market/mood"),
     getJson<Portfolio>(`/portfolio${dayParam}`),
     getJson<Watchlist>("/watchlist"),
     getJson<SectionSummary[]>("/sections"),
+    getJson<NewsView>("/news/latest"),
+    getJson<SetupView>("/setup"),
   ]);
   const db = health?.database === "ok";
   if (!result.ok) {
@@ -472,6 +496,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
           </>
         }
       />
+      <SetupBanner setup={setupResult.ok ? setupResult.data : null} />
       <MoodBanner mood={mood} />
       <SectionsStrip sections={sectionsResult.ok ? sectionsResult.data : null} />
       <div className="grid items-start gap-4 lg:grid-cols-3">
@@ -480,6 +505,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
         <YourRisk p={p} />
       </div>
       <WatchHits w={watchResult.ok ? watchResult.data : null} />
+      <NewsCard
+        title="Latest company news"
+        news={newsResult.ok ? newsResult.data : null}
+        showSymbol
+        empty="No company announcements in the last week."
+      />
       <SectorStrength mood={mood} />
       <BehindTheScenes d={d} />
       <SystemLine ok={!!health} db={db} />

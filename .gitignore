@@ -9,3 +9,5 @@ __pycache__/
 .ruff_cache/
 backend/data/
 backups/
+imports/*
+!imports/README.txt

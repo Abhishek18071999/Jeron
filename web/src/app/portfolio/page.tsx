@@ -81,9 +81,9 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
 
       {t.positions === 0 ? (
         <Card>
-          <EmptyState command={cli("tradebook FILE")}>
+          <EmptyState>
             Positions come from the journal: record a fill on a signal, add a trade you took without one, or
-            import your Zerodha tradebook (Journal page, or the command below with the CSV).
+            upload your Zerodha tradebook on the Journal page.
           </EmptyState>
         </Card>
       ) : (

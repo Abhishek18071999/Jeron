@@ -2,7 +2,15 @@ import Link from "next/link";
 
 import { WatchStar } from "@/components/watch-star";
 import { Card, LinkButton, ResearchBadge, inr, rMultiple } from "@/components/ui";
-import { type StockDeals, type StockFundamentals, type StockView, type Watchlist, getJson } from "@/lib/api";
+import { NewsCard } from "@/components/news";
+import {
+  type NewsView,
+  type StockDeals,
+  type StockFundamentals,
+  type StockView,
+  type Watchlist,
+  getJson,
+} from "@/lib/api";
 
 import { signClass } from "../../backtests/format";
 import { type Level, PriceChart } from "./chart";
@@ -13,11 +21,12 @@ export const dynamic = "force-dynamic";
 
 export default async function StockPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
-  const [result, watch, deals, fundamentals] = await Promise.all([
+  const [result, watch, deals, fundamentals, news] = await Promise.all([
     getJson<StockView>(`/stocks/${encodeURIComponent(symbol)}?sessions=500`),
     getJson<Watchlist>("/watchlist"),
     getJson<StockDeals>(`/stocks/${encodeURIComponent(symbol)}/deals`),
     getJson<StockFundamentals>(`/stocks/${encodeURIComponent(symbol)}/fundamentals`),
+    getJson<NewsView>(`/stocks/${encodeURIComponent(symbol)}/news`),
   ]);
   if (!result.ok) {
     return (
@@ -98,8 +107,8 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
               ))}
             </ul>
             <p className="text-muted">
-              Brains: technical {Number(latest.payload.brains_breakdown.technical).toFixed(0)}, fundamental
-              and news arrive in M6. Event risk: {latest.payload.event_risk.replace(/\.$/, "")}.
+              Brains: technical {Number(latest.payload.brains_breakdown.technical).toFixed(0)}. Event risk:{" "}
+              {latest.payload.event_risk.replace(/\.$/, "")}.
             </p>
             <p className="text-muted">
               Backtest (out of sample, after costs): {latest.payload.backtest_stats.trades} trades, expectancy{" "}
@@ -181,6 +190,11 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
       <FundamentalsPanel
         data={fundamentals.ok ? fundamentals.data : null}
         error={fundamentals.ok ? undefined : fundamentals.error}
+      />
+      <NewsCard
+        title="News"
+        news={news.ok ? news.data : null}
+        empty="No company announcements stored for this stock yet."
       />
       <DealsPanel data={deals.ok ? deals.data : null} error={deals.ok ? undefined : deals.error} />
     </main>

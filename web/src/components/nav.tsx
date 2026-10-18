@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Six places: what to do today, the four trading sections, a stock, my money, my
-// record, and the research behind it all. Research pages (scanner, backtests, paper, compare, data, spot check) sit
+// Seven places: what to do today, the four trading sections, a stock, my money, my
+// record, lessons, and the research behind it all. Research pages (scanner, backtests, paper, compare, data, spot check) sit
 // under one item.
-export const RESEARCH_PATHS = ["/research", "/scanner", "/backtests", "/paper", "/compare", "/data", "/spot-check"];
+export const RESEARCH_PATHS = ["/research", "/setup", "/scanner", "/backtests", "/paper", "/compare", "/data", "/spot-check"];
 
 type Item = { href: string; label: string; match: (path: string) => boolean; icon: React.ReactNode };
 
@@ -24,6 +24,7 @@ export const NAV: Item[] = [
   { href: "/stocks", label: "Stocks", match: (p) => ["/stocks", "/watchlist", "/plan"].some((r) => starts(p, r)), icon: icon("M4 19V9M10 19V5M16 19v-7M22 19H2") },
   { href: "/portfolio", label: "Portfolio", match: (p) => starts(p, "/portfolio"), icon: icon("M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM8 8V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3M3 13h18") },
   { href: "/journal", label: "Journal", match: (p) => starts(p, "/journal"), icon: icon("M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8 7h6M8 11h6M8 15h4") },
+  { href: "/learn", label: "Learn", match: (p) => starts(p, "/learn"), icon: icon("M2 7l10-4 10 4-10 4zM6 9v5c0 2 3 3.5 6 3.5s6-1.5 6-3.5V9M22 7v6") },
   { href: "/research", label: "Research", match: (p) => RESEARCH_PATHS.some((r) => starts(p, r)), icon: icon("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4") },
 ];
 
@@ -59,7 +60,7 @@ export function TabBar() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="mx-auto grid max-w-md grid-cols-6">
+      <ul className="mx-auto grid max-w-lg grid-cols-7">
         {NAV.map((item) => {
           const active = item.match(path);
           return (
