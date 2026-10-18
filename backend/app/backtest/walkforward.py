@@ -31,6 +31,7 @@ from app.backtest.market import Market
 from app.backtest.stats import (
     CurveStats,
     GateRules,
+    cash_sweep_curve,
     curve_stats,
     daily_rate,
     daily_returns,
@@ -481,7 +482,15 @@ def _report(
     holdout_stats = trade_stats(holdout_trades)
     by_regime = grouped(oos_trades, lambda t: t.regime.value)
     benchmark = bench(oos_start, folds.holdout_start - 1)
+    own = getattr(strategy, "single_regime", ())
+    if own:
+        gate_rules = replace(gate_rules or GateRules(), single_regime=tuple(r.value for r in own))
     gate_list = gates(oos_stats, oos_curve_stats, by_regime, benchmark, holdout_stats, gate_rules)
+    interest = np.zeros(len(sim.equity))
+    for t, amount in sim.interest:
+        if sim.start <= t <= sim.end:
+            interest[t - sim.start] += amount
+    sweep = cash_sweep_curve(sim.equity, sim.cash, m.nifty500[sim.start : sim.end + 1], interest)
     excess = daily_returns(oos_curve) - daily_rate(rules.cash_rate_pct)
     dsr = deflated_sharpe(excess, trial_sharpes)
 
@@ -577,6 +586,15 @@ def _report(
             "benchmark": bench(folds.holdout_start - 1, folds.end).to_dict(),
         },
         "gates": [g.to_dict() for g in gate_list],
+        "cash_sweep": {
+            "out_of_sample": curve_stats(sweep[:split], rules.cash_rate_pct).to_dict(),
+            "holdout": curve_stats(sweep[split - 1 :], rules.cash_rate_pct).to_dict(),
+            "note": (
+                "Idle cash in a Nifty 500 index fund instead of a liquid fund, with no "
+                "costs or tax on switching. An allocation choice that adds the index's "
+                "ups and downs: reported beside the strategy, never in its gates."
+            ),
+        },
         "schedule": schedule_json,
         "skipped_entries": dict(skip_counts.most_common()),
         "exit_reasons": dict(exit_counts.most_common()),
@@ -603,6 +621,7 @@ def _report(
             "benchmark": round(float(bench_curve[i] / base * sim.equity[0]), 2)
             if not math.isnan(bench_curve[i])
             else None,
+            "sweep": round(float(sweep[i]), 2),
         }
         for i, v in enumerate(sim.equity)
     ]

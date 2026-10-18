@@ -198,6 +198,30 @@ def per_period_sharpe(curve: Array, risk_free_pct: float = 0.0) -> float:
     return float(np.mean(r)) / sd if sd > 0 else 0.0
 
 
+def cash_sweep_curve(equity: Array, cash: Array, index: Array, interest: Array) -> Array:
+    """The equity curve had idle cash sat in the index (a Nifty 500 fund) instead of a
+    liquid fund (M8 part 2). Each session the cash held at the previous close earns the
+    index's return instead of the interest it earned, and what that adds or loses stays
+    in the index. No costs or tax on switching: an allocation choice reported beside
+    the strategy, never inside its gates. `interest` is what each session earned."""
+    equity = np.asarray(equity, dtype=float)
+    out = equity.copy()
+    extra = 0.0
+    prev = math.nan
+    for i in range(len(equity)):
+        level = float(index[i])
+        if i and math.isfinite(level) and math.isfinite(prev) and prev > 0:
+            r = level / prev - 1
+        else:
+            r = 0.0
+        if i:
+            extra = extra * (1 + r) + max(float(cash[i - 1]), 0.0) * r - float(interest[i])
+            out[i] = equity[i] + extra
+        if math.isfinite(level):
+            prev = level
+    return out
+
+
 # --- Section 6 gates -------------------------------------------------------------------
 
 
@@ -219,6 +243,32 @@ class GateRules:
     max_drawdown_pct: float = 20.0
     min_trades: int = 100
     min_positive_regimes: int = 2
+    # Gate 5 for a strategy registered as single-regime (M8 part 2): positive in each
+    # regime it trades and not below 0R in the others, instead of 2 of 3. Set from the
+    # strategy's `single_regime`, which only strategies registered from 2026-10-18 have.
+    single_regime: tuple[str, ...] = ()
+
+
+def _regime_gate(by_regime: dict[str, TradeStats], positive: list[str], rules: GateRules) -> Gate:
+    if not rules.single_regime:
+        return Gate(
+            "regimes",
+            f"Positive in at least {rules.min_positive_regimes} of 3 regimes",
+            ", ".join(positive) or "none",
+            len(positive) >= rules.min_positive_regimes,
+        )
+    own = rules.single_regime
+    losing = [k for k, v in by_regime.items() if k not in own and v.trades and v.expectancy_r < 0]
+    missing = [k for k in own if k not in positive]
+    value = ", ".join(positive) or "none"
+    if losing:
+        value += f"; losing in {', '.join(losing)}"
+    return Gate(
+        "regimes",
+        f"Single-regime: positive in {' and '.join(own)}, not losing in the others",
+        value,
+        not missing and not losing,
+    )
 
 
 def gates(
@@ -256,12 +306,7 @@ def gates(
             str(stats.trades),
             stats.trades >= rules.min_trades,
         ),
-        Gate(
-            "regimes",
-            f"Positive in at least {rules.min_positive_regimes} of 3 regimes",
-            ", ".join(positive) or "none",
-            len(positive) >= rules.min_positive_regimes,
-        ),
+        _regime_gate(by_regime, positive, rules),
         Gate(
             "benchmark",
             "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",

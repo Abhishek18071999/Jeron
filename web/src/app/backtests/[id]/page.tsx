@@ -33,7 +33,9 @@ function EquityChart({ points, holdoutStart }: { points: EquityPoint[]; holdoutS
   if (points.length < 2) return null;
   const equity = points.map((p) => p.equity);
   const bench = points.map((p) => p.benchmark);
-  const all = [...equity, ...bench.filter((b): b is number => b !== null)];
+  const sweep = points.map((p) => p.sweep ?? null);
+  const hasSweep = sweep.some((v) => v !== null);
+  const all = [...equity, ...[...bench, ...sweep].filter((b): b is number => b !== null)];
   const min = Math.min(...all);
   const max = Math.max(...all);
   const dd = points.map((p) => -p.drawdown_pct);
@@ -55,6 +57,9 @@ function EquityChart({ points, holdoutStart }: { points: EquityPoint[]; holdoutS
           </>
         )}
         <path d={path(bench, min, max, H)} className="fill-none stroke-muted" strokeWidth={1.5} strokeDasharray="4 3" />
+        {hasSweep && (
+          <path d={path(sweep, min, max, H)} className="fill-none stroke-accent" strokeWidth={1.2} strokeDasharray="1 3" />
+        )}
         <path d={path(equity, min, max, H)} className="fill-none stroke-good" strokeWidth={2} />
         <g transform={`translate(0, ${H + 10})`}>
           <path d={`${path(dd, ddMin, 0, 70)}L${W},0L0,0Z`} className="fill-bad-bg" />
@@ -70,7 +75,8 @@ function EquityChart({ points, holdoutStart }: { points: EquityPoint[]; holdoutS
       </svg>
       <figcaption className="text-xs text-muted">
         Green: strategy equity from {rupees(points[0].equity)}. Dashed grey: Nifty 500 bought and held from the same
-        day. Red: the strategy&apos;s drawdown from its peak.
+        day.{hasSweep && " Dotted: the strategy with idle cash in Nifty 500 (not part of its checks)."} Red: the
+        strategy&apos;s drawdown from its peak.
       </figcaption>
     </figure>
   );
@@ -254,6 +260,15 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
         {num(oos.benchmark.max_drawdown_pct, 1)}%, Sharpe {num(oos.benchmark.sharpe)}. Over the holdout: CAGR{" "}
         {pct(summary.holdout.benchmark.cagr)}, Sharpe {num(summary.holdout.benchmark.sharpe)}.
       </p>
+      {summary.cash_sweep && (
+        <p className="mt-2 text-sm text-muted">
+          With idle cash in a Nifty 500 fund instead of a liquid fund: CAGR{" "}
+          {pct(summary.cash_sweep.out_of_sample.cagr)}, max drawdown{" "}
+          {num(summary.cash_sweep.out_of_sample.max_drawdown_pct, 1)}%, Sharpe{" "}
+          {num(summary.cash_sweep.out_of_sample.sharpe)} (holdout CAGR {pct(summary.cash_sweep.holdout.cagr)}).{" "}
+          {summary.cash_sweep.note}
+        </p>
+      )}
       <EquityChart points={equity} holdoutStart={summary.periods.holdout[0]} />
 
       <div className="mt-8 grid gap-8 md:grid-cols-2">
