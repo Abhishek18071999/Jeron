@@ -176,6 +176,10 @@ class Market:
     # sections-v1: fund-v1 from the filings published before each day (`fund_scores`);
     # NaN = unknown. None = no results loaded.
     fund_score: Array | None = None
+    # momentum-v1 (docs/plans/momentum-v1.md): the 12-1 return, and its risk-adjusted
+    # score's percentile (0-1) among the universe that day. NaN outside the universe.
+    mom_return: Array | None = None
+    mom_rank: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -396,6 +400,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         p6 = np.nan_to_num(ranks6, nan=0.0)
         score[members, t] = np.round(base[members, t] + half * p3 + MAX_POINTS["rs_6m"] * p6, 1)
 
+    mom_return, mom_rank = momentum_ranks(close, eligible)
     symbols = [s.symbol for s in inputs.stocks]
     reactions = results_reactions(days, symbols, inputs.results, close, vol_ratio, nifty500)
     sector_closes = [_index_series(days, inputs.sector_indices.get(n, {})) for n in SECTOR_INDICES]
@@ -443,6 +448,8 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         sector_rank=sector_ranks(close, nifty500, sector_closes),
         results_reaction=None if reactions is None else reactions[0],
         results_volume_ratio=None if reactions is None else reactions[1],
+        mom_return=mom_return,
+        mom_rank=mom_rank,
         fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
     )
 
@@ -454,6 +461,53 @@ def _returns(closes: Array) -> Array:
     with np.errstate(invalid="ignore", divide="ignore"):
         out[..., 1:] = closes[..., 1:] / closes[..., :-1] - 1
     return out
+
+
+# momentum-v1: skip the latest month, look back a year.
+MOMENTUM_SKIP_SESSIONS = 21
+MOMENTUM_LOOKBACK_SESSIONS = 252
+MOMENTUM_MIN_RETURNS = 200
+
+
+def momentum_ranks(close: Array, universe: Array) -> tuple[Array, Array]:
+    """momentum-v1 (docs/plans/momentum-v1.md), using only data up to each day: the
+    12-1 return (close `MOMENTUM_SKIP_SESSIONS` ago over close
+    `MOMENTUM_LOOKBACK_SESSIONS` ago, minus 1) and the percentile among the day's
+    universe of that return divided by the standard deviation of daily returns over the
+    last `MOMENTUM_LOOKBACK_SESSIONS` (at least `MOMENTUM_MIN_RETURNS` of them). The
+    rank is NaN outside the universe or where an input is missing."""
+    s_count, d_count = close.shape
+    n, skip = MOMENTUM_LOOKBACK_SESSIONS, MOMENTUM_SKIP_SESSIONS
+    ret = np.full((s_count, d_count), NAN)
+    rank = np.full((s_count, d_count), NAN)
+    if d_count <= n:
+        return ret, rank
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ret[:, n:] = close[:, n - skip : d_count - skip] / close[:, : d_count - n] - 1
+
+    daily = _returns(close)
+    defined = ~np.isnan(daily)
+    x = np.where(defined, daily, 0.0)
+
+    def window_sum(a: Array) -> Array:
+        c = np.zeros((s_count, d_count + 1))
+        np.cumsum(a, axis=1, out=c[:, 1:])
+        out = np.full((s_count, d_count), NAN)
+        out[:, n - 1 :] = c[:, n:] - c[:, : d_count + 1 - n]
+        return out
+
+    count = window_sum(defined.astype(float))
+    total, squares = window_sum(x), window_sum(x * x)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean = total / count
+        var = (squares - count * mean * mean) / (count - 1)
+        vol = np.sqrt(np.maximum(var, 0.0))
+        score = np.where((count >= MOMENTUM_MIN_RETURNS) & (vol > 0), ret / vol, NAN)
+    for t in range(n, d_count):
+        members = np.flatnonzero(universe[:, t])
+        if len(members):
+            rank[members, t] = percentile_ranks(score[members, t])
+    return ret, rank
 
 
 def sector_ranks(close: Array, nifty500: Array, sectors: Sequence[Array]) -> Array:

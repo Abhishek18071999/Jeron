@@ -3,7 +3,7 @@
 from datetime import date
 from decimal import Decimal
 
-from app.portfolio.calc import UNKNOWN_SECTOR, Holding, totals
+from app.portfolio.calc import UNKNOWN_SECTOR, Holding, tax_notes, totals
 
 
 def _h(ticker="A", sector="IT", shares=100, entry="100", close="110", stop="95", pnl="1000"):
@@ -103,3 +103,39 @@ def test_idle_cash_is_flagged_both_ways():
     short = totals([_h()], Decimal("25000"), Decimal(5), Decimal(6), Decimal(30), Decimal("20000"))
     assert short.cash_action is not None
     assert short.cash_action.startswith("Open positions and the next session's signals need ₹5,000")
+
+
+def test_idle_cash_can_go_to_an_index_fund():
+    args = ([_h()], Decimal("100000"), Decimal(5), Decimal(6), Decimal(30))
+    t = totals(*args, Decimal("20000"), True)
+    assert t.cash_action is not None
+    assert t.cash_action.startswith("₹70,000 is idle: park it in a Nifty 50 or Nifty 500")
+    short = totals(
+        [_h()], Decimal("25000"), Decimal(5), Decimal(6), Decimal(30), Decimal("20000"), True
+    )
+    assert short.cash_action is not None and "of the index fund" in short.cash_action
+
+
+def test_tax_notes_flag_a_gain_about_to_turn_long_term():
+    # Bought 1 Sep 2026: long-term (held more than 365 days) from 2 Sep 2027.
+    h = _h(close="150")  # 100 shares, ₹5,000 gain
+    assert tax_notes([h], date(2027, 6, 1)) == []  # 273 days: too early
+    (note,) = tax_notes([h], date(2027, 8, 1))
+    assert note.startswith("A becomes long-term on 02 Sep 2027 (in 32 days)")
+    assert "₹5,000 gain is taxed at 12.5% instead of 20%, up to ₹375 less" in note
+    assert tax_notes([h], date(2027, 9, 2)) == []  # already long-term
+    assert tax_notes([_h(close="90")], date(2027, 8, 1)) == []  # a loss: nothing to wait for
+
+
+def test_tax_notes_list_losses_before_the_financial_year_ends():
+    loser = _h(close="80")  # ₹2,000 below cost
+    assert tax_notes([loser], date(2027, 1, 15)) == []
+    (note,) = tax_notes([loser], date(2027, 3, 10))
+    assert note.startswith("A is ₹2,000 below cost.")
+    assert tax_notes([_h(close="120")], date(2027, 3, 10)) == []
+
+
+def test_totals_carry_the_tax_notes_when_given_a_day():
+    args = ([_h(close="80")], Decimal("100000"), Decimal(5), Decimal(6), Decimal(30))
+    assert totals(*args).tax_notes == []
+    assert len(totals(*args, as_of=date(2027, 2, 1)).tax_notes) == 1

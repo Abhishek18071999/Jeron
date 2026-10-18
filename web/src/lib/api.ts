@@ -812,6 +812,7 @@ export type Portfolio = {
     pending_cost: string;
     idle_cash: string;
     cash_action: string | null; // park idle cash in a liquid fund, or free some up
+    tax_notes: string[]; // long-term tax soon; losses to book before 31 March
   };
 };
 

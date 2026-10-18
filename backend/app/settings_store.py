@@ -38,6 +38,12 @@ EDITABLE: dict[str, Editable] = {
         "Long-term positions at most", "Open long-term investments at once."
     ),
     "sector_cap_pct": Editable("Sector cap (%)", "Most of capital in one sector."),
+    "idle_cash_in_index": Editable(
+        "Park idle cash in an index fund",
+        "On: Jeron says to keep idle cash in a Nifty index fund instead of a liquid fund. "
+        "More return when the market rises, and you share its falls (Nifty 500 fell 38% "
+        "at worst from 2019 to 2025). The backtest's dotted line shows the effect.",
+    ),
     "alert_research_signals": Editable(
         "Alert research-only signals",
         "Also send signals of strategies that failed section 6, clearly marked. "

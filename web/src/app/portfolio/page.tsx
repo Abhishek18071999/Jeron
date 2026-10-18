@@ -78,6 +78,9 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
         </Notice>
       ))}
       {t.cash_action && <Notice>{t.cash_action}</Notice>}
+      {t.tax_notes.map((n) => (
+        <Notice key={n}>{n}</Notice>
+      ))}
 
       {t.positions === 0 ? (
         <Card>
