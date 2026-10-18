@@ -232,6 +232,8 @@ class SimResult:
     open_trades: list[Trade] = field(default_factory=list)
     # Open risk (entry - stop) x shares as % of equity, per session from start to end.
     heat_pct: Array = field(default_factory=lambda: np.zeros(0))
+    # Cash after each session's fills, from start to end (the cash-sweep line uses it).
+    cash: Array = field(default_factory=lambda: np.zeros(0))
 
 
 def position_size(
@@ -348,6 +350,7 @@ def simulate(
     interest: list[tuple[int, float]] = []
     placed: list[Order] = []
     heat_pct = np.zeros(end - start + 1)
+    cash_series = np.zeros(end - start + 1)
     daily_rate = (1 + rules.cash_rate_pct / 100) ** (1 / 365) - 1
     equity = np.zeros(end - start + 1)
     last_close = np.full(len(m.symbols), math.nan)
@@ -536,6 +539,7 @@ def simulate(
         # Mark to market.
         value = cash + sum(tr.remaining * last_close[tr.s] for tr in open_trades)
         equity[t - start] = value
+        cash_series[t - start] = cash
         open_risk = sum(max(0.0, tr.entry - tr.stop) * tr.remaining for tr in open_trades)
         heat_pct[t - start] = open_risk / value * 100 if value > 0 else 0.0
         if value > peak:
@@ -700,4 +704,5 @@ def simulate(
         pending=orders if orders_on_last_day else [],
         open_trades=still,
         heat_pct=heat_pct,
+        cash=cash_series,
     )

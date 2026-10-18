@@ -30,6 +30,7 @@ class ImportResult:
     already: int = 0
     to_signals: int = 0  # buys matched to a signal
     new_entries: int = 0  # entries created without a signal
+    replaced: int = 0  # fills typed in Telegram that the broker's own fills replaced
     skipped: dict[str, int] = field(default_factory=dict)  # by segment (F&O...)
     problems: list[str] = field(default_factory=list)
 
@@ -123,6 +124,22 @@ def import_tradebook(session: Session, text: str) -> ImportResult:
                 "the journal (bought before the journal began?): not imported."
             )
             continue
+        if t.side == "buy":
+            # A buy recorded from Telegram ("I bought it") is replaced by the broker's
+            # own fills for that day, which are exact.
+            typed = session.scalars(
+                select(JournalFill).where(
+                    JournalFill.entry_id == entry.id,
+                    JournalFill.source == "telegram",
+                    JournalFill.side == "buy",
+                    JournalFill.trade_date == t.trade_date,
+                )
+            ).all()
+            for fill in typed:
+                session.delete(fill)
+                result.replaced += 1
+            if typed:
+                session.commit()
         try:
             add_fill(
                 session,

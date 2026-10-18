@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.alerts.buttons import Keyboard, signal_keyboard
 from app.alerts.channels import Channel, channels_from, deliver
 from app.alerts.format import (
     Digest,
@@ -160,6 +161,7 @@ def _send(
     now: datetime,
     day: date | None = None,
     signal_id: UUID | None = None,
+    buttons: Keyboard | None = None,
 ) -> Alert:
     alert = session.scalar(select(Alert).where(Alert.key == key))
     if alert is not None and alert.status == "sent":
@@ -168,7 +170,7 @@ def _send(
     if alert is None:
         alert = Alert(key=key, kind=kind, trade_date=day, signal_id=signal_id, attempts=0)
         session.add(alert)
-    channel, errors = deliver(channels, text, subject)
+    channel, errors = deliver(channels, text, subject, buttons)
     alert.text = text
     alert.attempts += 1
     alert.status = "sent" if channel else "failed"
@@ -227,6 +229,7 @@ def run_alerts(
             now,
             day,
             record.signal_id,
+            signal_keyboard(str(record.signal_id), record.ticker, settings.web_url),
         )
     for hit in watchlist_hits(session, day):
         _send(

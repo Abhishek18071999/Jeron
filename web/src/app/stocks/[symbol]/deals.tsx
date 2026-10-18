@@ -27,7 +27,7 @@ function Parties({ title, rows, help }: { title: string; rows: DealParty[]; help
       {rows.length === 0 ? (
         <p className="text-sm text-muted">None in this period.</p>
       ) : (
-        <Table>
+        <Table stack>
           <thead>
             <tr>
               <Th>Who</Th>
@@ -38,17 +38,17 @@ function Parties({ title, rows, help }: { title: string; rows: DealParty[]; help
           <tbody>
             {rows.map((p) => (
               <tr key={p.name}>
-                <Td>
+                <Td label="Who">
                   {p.name}
                   <span className="block text-xs text-muted">
                     {p.deals} deal{p.deals === 1 ? "" : "s"} · {p.kinds.join(", ")} · net{" "}
                     {shares(Math.abs(p.bought_quantity - p.sold_quantity))} shares
                   </span>
                 </Td>
-                <Td num className={signTone(p.net_value)}>
+                <Td label="Net" num className={signTone(p.net_value)}>
                   {crore(p.net_value, true)}
                 </Td>
-                <Td num>{shortDate(p.last_day)}</Td>
+                <Td label="Last" num>{shortDate(p.last_day)}</Td>
               </tr>
             ))}
           </tbody>
@@ -108,7 +108,7 @@ export function DealsPanel({ data, error }: { data: StockDeals | null; error?: s
                   All {d.deal_count} deal{d.deal_count === 1 ? "" : "s"}
                   {d.deal_count > d.deals.length ? ` (latest ${d.deals.length})` : ""}
                 </summary>
-                <Table className="mt-2">
+                <Table stack className="mt-2">
                   <thead>
                     <tr>
                       <Th>Day</Th>
@@ -122,14 +122,14 @@ export function DealsPanel({ data, error }: { data: StockDeals | null; error?: s
                   <tbody>
                     {d.deals.map((x) => (
                       <tr key={`${x.day}-${x.client}-${x.side}-${x.quantity}-${x.price}`}>
-                        <Td className="whitespace-nowrap">
+                        <Td label="Day" className="whitespace-nowrap">
                           {x.day} <Badge>{x.kind}</Badge>
                         </Td>
-                        <Td>{x.client}</Td>
-                        <Td className={x.side === "buy" ? "text-good" : "text-bad"}>{x.side}</Td>
-                        <Td num>{shares(x.quantity)}</Td>
-                        <Td num>₹{Number(x.price).toLocaleString("en-IN")}</Td>
-                        <Td num>{crore(x.value)}</Td>
+                        <Td label="Client">{x.client}</Td>
+                        <Td label="Side" className={x.side === "buy" ? "text-good" : "text-bad"}>{x.side}</Td>
+                        <Td label="Shares" num>{shares(x.quantity)}</Td>
+                        <Td label="Price" num>₹{Number(x.price).toLocaleString("en-IN")}</Td>
+                        <Td label="Value" num>{crore(x.value)}</Td>
                       </tr>
                     ))}
                   </tbody>
@@ -170,7 +170,7 @@ export function DealsPanel({ data, error }: { data: StockDeals | null; error?: s
                   ` · ${t.other_modes} more by ESOP, gift, transfer or off-market, which say less`}
                 .
               </p>
-              <Table>
+              <Table stack>
                 <thead>
                   <tr>
                     <Th>Disclosed</Th>
@@ -184,17 +184,17 @@ export function DealsPanel({ data, error }: { data: StockDeals | null; error?: s
                 <tbody>
                   {d.insider.map((x) => (
                     <tr key={`${x.disclosed}-${x.person}-${x.side}-${x.quantity}-${x.traded_from}`}>
-                      <Td className="whitespace-nowrap">{x.disclosed}</Td>
-                      <Td>
+                      <Td label="Disclosed" className="whitespace-nowrap">{x.disclosed}</Td>
+                      <Td label="Who">
                         {x.person}
                         <span className="block text-xs text-muted">
                           {[x.category, x.mode].filter(Boolean).join(" · ")}
                         </span>
                       </Td>
-                      <Td className={x.side === "buy" ? "text-good" : "text-bad"}>{x.side}</Td>
-                      <Td num>{shares(x.quantity)}</Td>
-                      <Td num>{crore(x.value)}</Td>
-                      <Td num>{x.after_pct === null ? "-" : `${Number(x.after_pct).toFixed(2)}%`}</Td>
+                      <Td label="Side" className={x.side === "buy" ? "text-good" : "text-bad"}>{x.side}</Td>
+                      <Td label="Shares" num>{shares(x.quantity)}</Td>
+                      <Td label="Value" num>{crore(x.value)}</Td>
+                      <Td label="Holding after" num>{x.after_pct === null ? "-" : `${Number(x.after_pct).toFixed(2)}%`}</Td>
                     </tr>
                   ))}
                 </tbody>

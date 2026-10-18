@@ -218,6 +218,9 @@ export type BacktestSummary = {
   };
   holdout: { trades: TradeStats; curve: CurveStats; benchmark: CurveStats };
   gates: Gate[];
+  // M8 part 2: idle cash in Nifty 500 instead of a liquid fund; never in the gates.
+  // Missing on runs made before it.
+  cash_sweep?: { out_of_sample: CurveStats; holdout: CurveStats; note: string };
   schedule: { from: string; variant: string; params: Record<string, number> }[];
   skipped_entries: Record<string, number>;
   exit_reasons: Record<string, number>;
@@ -227,7 +230,13 @@ export type BacktestSummary = {
   live_eligible: boolean;
 };
 
-export type EquityPoint = { date: string; equity: number; drawdown_pct: number; benchmark: number | null };
+export type EquityPoint = {
+  date: string;
+  equity: number;
+  drawdown_pct: number;
+  benchmark: number | null;
+  sweep?: number;
+};
 
 export type BacktestVariant = {
   window: string;
@@ -453,7 +462,7 @@ export type JournalFill = {
   price: string;
   charges: string;
   charges_estimated: boolean;
-  source: "manual" | "tradebook";
+  source: "manual" | "tradebook" | "telegram";
 };
 
 export type TradebookImport = {

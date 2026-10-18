@@ -113,3 +113,55 @@ textarea {
 select option {
   background: var(--surface);
 }
+
+/*
+  Tables marked `stack` turn each row into a small card on phones (no sideways
+  scrolling): every cell shows its column's name from `data-label`.
+*/
+@media (max-width: 639px) {
+  .stack-table thead {
+    display: none;
+  }
+  .stack-table tr {
+    display: block;
+    border-bottom: 1px solid var(--line);
+    padding: 0.5rem 0;
+  }
+  .stack-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border: 0;
+    padding: 0.125rem 0;
+    text-align: right;
+    white-space: normal;
+  }
+  .stack-table td:empty {
+    display: none;
+  }
+  .stack-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-align: left;
+  }
+  .stack-table td:first-child {
+    font-weight: 600;
+  }
+  .stack-table td:first-child::before,
+  .stack-table td[data-label=""]::before {
+    content: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sheet-in {
+    animation: sheet-in 160ms ease-out;
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}

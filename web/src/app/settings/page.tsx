@@ -1,4 +1,4 @@
-import { Badge, Card, ErrorNote, Notice, Page, PageHeader, buttonClass, cli, inputClass } from "@/components/ui";
+import { Badge, Card, ErrorNote, Notice, Page, PageHeader, buttonClass, RunCommand, inputClass } from "@/components/ui";
 import { type SettingRow, type SettingsView, getJson } from "@/lib/api";
 import { loginConfig } from "@/lib/auth";
 
@@ -124,7 +124,7 @@ export default async function SettingsPage({
             </dl>
             {!result.data.setup.telegram && (
               <p className="mt-3 text-xs text-muted">
-                Telegram: <code>{cli("telegram --setup")}</code>
+                Telegram: <RunCommand job="telegram --setup" lead="" phone="set it up from your computer." />
               </p>
             )}
           </Card>

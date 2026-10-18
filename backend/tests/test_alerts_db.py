@@ -51,12 +51,13 @@ NOW = datetime(2026, 1, 1, 19, 0, tzinfo=IST)
 
 class FakeChannel:
     def __init__(self, name="telegram", fail=False):
-        self.name, self.fail, self.sent = name, fail, []
+        self.name, self.fail, self.sent, self.buttons = name, fail, [], []
 
-    def send(self, text, subject):
+    def send(self, text, subject, buttons=None):
         if self.fail:
             raise AlertError("network down")
         self.sent.append((subject, text))
+        self.buttons.append(buttons)
 
 
 def _signal_day(session, live: bool) -> date:
@@ -282,3 +283,126 @@ def test_signal_on_an_unexplained_drop_is_marked_held(session):
     run_alerts(session, day, settings=Settings(), channels=[telegram], now=NOW)
     text = next(t for subject, t in telegram.sent if f": {held} (" in subject)
     assert text.startswith(f"HELD, check by hand before buying: {held} fell -30.00%")
+
+
+class FakeBot:
+    """Telegram for app/alerts/bot.py: queued updates, and what the bot said back."""
+
+    name = "telegram"
+
+    def __init__(self, updates):
+        self.queue, self.said, self.asked, self.answers, self.markups = updates, [], [], [], []
+
+    def updates(self, offset):
+        return [u for u in self.queue if offset is None or u["update_id"] >= offset]
+
+    def send(self, text, subject="", buttons=None):
+        self.said.append(text)
+
+    def ask(self, text):
+        self.asked.append(text)
+
+    def answer(self, callback_id, text):
+        self.answers.append(text)
+
+    def set_buttons(self, chat_id, message_id, buttons):
+        self.markups.append(buttons)
+
+
+def _press(update_id, data, chat="42"):
+    message = {"message_id": 7, "chat": {"id": int(chat)}}
+    return {
+        "update_id": update_id,
+        "callback_query": {"id": f"q{update_id}", "data": data, "message": message},
+    }
+
+
+def _reply(update_id, text, prompt, chat="42"):
+    return {
+        "update_id": update_id,
+        "message": {
+            "chat": {"id": int(chat)},
+            "text": text,
+            "reply_to_message": {"text": prompt},
+        },
+    }
+
+
+def test_telegram_buttons_record_skips_and_buys(session):
+    from app.alerts.bot import poll
+    from app.models import BotUpdate, JournalEntry, JournalFill
+
+    _signal_day(session, live=True)
+    first, second = session.scalars(
+        select(SignalRecord).order_by(SignalRecord.signal_date.desc(), SignalRecord.ticker)
+    ).all()[:2]
+    settings = Settings(telegram_bot_token="t", telegram_chat_id="42", web_url="http://jeron.local")
+
+    # Skip, then the reason: recorded as skipped; another chat is ignored.
+    bot = FakeBot(
+        [
+            _press(1, f"skip:{first.signal_id}"),
+            _press(2, f"skipr:{first.signal_id}:1"),
+            _press(3, f"skipr:{second.signal_id}:0", chat="99"),
+        ]
+    )
+    outcome = poll(session, settings=settings, channel=bot, now=NOW)
+    assert outcome.handled == 3 and outcome.recorded == 1
+    assert bot.markups[0] and bot.markups[1] is None  # reasons shown, then removed
+    entry = session.scalar(select(JournalEntry).where(JournalEntry.signal_id == first.signal_id))
+    assert entry.decision == "skipped" and entry.reason == "No cash free"
+    assert (
+        session.scalar(select(JournalEntry).where(JournalEntry.signal_id == second.signal_id))
+        is None
+    )
+
+    # I bought it: taken, asked for the fill; the reply adds the buy.
+    bot = FakeBot([_press(4, f"buy:{second.signal_id}")])
+    poll(session, settings=settings, channel=bot, now=NOW)
+    (prompt,) = bot.asked
+    bot = FakeBot([_reply(5, "no idea", prompt), _reply(6, "10 @ 101.50", prompt)])
+    outcome = poll(session, settings=settings, channel=bot, now=NOW)
+    assert outcome.recorded == 1 and bot.asked[0].startswith("Couldn't read that.")
+    entry = session.scalar(select(JournalEntry).where(JournalEntry.signal_id == second.signal_id))
+    (fill,) = session.scalars(select(JournalFill).where(JournalFill.entry_id == entry.id)).all()
+    assert entry.decision == "taken"
+    assert (fill.shares, fill.price, fill.source) == (10, Decimal("101.50"), "telegram")
+    assert fill.charges > 0 and fill.charges_estimated
+
+    # Nothing is recorded twice, and a bought signal can't be skipped by a stray tap.
+    again = FakeBot([_reply(6, "10 @ 101.50", prompt), _press(7, f"skipr:{second.signal_id}:2")])
+    poll(session, settings=settings, channel=again, now=NOW)
+    assert session.scalar(select(func.count()).select_from(JournalFill)) == 1
+    assert session.get(JournalEntry, entry.id).decision == "taken"
+    assert session.scalar(select(func.count()).select_from(BotUpdate)) == 7
+
+    # The broker's tradebook later replaces the typed fill with its own.
+    from app.journal.importer import import_tradebook
+    from tests.test_tradebook import HEADER
+
+    day = NOW.date()
+    rows = [
+        f"{second.ticker},,{day},NSE,EQ,EQ,buy,false,6,101.40,5001,7001,{day}T09:15:01",
+        f"{second.ticker},,{day},NSE,EQ,EQ,buy,false,4,101.40,5002,7001,{day}T09:15:02",
+    ]
+    result = import_tradebook(session, "\n".join([HEADER, *rows]) + "\n")
+    assert (result.added, result.replaced) == (2, 1)
+    fills = session.scalars(select(JournalFill).where(JournalFill.entry_id == entry.id)).all()
+    assert sorted((f.source, f.shares) for f in fills) == [("tradebook", 4), ("tradebook", 6)]
+
+
+def test_signal_alerts_carry_buttons(session):
+    day = _signal_day(session, live=True)
+    telegram = FakeChannel()
+    run_alerts(
+        session,
+        day,
+        settings=Settings(web_url="http://localhost:3000"),
+        channels=[telegram],
+        now=NOW,
+    )
+    signal_buttons = [
+        b for (s, _), b in zip(telegram.sent, telegram.buttons, strict=True) if "Signal" in s
+    ]
+    assert signal_buttons and all(b[0][0]["text"] == "I bought it" for b in signal_buttons)
+    assert telegram.buttons[-1] is None  # the summary has none

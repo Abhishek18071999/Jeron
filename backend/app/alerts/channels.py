@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.alerts.buttons import Keyboard, markup
 from app.alerts.format import split_message
 from app.config import Settings
 
@@ -20,7 +21,7 @@ class AlertError(RuntimeError):
 class Channel(Protocol):
     name: str
 
-    def send(self, text: str, subject: str) -> None: ...
+    def send(self, text: str, subject: str, buttons: Keyboard | None = None) -> None: ...
 
 
 class TelegramChannel:
@@ -45,12 +46,49 @@ class TelegramChannel:
             )
         return body.get("result")
 
-    def send(self, text: str, subject: str = "") -> None:
-        for part in split_message(text):
-            self._call(
-                "sendMessage",
-                {"chat_id": self.chat_id, "text": part, "disable_web_page_preview": True},
-            )
+    def send(self, text: str, subject: str = "", buttons: Keyboard | None = None) -> None:
+        parts = split_message(text)
+        for i, part in enumerate(parts):
+            payload: dict[str, Any] = {
+                "chat_id": self.chat_id,
+                "text": part,
+                "disable_web_page_preview": True,
+            }
+            # The buttons go under the last part, where the message ends.
+            if buttons and i == len(parts) - 1:
+                payload["reply_markup"] = markup(buttons)
+            self._call("sendMessage", payload)
+
+    def ask(self, text: str) -> None:
+        """A message whose reply Telegram makes a reply to it (the "I bought it" prompt)."""
+        self._call(
+            "sendMessage",
+            {
+                "chat_id": self.chat_id,
+                "text": text,
+                "reply_markup": {"force_reply": True, "input_field_placeholder": "80 612.50"},
+            },
+        )
+
+    def updates(self, offset: int | None) -> list[dict[str, Any]]:
+        """Button presses and messages since `offset` (which confirms the earlier ones)."""
+        payload: dict[str, Any] = {"allowed_updates": ["message", "callback_query"]}
+        if offset is not None:
+            payload["offset"] = offset
+        return list(self._call("getUpdates", payload) or [])
+
+    def answer(self, callback_id: str, text: str) -> None:
+        self._call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text})
+
+    def set_buttons(self, chat_id: str, message_id: int, buttons: Keyboard | None) -> None:
+        self._call(
+            "editMessageReplyMarkup",
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "reply_markup": markup(buttons or []),
+            },
+        )
 
     def chats(self) -> list[tuple[str, str]]:
         """(chat id, name) of everyone who has messaged the bot recently."""
@@ -81,7 +119,8 @@ class EmailChannel:
         self.host, self.port, self.sender, self.to = host, port, sender or user or to, to
         self._user, self._password, self._starttls, self._smtp = user, password, starttls, smtp
 
-    def send(self, text: str, subject: str) -> None:
+    def send(self, text: str, subject: str, buttons: Keyboard | None = None) -> None:
+        # Email has no buttons; the message already links to the journal.
         message = EmailMessage()
         message["Subject"] = subject
         message["From"] = self.sender
@@ -118,12 +157,14 @@ def channels_from(settings: Settings) -> list[Channel]:
     return out
 
 
-def deliver(channels: Sequence[Channel], text: str, subject: str) -> tuple[str | None, list[str]]:
+def deliver(
+    channels: Sequence[Channel], text: str, subject: str, buttons: Keyboard | None = None
+) -> tuple[str | None, list[str]]:
     """Try each channel in order until one works: (the channel that delivered, errors)."""
     errors: list[str] = []
     for channel in channels:
         try:
-            channel.send(text, subject)
+            channel.send(text, subject, buttons)
         except AlertError as e:
             errors.append(f"{channel.name}: {e}")
             continue

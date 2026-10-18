@@ -8,6 +8,7 @@ the entry condition, the stop distance and the tier (holding period).
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import date
 from enum import StrEnum
 from itertools import product
 from typing import Any, TypeVar
@@ -76,6 +77,9 @@ class ExitSignal:
     reason: str
 
 
+# M8 part 2 (docs/plans/M8.md): the day the single-regime Gate 5 was adopted.
+SINGLE_REGIME_GATE_FROM = date(2026, 10, 18)
+
 # Score needed on risk-off days (spec section 3: require >= 85 when the regime filter
 # is on).
 RISK_OFF_MIN_SCORE = 85.0
@@ -108,6 +112,20 @@ class Strategy:
     exit_condition: Callable[[Market, Params], Array] | None = None
     exit_reason: str = ""
     exit_rule: str = ""
+    # M8 part 2: a strategy registered as trading only in these regimes is judged by
+    # the single-regime Gate 5. Only for strategies registered on or after
+    # `SINGLE_REGIME_GATE_FROM`, so no existing result is re-judged after the fact.
+    single_regime: tuple[Regime, ...] = ()
+    registered_on: date | None = None
+
+    def __post_init__(self) -> None:
+        if self.single_regime and (
+            self.registered_on is None or self.registered_on < SINGLE_REGIME_GATE_FROM
+        ):
+            raise ValueError(
+                f"{self.key}: the single-regime gate is only for strategies registered "
+                f"from {SINGLE_REGIME_GATE_FROM}"
+            )
 
     @property
     def grid(self) -> list[Params]:

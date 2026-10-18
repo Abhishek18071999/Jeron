@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ErrorNote, buttonClass, cli, inputClass } from "@/components/ui";
+import { ErrorNote, buttonClass, RunCommand, inputClass } from "@/components/ui";
 import { loginConfig } from "@/lib/auth";
 
 import { login } from "./actions";
@@ -25,7 +25,7 @@ export default async function LoginPage({
             <p className="text-muted">The login isn&apos;t set up yet, so Jeron stays locked.</p>
             <ol className="list-decimal space-y-2 pl-5">
               <li>
-                Run <code>{cli("auth-setup")}</code>, choose a password and add the account to your
+                <RunCommand job="auth-setup" phone="On your computer, run the auth-setup command" />, choose a password and add the account to your
                 authenticator app.
               </li>
               <li>

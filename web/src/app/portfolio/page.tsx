@@ -12,13 +12,13 @@ import {
   Table,
   Td,
   Th,
-  cli,
   inr,
   inrSigned,
   pctText,
   rMultiple,
   shortDate,
   signTone,
+  RunCommand,
 } from "@/components/ui";
 import { type Portfolio, getJson } from "@/lib/api";
 
@@ -69,7 +69,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       {p.stale && t.positions > 0 && (
         <Notice tone="warn">
           Prices for {shortDate(p.expected)} are not loaded (latest: {shortDate(p.data_as_of)}). Exit actions
-          below use older closes. Run <code>{cli("daily")}</code>
+          below use older closes. <RunCommand job="daily" />
         </Notice>
       )}
       {t.warnings.map((w) => (
@@ -95,6 +95,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
                 label="P&L"
                 value={<span className={signTone(t.pnl)}>{inrSigned(t.pnl)}</span>}
                 help="Realised and open profit or loss of the open positions, after charges."
+                how="For each open position: what you sold for plus the shares still held at the last close, minus what you paid and every charge in the journal. Added up over the positions."
               />
               <Stat
                 label="Open risk"
@@ -102,11 +103,13 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
                 tone={heat >= Number(t.heat_warn_pct) ? "warn" : "neutral"}
                 sub={`${pctText(heat, 1)} of capital`}
                 help="Entry minus today's stop, times shares, summed. A stop at breakeven or above adds nothing."
+                how={`Shown as a share of your capital (${inr(t.capital, 0)}): that share is the portfolio heat. Above ${pctText(t.heat_warn_pct, 0)} Jeron warns; at ${pctText(t.heat_block_pct, 0)} a new trade plan is blocked.`}
               />
               <Stat
                 label="If every stop is hit"
                 value={inrSigned(-Number(t.give_back))}
                 help="What you would give back from today's close if every position hit its current stop."
+                how="For each position: (last close minus its current stop) times the shares held, added up. It is the worst case if every stop fills exactly; a gap down can cost more. It is not a loss you have now."
                 sub={t.without_stop ? `${t.without_stop} without a stop` : "all positions have a stop"}
               />
             </div>
@@ -122,7 +125,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
               ))}
             </ul>
             <div className="hidden md:block">
-              <Table>
+              <Table stack>
                 <thead>
                   <tr>
                     <Th>Stock</Th>
@@ -147,26 +150,26 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
                 <tbody>
                   {holdings.map((h) => (
                     <tr key={h.entry_id}>
-                      <Td>
+                      <Td label="Stock">
                         <Link href={`/journal/${h.entry_id}`} className="font-semibold hover:underline">
                           {h.ticker}
                         </Link>
                         <span className="block text-xs text-muted">{h.sector ?? "sector unknown"}</span>
                       </Td>
-                      <Td num>{h.shares}</Td>
-                      <Td num>{inr(h.avg_entry)}</Td>
-                      <Td num>{inr(h.last_close)}</Td>
-                      <Td num className={signTone(h.pnl)}>
+                      <Td label="Qty" num>{h.shares}</Td>
+                      <Td label="Avg price" num>{inr(h.avg_entry)}</Td>
+                      <Td label="Last close" num>{inr(h.last_close)}</Td>
+                      <Td label="P&L" num className={signTone(h.pnl)}>
                         {inrSigned(h.pnl)}
                       </Td>
-                      <Td num className={signTone(h.r_multiple)}>
+                      <Td label="R" num className={signTone(h.r_multiple)}>
                         {rMultiple(h.r_multiple)}
                       </Td>
-                      <Td num title={h.stop ? `Stop ${inr(h.stop)}` : "No stop"}>
+                      <Td label="To stop" num title={h.stop ? `Stop ${inr(h.stop)}` : "No stop"}>
                         {h.stop_distance_pct === null ? "-" : pctText(h.stop_distance_pct, 1)}
                         <span className="block text-xs text-muted">{h.stop ? inr(h.stop) : "no stop"}</span>
                       </Td>
-                      <Td
+                      <Td label="Held"
                         num
                         title={
                           h.sessions_held === null ? undefined : `${h.sessions_held} sessions after the entry day`
@@ -174,7 +177,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
                       >
                         {h.days_held}d
                       </Td>
-                      <Td className="max-w-[18rem]">
+                      <Td label="Exit plan" className="max-w-[18rem]">
                         <ActionBadge h={h} />
                         <span className="mt-0.5 block text-xs text-muted">{h.problem ?? h.reason}</span>
                         {h.events.map((e) => (
@@ -188,18 +191,18 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
                 </tbody>
                 <tfoot>
                   <tr className="font-semibold">
-                    <Td>
+                    <Td label="Stock">
                       Total
                       <span className="block text-xs font-normal text-muted">value {inr(t.value, 0)}</span>
                     </Td>
                     <Td num />
                     <Td num />
                     <Td num />
-                    <Td num className={signTone(t.pnl)}>
+                    <Td label="P&L" num className={signTone(t.pnl)}>
                       {inrSigned(t.pnl)}
                     </Td>
                     <Td num />
-                    <Td num className="font-normal text-muted">
+                    <Td label="To stop" num className="font-normal text-muted">
                       {inr(t.open_risk, 0)} at risk
                     </Td>
                     <Td num />

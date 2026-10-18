@@ -10,12 +10,15 @@ import {
   PageHeader,
   ResearchBadge,
   type Tone,
-  cli,
   inr,
   shortDate,
+  RunCommand,
 } from "@/components/ui";
+import { RRuler } from "@/components/trade-picture";
 import { WatchStar } from "@/components/watch-star";
-import { type PlanView, type SavedPlan, type Watchlist, getJson } from "@/lib/api";
+import { type PlanView, type SavedPlan, type StockView, type Watchlist, getJson } from "@/lib/api";
+
+import { PriceChart } from "../../stocks/[symbol]/chart";
 
 import { savePlan } from "../actions";
 import { PlanForm } from "./plan-form";
@@ -65,9 +68,10 @@ export default async function PlanPage({
   if (sp.entry && Number(sp.entry) > 0) query.set("entry", sp.entry);
   if (sp.stop && Number(sp.stop) > 0) query.set("stop", sp.stop);
   if (sp.tier === "swing" || sp.tier === "positional" || sp.tier === "invest") query.set("tier", sp.tier);
-  const [result, watch] = await Promise.all([
+  const [result, watch, stock] = await Promise.all([
     getJson<PlanView>(`/plan/${encodeURIComponent(symbol)}?${query}`),
     getJson<Watchlist>("/watchlist"),
+    getJson<StockView>(`/stocks/${encodeURIComponent(symbol)}?sessions=180`),
   ]);
   if (!result.ok) {
     return (
@@ -75,7 +79,7 @@ export default async function PlanPage({
         <PageHeader title={`Plan a trade: ${symbol}`} />
         <Notice tone="bad">{result.error}</Notice>
         <p className="text-sm text-muted">
-          Search for the stock with Ctrl+K, or run <code>{cli("daily")}</code> if prices are missing.
+          Search for the stock with Ctrl+K. If prices are missing: <RunCommand job="daily" />
         </p>
       </Page>
     );
@@ -145,11 +149,26 @@ export default async function PlanPage({
         </Notice>
       )}
 
+      {plan && stock.ok && stock.data.candles.length > 0 && (
+        <Card title="Trade picture" subtitle="The plan's entry, stop and targets on the chart (split/bonus-adjusted prices)">
+          <PriceChart
+            candles={stock.data.candles}
+            levels={[
+              { price: Number(plan.entry), title: "Entry", color: "#2563eb" },
+              { price: Number(plan.stop), title: "Stop", color: "#dc2626" },
+              { price: Number(plan.target1), title: "T1", color: "#16a34a" },
+              { price: Number(plan.target2), title: "T2", color: "#16a34a", dashed: true },
+            ]}
+          />
+          <RRuler entry={plan.entry} stop={plan.stop} price={s.last_close} t1={plan.target1} t2={plan.target2} />
+        </Card>
+      )}
+
       <div className="grid items-start gap-4 lg:grid-cols-3">
         <Card title="Your plan" subtitle="Numbers update as you type; sizing is the engine's" className="lg:col-span-2">
           {!s.last_close ? (
             <Notice tone="warn">
-              No prices stored for {s.symbol}. Run <code>{cli("daily")}</code>
+              No prices stored for {s.symbol}. <RunCommand job="daily" />
             </Notice>
           ) : (
             <PlanForm
@@ -176,7 +195,7 @@ export default async function PlanPage({
               </div>
             ) : (
               <p className="text-sm text-muted">
-                Unknown: no completed scan. Run <code>{cli("daily")}</code>
+                Unknown: no completed scan. <RunCommand job="daily" />
               </p>
             )}
           </Card>
@@ -191,7 +210,7 @@ export default async function PlanPage({
               <p className={v.events.blackout === null ? "text-warn" : "text-muted"}>{v.events.results_line}</p>
               {v.events.blackout === null && (
                 <p className="text-xs text-muted">
-                  Load the calendar: <code>{cli("events")}</code>
+                  <RunCommand job="events" lead="Load the calendar:" phone="The calendar loads with the evening run." />
                 </p>
               )}
               {v.events.ex_dates.map((e) => (
