@@ -31,6 +31,10 @@ PRICES: dict[str, tuple[float, float, float, float]] = {
     # so this errs high.
     "deepseek-chat": (0.28, 0.42, 0.028, 0.0),
     "deepseek-reasoner": (0.28, 0.42, 0.028, 0.0),
+    # Gemini's paid-tier list prices (the free tier costs nothing, so this errs high).
+    "gemini-2.5-flash": (0.30, 2.50, 0.03, 0.0),
+    "gemini-2.5-flash-lite": (0.10, 0.40, 0.01, 0.0),
+    "gemini-2.5-pro": (1.25, 10.0, 0.125, 0.0),
 }
 
 

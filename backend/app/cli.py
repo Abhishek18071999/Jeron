@@ -12,7 +12,7 @@ python -m app.cli deals                         # today's bulk and block deals
 python -m app.cli deals-import deals.csv        # bulk/block deals or insider trades saved
                                                 # from nseindia.com
 python -m app.cli fundamentals-import CF-FR*.csv # quarterly results (CSV from nseindia.com)
-python -m app.cli news-label --limit 100        # label news (Claude or DeepSeek; needs a key)
+python -m app.cli news-label --limit 100        # label news (JERON_NEWS_PROVIDER; needs a key)
 python -m app.cli news-testset                  # write headlines for you to label by hand
 python -m app.cli news-eval testset.csv         # the model's accuracy on your labels
 python -m app.cli backtest                      # walk-forward test of every strategy

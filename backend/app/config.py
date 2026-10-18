@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     alert_email_from: str = ""
     alert_email_to: str = ""
     # News labels (M6). Keys live only in .env; without one the news brain is off.
-    # news_provider: "claude", "deepseek" or "ollama" (Ollama Cloud).
+    # news_provider: "claude", "deepseek", "ollama" (Ollama Cloud) or "gemini".
     news_provider: str = "claude"
     anthropic_api_key: str = ""
     news_model: str = "claude-opus-5-5"
@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     ollama_api_key: str = ""
     ollama_model: str = "gemma4:31b"
     ollama_base_url: str = "https://ollama.com"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     # Monthly cap on the news labeller's estimated spend, US$ (spec section 10). The
     # labeller stops for the month once it is reached; 0 turns the cap off.
     news_monthly_budget_usd: float = Field(default=20.0, ge=0)
@@ -72,6 +75,8 @@ class Settings(BaseSettings):
             return bool(self.deepseek_api_key)
         if self.news_provider == "ollama":
             return bool(self.ollama_api_key)
+        if self.news_provider == "gemini":
+            return bool(self.gemini_api_key)
         return bool(self.anthropic_api_key)
 
     @property

@@ -48,7 +48,8 @@ are part of done, never commit secrets.
   - `app/news/` the news brain: `labels.py` (subject rules, the LLM's JSON schema and
     prompt, news score, test-set accuracy; pure), `claude.py` (Anthropic API labeller,
     batches; tests use a fake client, never the API), `deepseek.py` (DeepSeek's chat API in
-    JSON mode) and `ollama.py` (Ollama Cloud), the alternative labellers, and `job.py` (database). Labels are
+    JSON mode) `ollama.py` (Ollama Cloud) and `gemini.py`
+    (Gemini's OpenAI-compatible API), the alternative labellers, and `job.py` (database). Labels are
     stored once per model and `PROMPT_VERSION`; changing the prompt means a new version.
   - `app/fundamentals/` the fundamental brain (decision 0013): `score.py` (TTM, growth,
     P/E against own history, `FUND_SCORE_VERSION`; pure) and `job.py` (load filings from

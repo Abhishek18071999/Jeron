@@ -113,8 +113,11 @@ class DeepSeekLabeller:
 def _error_text(provider: str, response: httpx.Response) -> str:
     """The provider's own words ("Insufficient Balance", "unauthorized")."""
     try:
-        error = response.json().get("error") or {}
+        body = response.json()
+        if isinstance(body, list):  # Gemini's OpenAI-compatible API wraps errors in a list
+            body = body[0] if body else {}
+        error = body.get("error") or {}
         message = error.get("message") if isinstance(error, dict) else str(error)
-    except ValueError:
+    except (ValueError, AttributeError):
         message = None
     return f"{provider} HTTP {response.status_code}: {message or response.text[:200]}"

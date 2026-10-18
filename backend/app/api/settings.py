@@ -56,6 +56,7 @@ def _model(settings: Settings) -> str:
     return {
         "deepseek": settings.deepseek_model,
         "ollama": settings.ollama_model,
+        "gemini": settings.gemini_model,
     }.get(settings.news_provider, settings.news_model)
 
 

@@ -28,6 +28,7 @@ from app.models import Announcement, DailyBar, Instrument, LlmUsage, NewsBatch
 from app.models import NewsLabel as NewsLabelRow
 from app.news.claude import PRICES, ClaudeLabeller, Labeller, Usage
 from app.news.deepseek import DeepSeekLabeller, LabellerError
+from app.news.gemini import GeminiLabeller
 from app.news.labels import (
     PROMPT_VERSION,
     RULES_LABELLER,
@@ -559,6 +560,12 @@ def make_labeller(settings: Settings, model: str | None = None) -> Labeller | No
         return OllamaLabeller(
             settings.ollama_api_key, model or settings.ollama_model, settings.ollama_base_url
         )
+    if settings.news_provider == "gemini":
+        if not settings.gemini_api_key:
+            return None
+        return GeminiLabeller(
+            settings.gemini_api_key, model or settings.gemini_model, settings.gemini_base_url
+        )
     if settings.news_provider == "deepseek":
         if not settings.deepseek_api_key:
             return None
@@ -577,6 +584,7 @@ def labeller_name(settings: Settings) -> str:
     return {
         "deepseek": settings.deepseek_model,
         "ollama": settings.ollama_model,
+        "gemini": settings.gemini_model,
     }.get(settings.news_provider, settings.news_model)
 
 
@@ -592,7 +600,9 @@ def labels_exist(session: Session, labeller: str) -> bool:
 
 
 def missing_key(settings: Settings) -> str:
-    name = {"deepseek": "DEEPSEEK", "ollama": "OLLAMA"}.get(settings.news_provider, "ANTHROPIC")
+    name = {"deepseek": "DEEPSEEK", "ollama": "OLLAMA", "gemini": "GEMINI"}.get(
+        settings.news_provider, "ANTHROPIC"
+    )
     return (
         f"No JERON_{name}_API_KEY in .env: the news brain is off; only the free "
         "subject labels were made."
