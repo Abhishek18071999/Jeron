@@ -135,5 +135,7 @@ def portfolio(
             Decimal(str(RULES.heat_block_pct)),
             Decimal(str(settings.sector_cap_pct)),
             pending_cost(session, p.data_as_of),
+            settings.idle_cash_in_index,
+            p.data_as_of or p.expected,
         ),
     )

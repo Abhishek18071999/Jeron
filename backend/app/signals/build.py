@@ -109,6 +109,12 @@ def reasons(m: Market, s: int, t: int, strategy: Strategy, params: Params) -> li
             f"latest results (needs {params['min_fund']:g})"
         )
         out.append("Long-term uptrend: close above the 50-day EMA, the 50-day above the 200-day")
+    elif strategy.key == "momentum" and m.mom_rank is not None and m.mom_return is not None:
+        out.append(
+            f"Momentum leader: rank {_value(m.mom_rank, s, t):.2f} in the universe "
+            f"(needs {params['min_rank']:g}), checked on the first session of the month"
+        )
+        out.append(f"Rose {_value(m.mom_return, s, t) * 100:.0f}% from a year ago to a month ago")
     ema200 = _value(m.ema200, s, t)
     if not math.isnan(ema200) and c > ema200:
         out.append(f"Above its 200-day EMA ({_rs(ema200 / f)}): long-term uptrend")

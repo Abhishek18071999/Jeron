@@ -448,6 +448,58 @@ QUALITY_TREND = Strategy(
     ),
 )
 
+# momentum-v1 (docs/plans/momentum-v1.md): enter on the first session of a month,
+# sell on one when the stock has left the top quarter.
+MOMENTUM_EXIT_BELOW = 0.75
+
+
+def _mom_rank(m: Market) -> Array:
+    if m.mom_rank is None:
+        raise ValueError("this strategy needs the market's mom_rank")
+    return m.mom_rank
+
+
+def rebalance_days(m: Market) -> Array:
+    """Bool (1, days): the first session of each calendar month."""
+    first = [t == 0 or d.month != m.days[t - 1].month for t, d in enumerate(m.days)]
+    return np.array([first], dtype=bool)
+
+
+def _momentum_condition(m: Market, p: Params) -> Array:
+    rank = np.nan_to_num(_mom_rank(m), nan=-1.0)
+    return np.asarray((rank >= p["min_rank"]) & rebalance_days(m), dtype=bool)
+
+
+def _momentum_exit(m: Market, p: Params) -> Array:
+    # An unknown rank (left the universe, a gap in the data) is not an exit.
+    rank = np.nan_to_num(_mom_rank(m), nan=1.0)
+    return np.asarray((rank < MOMENTUM_EXIT_BELOW) & rebalance_days(m), dtype=bool)
+
+
+MOMENTUM = Strategy(
+    key="momentum",
+    version="momentum-v1",
+    name="Monthly 12-1 momentum leaders (invest)",
+    tier=Tier.INVEST,
+    summary="Each month, own the stocks with the strongest steady rise over the past year.",
+    grid_axes={"min_rank": (0.9, 0.95), "stop_atr": (3.0, 4.0)},
+    default={"min_rank": 0.9, "stop_atr": 4.0},
+    describe=lambda p: [
+        "Enter at the close of the first session of a month when the stock's momentum "
+        f"rank is in the top {100 - 100 * p['min_rank']:g}% of the universe. Momentum is "
+        "the return from 252 to 21 sessions ago divided by the volatility of daily returns "
+        "over the last 252 sessions. No trend or market-regime filter."
+    ],
+    condition=_momentum_condition,
+    exit_condition=_momentum_exit,
+    exit_reason=f"left the momentum leaders (rank below {MOMENTUM_EXIT_BELOW:g})",
+    exit_rule=(
+        "Sell at the next open after the first session of a month on which the stock's "
+        f"momentum rank is below {MOMENTUM_EXIT_BELOW:g} (out of the top quarter)."
+    ),
+    registered_on=date(2026, 10, 18),
+)
+
 # Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
 # back above 40 after about 26 days.
 MIN_NEWS_SCORE = 40.0
@@ -480,6 +532,7 @@ STRATEGIES = {
         RESULTS_DRIFT,
         SECTOR_ROTATION,
         QUALITY_TREND,
+        MOMENTUM,
     )
 }
 

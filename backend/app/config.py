@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     max_positions_positional: int = Field(default=8, ge=1)
     max_positions_invest: int = Field(default=15, ge=1)
     sector_cap_pct: float = Field(default=30.0, gt=0, le=100)
+    # Where idle cash goes: off = a liquid fund (what the backtests credit), on = a Nifty
+    # index fund (the backtests' cash-sweep line). An allocation choice, not an edge.
+    idle_cash_in_index: bool = False
     # Alerts (M5). Telegram first; email is the backup when Telegram is not set up or a
     # send fails. Secrets only in .env, never in the repo.
     telegram_bot_token: str = ""

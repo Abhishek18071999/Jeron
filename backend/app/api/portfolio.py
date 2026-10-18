@@ -61,6 +61,7 @@ class TotalsOut(BaseModel):
     pending_cost: Decimal
     idle_cash: Decimal
     cash_action: str | None
+    tax_notes: list[str]
 
 
 class PortfolioOut(BaseModel):
