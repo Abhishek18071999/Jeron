@@ -15,7 +15,7 @@ from app.news.deepseek import DeepSeekLabeller, LabellerError
 from app.news.labels import NewsItem
 
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"
 # Room for any thinking the model still does before the label.
 MAX_TOKENS = 4096
 WORKERS = 2

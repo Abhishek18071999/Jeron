@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma4:31b"
     ollama_base_url: str = "https://ollama.com"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     # Monthly cap on the news labeller's estimated spend, US$ (spec section 10). The
     # labeller stops for the month once it is reached; 0 turns the cap off.

@@ -49,7 +49,7 @@ def test_labels_through_the_openai_compatible_api():
     assert label is not None and label.event_type == EventType.ORDER_WIN
     assert http.urls == ["https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"]
     body = http.bodies[0]
-    assert body["model"] == "gemini-2.5-flash"
+    assert body["model"] == "gemini-3.8-flash"
     assert body["response_format"] == {"type": "json_object"}
     assert body["reasoning_effort"] == "low"
     assert labeller.usage.requests == 1 and labeller.usage.output_tokens == 40
