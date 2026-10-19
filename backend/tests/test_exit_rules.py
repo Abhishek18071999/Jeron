@@ -114,3 +114,12 @@ def test_matches_the_engine(rows):
     decided = final.day if final.reason.startswith(("stop", "breakeven")) else final.day - 1
     assert plan.exit_day == m.days[decided]
     assert (plan.t1_hit is not None) == any("T1" in f.reason for f in trade.exits)
+
+
+def test_stale_message_names_the_year_of_old_data():
+    from app.exits.job import PreOpen, preopen_message
+
+    old = PreOpen(date(2026, 10, 19), date(2024, 11, 28), date(2026, 10, 16), [], 0, 0)
+    assert "latest: Thu 28 Nov 2024" in preopen_message(old)
+    recent = PreOpen(date(2026, 10, 19), date(2026, 10, 14), date(2026, 10, 16), [], 0, 0)
+    assert "latest: Wed 14 Oct)" in preopen_message(recent)

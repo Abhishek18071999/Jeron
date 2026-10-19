@@ -178,3 +178,12 @@ def test_every_strategy_runs_or_says_what_it_needs(session):
     assert skipped == {"results-drift", "quality-trend", "combined-book"}
     assert any("run the events job" in line for line in lines)
     assert any("fundamentals-import" in line for line in lines)
+
+
+def test_short_history_is_skipped_with_a_message(session):
+    """With less history than the warm-up, `backtest` says so instead of a traceback."""
+    lines: list[str] = []
+    runs = run_backtests(session, ["breakout-52w"], start=DAYS[-30], log=lines.append)
+    assert runs == []
+    assert any("not enough history" in line for line in lines)
+    assert session.scalar(select(func.count()).select_from(BacktestRun)) == 0
