@@ -34,6 +34,7 @@ from app.backtest.walkforward import (
     all_trial_sharpes,
     evaluate,
     evaluate_combined,
+    make_folds,
 )
 from app.config import get_settings
 from app.data import store
@@ -407,6 +408,11 @@ def run_backtests(
     if market is None:
         market = build_market(load_inputs(session, start, end, log=log))
         log(f"Market ready: {len(market.symbols)} stocks in {time.perf_counter() - started:.1f} s")
+    try:
+        make_folds(market.days)
+    except ValueError as exc:
+        log(f"No backtest: {exc} ({len(market.days)} sessions loaded). Load more history first.")
+        return []
     ready = []
     for s in strategies:
         missing = missing_inputs(market, s)

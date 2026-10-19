@@ -457,7 +457,9 @@ def run_paper(
     now = now or datetime.now(IST)
     day = day or latest_scan_date(session)
     if day is None:
-        return PaperOutcome(date.min, "blocked", ["No scan has run yet; run the scan first."])
+        reason = "No scan has run yet; run the scan first."
+        log(f"Paper trading blocked: {reason}")
+        return PaperOutcome(date.min, "blocked", [reason])
     reasons = blocking_reasons(session, day)
     if reasons:
         for reason in reasons:

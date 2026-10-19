@@ -264,7 +264,11 @@ def _line(c: PositionCheck) -> str:
 def preopen_message(p: PreOpen, web_url: str = "", cash_action: str | None = None) -> str:
     lines = [f"Jeron pre-open check, {p.day:%a %-d %b %Y}"]
     if p.stale:
-        when = f"{p.data_as_of:%a %-d %b}" if p.data_as_of else "never"
+        when = "never"
+        if p.data_as_of:
+            # The year only when it isn't this one: a long-stopped install shows its age.
+            fmt = "%a %-d %b" if p.data_as_of.year == p.day.year else "%a %-d %b %Y"
+            when = f"{p.data_as_of:{fmt}}"
         lines += [
             "",
             f"Prices for {p.expected:%a %-d %b} are not loaded (latest: {when}). No actions "
