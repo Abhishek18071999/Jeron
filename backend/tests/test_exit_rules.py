@@ -123,3 +123,12 @@ def test_stale_message_names_the_year_of_old_data():
     assert "latest: Thu 28 Nov 2024" in preopen_message(old)
     recent = PreOpen(date(2026, 10, 19), date(2026, 10, 14), date(2026, 10, 16), [], 0, 0)
     assert "latest: Wed 14 Oct)" in preopen_message(recent)
+
+
+def test_message_carries_the_calendar_warning():
+    from app.exits.job import PreOpen, preopen_message
+
+    p = PreOpen(date(2026, 11, 2), date(2026, 10, 30), date(2026, 10, 30), [], 0, 0)
+    assert "CALENDAR" not in preopen_message(p)
+    text = preopen_message(p, calendar_note="The NSE holiday calendar has no 2027 rows yet.")
+    assert "CALENDAR\n- The NSE holiday calendar has no 2027 rows yet." in text

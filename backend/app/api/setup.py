@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app import autopilot
 from app.backtest.strategies import COMBINED, STRATEGIES, Combined, Strategy
+from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.db import get_session
 from app.models import (
@@ -224,6 +225,24 @@ def setup_view(session: SessionDep) -> SetupView:
             + f"{tested} of {len(strategies)} backtested, {passed} passed the section 6 "
             "gates and trade live; the rest are research only. Strategies that need results "
             "or news are tested once those are in.",
+        )
+    )
+
+    calendar = TradingCalendar.default()
+    note = calendar.coverage_warning(date.today())
+    steps.append(
+        Step(
+            key="calendar",
+            title="Holiday calendar",
+            state="you" if note else "done",
+            detail=note or f"NSE holidays loaded through {max(calendar.years)}.",
+            todo=[
+                "Ask Claude to add NSE's holiday list (nseindia.com > Resources > Exchange "
+                "Communication > Holidays) once it is published, then `git pull` and "
+                "`docker compose up -d --build`."
+            ]
+            if note
+            else [],
         )
     )
 

@@ -43,6 +43,17 @@ class HoldingOut(BaseModel):
     notes: list[str]
 
 
+class ExemptionOut(BaseModel):
+    year: int
+    label: str
+    long_term: Decimal
+    short_term: Decimal
+    exemption: Decimal
+    used: Decimal
+    left: Decimal
+    line: str
+
+
 class TotalsOut(BaseModel):
     positions: int
     value: Decimal
@@ -62,6 +73,7 @@ class TotalsOut(BaseModel):
     idle_cash: Decimal
     cash_action: str | None
     tax_notes: list[str]
+    exemption: ExemptionOut | None
 
 
 class PortfolioOut(BaseModel):

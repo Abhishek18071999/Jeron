@@ -812,7 +812,18 @@ export type Portfolio = {
     pending_cost: string;
     idle_cash: string;
     cash_action: string | null; // park idle cash in a liquid fund, or free some up
-    tax_notes: string[]; // long-term tax soon; losses to book before 31 March
+    tax_notes: string[]; // long-term tax soon (sell now vs after); losses to book before 31 March
+    // This financial year's long-term gains against the ₹1.25 lakh exemption.
+    exemption: {
+      year: number;
+      label: string; // "2026-27"
+      long_term: string;
+      short_term: string;
+      exemption: string;
+      used: string;
+      left: string;
+      line: string;
+    } | null;
   };
 };
 

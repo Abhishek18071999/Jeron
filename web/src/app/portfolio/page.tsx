@@ -81,6 +81,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       {t.tax_notes.map((n) => (
         <Notice key={n}>{n}</Notice>
       ))}
+      {t.exemption && <Notice>{t.exemption.line}</Notice>}
 
       {t.positions === 0 ? (
         <Card>

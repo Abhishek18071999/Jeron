@@ -7,6 +7,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from app.backtest.costs import small_trade_warning
+
 # Telegram's limit for one message.
 TELEGRAM_LIMIT = 4096
 
@@ -103,6 +105,9 @@ def signal_message(
             "it is paper-traded for evidence only."
         )
     lines += [f"Note: {n}" for n in p.get("notes", [])]
+    small = small_trade_warning(float(p["capital_at_risk"]))
+    if small:
+        lines.append(f"Note: {small}")
     lines += ["", f"Journal: {journal_link(web_url, str(p['signal_id']))}"]
     return "\n".join(lines)
 

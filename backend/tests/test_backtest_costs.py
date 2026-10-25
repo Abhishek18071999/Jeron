@@ -2,7 +2,15 @@ from datetime import date
 
 import pytest
 
-from app.backtest.costs import CRORE, CostModel, Realised, estimate_tax, financial_year
+from app.backtest.costs import (
+    CRORE,
+    CostModel,
+    Realised,
+    estimate_tax,
+    financial_year,
+    fixed_charges,
+    small_trade_warning,
+)
 
 
 def test_delivery_charges_on_one_lakh():
@@ -73,3 +81,28 @@ def test_interest_on_idle_cash_is_taxed_at_the_slab():
     (year,) = est.years
     assert year.interest == 15_000.0
     assert est.total == pytest.approx(4_500.0)
+
+
+def test_fixed_charges_are_the_dp_charge_per_sale_day():
+    assert fixed_charges(CostModel()) == pytest.approx(30.68)  # two sale days
+    assert fixed_charges(CostModel(), sales=1) == pytest.approx(15.34)
+    # A broker with a ₹20 minimum adds it to the buy and each sale, plus GST.
+    assert fixed_charges(CostModel(brokerage_min=20.0)) == pytest.approx(30.68 + 60 * 1.18)
+
+
+def test_brokerage_minimum_applies_per_order():
+    model = CostModel(brokerage_pct=0.03, brokerage_min=20.0)
+    assert model.charges(10_000, "buy").brokerage == pytest.approx(20.0)  # 0.03% is ₹3
+    assert model.charges(1_000_000, "buy").brokerage == pytest.approx(300.0)
+
+
+def test_small_trade_warning_at_the_boundary():
+    # ₹30.68 of fixed charges is 0.1R at ₹306.80 at risk.
+    assert small_trade_warning(306.8) is None
+    assert small_trade_warning(10_000) is None
+    note = small_trade_warning(306.0)
+    assert note is not None and note.startswith("Small trade: fixed charges of about ₹31")
+    assert "0.10R of the ₹306 at risk" in note
+    note = small_trade_warning(153.4)
+    assert note is not None and "0.20R" in note and "Below about ₹307 at risk" in note
+    assert small_trade_warning(0) is None

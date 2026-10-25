@@ -3,7 +3,17 @@
 from datetime import date
 from decimal import Decimal
 
-from app.portfolio.calc import UNKNOWN_SECTOR, Holding, tax_notes, totals
+from app.journal.calc import Fill
+from app.portfolio.calc import (
+    UNKNOWN_SECTOR,
+    Holding,
+    Sale,
+    long_term_exemption,
+    realised_sales,
+    sell_now_or_later,
+    tax_notes,
+    totals,
+)
 
 
 def _h(ticker="A", sector="IT", shares=100, entry="100", close="110", stop="95", pnl="1000"):
@@ -122,7 +132,10 @@ def test_tax_notes_flag_a_gain_about_to_turn_long_term():
     assert tax_notes([h], date(2027, 6, 1)) == []  # 273 days: too early
     (note,) = tax_notes([h], date(2027, 8, 1))
     assert note.startswith("A becomes long-term on 02 Sep 2027 (in 32 days)")
-    assert "₹5,000 gain is taxed at 12.5% instead of 20%, up to ₹375 less" in note
+    # The whole ₹1.25 lakh exemption is left: no tax after the mark.
+    assert "₹5,000 gain, selling now costs about ₹1,000 in tax (20% short-term)" in note
+    assert "selling after that about ₹0 (12.5% above the ₹125,000 of this financial" in note
+    assert "₹1,000 less" in note
     assert tax_notes([h], date(2027, 9, 2)) == []  # already long-term
     assert tax_notes([_h(close="90")], date(2027, 8, 1)) == []  # a loss: nothing to wait for
 
@@ -139,3 +152,71 @@ def test_totals_carry_the_tax_notes_when_given_a_day():
     args = ([_h(close="80")], Decimal("100000"), Decimal(5), Decimal(6), Decimal(30))
     assert totals(*args).tax_notes == []
     assert len(totals(*args, as_of=date(2027, 2, 1)).tax_notes) == 1
+
+
+def test_tax_notes_use_the_exemption_left_this_year():
+    h = _h(close="1200", shares=200)  # ₹2,20,000 gain
+    (note,) = tax_notes([h], date(2027, 8, 1), Decimal("25000"))
+    # Now: 20% of 2,20,000 = 44,000. After: 12.5% of (2,20,000 - 25,000) = 24,375.
+    assert "about ₹44,000 in tax" in note
+    assert "about ₹24,375 (12.5% above the ₹25,000 of this financial year's" in note
+    assert "₹19,625 less" in note
+
+
+def test_sell_later_in_the_next_financial_year_gets_a_new_exemption():
+    gain = Decimal("200000")
+    # The mark on 2 Apr 2027 is in FY 2027-28: the exemption used in 2026-27 doesn't count.
+    now, later, exempt = sell_now_or_later(gain, date(2027, 3, 1), date(2027, 4, 2), Decimal(0))
+    assert (now, later, exempt) == (Decimal("40000"), Decimal("9375"), Decimal("125000"))
+    now, later, exempt = sell_now_or_later(gain, date(2027, 5, 1), date(2027, 6, 2), Decimal(0))
+    assert (later, exempt) == (Decimal("25000"), Decimal(0))
+
+
+def test_realised_sales_match_lots_first_in_first_out():
+    fills = [
+        Fill(date(2025, 1, 10), "buy", 10, Decimal("100"), Decimal("10")),  # ₹101 a share
+        Fill(date(2025, 6, 10), "buy", 10, Decimal("200")),
+        Fill(date(2026, 2, 1), "sell", 15, Decimal("300"), Decimal("15")),  # ₹299 net
+    ]
+    first, second = realised_sales("A", fills)
+    assert (first.shares, first.gain, first.held_days, first.long_term) == (
+        10,
+        Decimal("1980.00"),
+        387,
+        True,
+    )
+    assert (second.shares, second.gain, second.long_term) == (5, Decimal("495.00"), False)
+    # Nothing sold: no sales.
+    assert realised_sales("A", fills[:2]) == []
+
+
+def _sale(day, gain, days):
+    return Sale("A", day, 1, Decimal(gain), days)
+
+
+def test_long_term_exemption_used_this_financial_year():
+    sales = [
+        _sale(date(2026, 3, 20), "90000", 400),  # last financial year: not counted
+        _sale(date(2026, 5, 1), "80000", 400),
+        _sale(date(2026, 7, 1), "-10000", 400),
+        _sale(date(2026, 8, 1), "-5000", 100),  # a short-term loss is set off first
+        _sale(date(2026, 9, 1), "30000", 500),
+    ]
+    e = long_term_exemption(sales, date(2026, 10, 25))
+    assert (e.year, e.label) == (2026, "2026-27")
+    assert (e.long_term, e.short_term) == (Decimal("100000.00"), Decimal("-5000.00"))
+    assert (e.used, e.left) == (Decimal("95000.00"), Decimal("30000.00"))
+    assert e.line.startswith("FY 2026-27: ₹95,000 of the ₹125,000 long-term exemption used")
+    big = long_term_exemption([*sales, _sale(date(2026, 10, 1), "90000", 800)], date(2026, 10, 25))
+    assert big.left == 0 and "used up" in big.line
+    # A sale after the day isn't counted yet.
+    assert long_term_exemption(sales, date(2026, 6, 1)).used == Decimal("80000.00")
+
+
+def test_totals_carry_the_exemption_and_pass_what_is_left_to_the_notes():
+    holdings = [_h(close="1200", shares=200)]
+    args = (holdings, Decimal("10000000"), Decimal(5), Decimal(6), Decimal(30))
+    assert totals(*args).exemption is None
+    t = totals(*args, as_of=date(2027, 8, 1), sales=[_sale(date(2027, 5, 1), "100000", 400)])
+    assert t.exemption is not None and t.exemption.left == Decimal("25000.00")
+    assert "₹25,000 of this financial year's" in t.tax_notes[0]

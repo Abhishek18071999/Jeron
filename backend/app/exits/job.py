@@ -261,7 +261,9 @@ def _line(c: PositionCheck) -> str:
     return "\n".join([text, *(f"  {n}" for n in extra)])
 
 
-def preopen_message(p: PreOpen, web_url: str = "", cash_action: str | None = None) -> str:
+def preopen_message(
+    p: PreOpen, web_url: str = "", cash_action: str | None = None, calendar_note: str | None = None
+) -> str:
     lines = [f"Jeron pre-open check, {p.day:%a %-d %b %Y}"]
     if p.stale:
         when = "never"
@@ -292,6 +294,8 @@ def preopen_message(p: PreOpen, web_url: str = "", cash_action: str | None = Non
         lines += [f"- {t}: {e}" for t, e in events]
     if cash_action and not p.stale:
         lines += ["", "CASH", f"- {cash_action}"]
+    if calendar_note:
+        lines += ["", "CALENDAR", f"- {calendar_note}"]
     if p.paper_open:
         lines += [
             "",
@@ -321,7 +325,7 @@ def run_preopen(
     from app.portfolio.service import portfolio  # it builds on this module
 
     cash = portfolio(session, settings=settings, pre=p).totals.cash_action
-    text = preopen_message(p, settings.web_url, cash)
+    text = preopen_message(p, settings.web_url, cash, calendar.coverage_warning(day))
     log(text)
     outcome = AlertOutcome(day, "ok")
     if not send:

@@ -152,3 +152,12 @@ def test_checklist():
         "Size is from the plan, not a guess",
         "I will record the fill today",
     ]
+
+
+def test_small_trade_warns_without_blocking():
+    assert "small_trade" not in {c.key for c in build_plan(BASE).checks}
+    # ₹20,000 of capital: 39 shares (20% of capital) x ₹5 = ₹195 at risk, 0.16R of charges.
+    plan = build_plan(replace(BASE, capital=Decimal("20000")))
+    check = next(c for c in plan.checks if c.key == "small_trade")
+    assert check.status == "warn" and not check.hard
+    assert "0.16R of the ₹195 at risk" in check.detail

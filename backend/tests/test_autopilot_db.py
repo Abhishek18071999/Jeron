@@ -123,6 +123,9 @@ def test_setup_page_uploads_and_news(session):
     assert steps["prices"]["state"] == "waiting"
     assert steps["news"]["state"] == "you" and ".env" in steps["news"]["todo"][0]
     assert steps["alerts"]["state"] == "you"
+    calendar = steps["calendar"]
+    assert calendar["state"] in ("done", "you")  # "you" in November and December
+    assert calendar["state"] == "done" or "holiday calendar" in calendar["detail"]
     assert len(view["strategies"]) == len(STRATEGIES) + len(COMBINED)
 
     put = client.put("/imports/CF-FR-equities.csv", content=b"COMPANY NAME,** XBRL\n")

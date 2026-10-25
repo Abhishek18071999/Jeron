@@ -76,3 +76,21 @@ def test_shipped_file_covers_2026():
     assert cal.is_trading_day(date(2026, 10, 19))
     assert cal.is_trading_day(date(2026, 2, 1))  # Budget day, a Sunday
     assert cal.next_trading_day(date(2026, 10, 19)) == date(2026, 10, 21)
+
+
+def test_coverage_warning(cal):
+    # The fixture covers 2025 only.
+    assert cal.coverage_warning(date(2025, 6, 1)) is None
+    note = cal.coverage_warning(date(2025, 11, 3))
+    assert note is not None and "no 2026 rows yet" in note
+    note = cal.coverage_warning(date(2026, 1, 2))
+    assert note is not None and "no 2026 rows:" in note
+
+
+def test_shipped_file_covers_this_year():
+    """Fails from 1 January of a year whose NSE holidays are not in the file yet (NSE
+    publishes them in December): add them to nse_holidays.csv."""
+    today = date.today()
+    assert today.year in TradingCalendar.default().years, (
+        f"nse_holidays.csv has no {today.year} rows"
+    )

@@ -56,6 +56,9 @@ def test_signal_message_has_every_part_of_the_plan():
     assert "it stays as a limit for the day" in text  # an engine-v2 account's signal
     v3 = payload | {"invalidation": "Don't buy if it opens above ₹101.00 or below the stop"}
     assert "Not filled by 09:15: cancel it." in signal_message(v3, False, "")
+    assert "Small trade" not in text
+    small = signal_message(payload | {"capital_at_risk": "200"}, False, "")
+    assert "Note: Small trade: fixed charges of about ₹31" in small
     headed = signal_message(payload, False, "", section="Swing")
     assert headed.startswith("SWING · NEW SIGNAL: AAA (swing, conviction 5/5)")
 

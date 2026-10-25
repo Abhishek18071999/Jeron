@@ -41,6 +41,7 @@ class CostModel:
     name: str = "zerodha-delivery-2026"
     brokerage_pct: float = 0.0
     brokerage_max: float = 0.0  # cap per order in rupees (0 = no cap)
+    brokerage_min: float = 0.0  # minimum per order in rupees (0 = none)
     stt_pct: float = 0.1
     exchange_pct: float = 0.00297
     sebi_per_crore: float = 10.0
@@ -66,6 +67,8 @@ class CostModel:
         brokerage = value * self.brokerage_pct / 100
         if self.brokerage_max:
             brokerage = min(brokerage, self.brokerage_max)
+        if self.brokerage_min:
+            brokerage = max(brokerage, self.brokerage_min)
         stt = value * self.stt_pct / 100
         exchange = value * self.exchange_pct / 100
         sebi = value * self.sebi_per_crore / CRORE
@@ -90,6 +93,39 @@ class Charges:
         return (
             self.brokerage + self.stt + self.exchange + self.sebi + self.stamp + self.gst + self.dp
         )
+
+
+# --- Small trades ----------------------------------------------------------------------
+
+# Fixed charges above this share of 1R make a trade not worth taking at that size.
+SMALL_TRADE_R = 0.1
+# The engine's exits sell in two goes (half at T1, the rest later): two days with a sale.
+EXIT_SALES = 2
+
+
+def fixed_charges(model: CostModel, sales: int = EXIT_SALES) -> float:
+    """The charges that don't shrink with the trade's size: the DP charge on each day
+    with a sale and any brokerage minimum on the buy and each sale (GST included)."""
+    brokerage = model.brokerage_min * (1 + sales) * (1 + model.gst_pct / 100)
+    return model.dp_per_sale * sales + brokerage
+
+
+def small_trade_warning(
+    risk: float, model: CostModel | None = None, sales: int = EXIT_SALES
+) -> str | None:
+    """A warning when fixed charges cost more than `SMALL_TRADE_R` of the trade's risk
+    (entry - stop) x shares, in rupees; None otherwise."""
+    model = model or CostModel()
+    fixed = fixed_charges(model, sales)
+    if risk <= 0 or fixed <= SMALL_TRADE_R * risk:
+        return None
+    floor = fixed / SMALL_TRADE_R
+    return (
+        f"Small trade: fixed charges of about ₹{fixed:,.0f} (DP charge ₹{model.dp_per_sale:g} "
+        f"on each of {sales} days with a sale) are {fixed / risk:.2f}R of the ₹{risk:,.0f} at "
+        f"risk. Below about ₹{floor:,.0f} at risk they cost more than {SMALL_TRADE_R:g}R; "
+        "the backtest's results assume larger trades."
+    )
 
 
 # --- Estimated tax (post-tax view) -----------------------------------------------------
