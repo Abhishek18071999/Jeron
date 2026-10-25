@@ -30,10 +30,16 @@ authenticator app such as Google Authenticator):
 docker compose run --rm backend python -m app.cli auth-setup
 ```
 
-Paste the two lines it prints into `.env`, add the account to your authenticator app
+Paste the three lines it prints into `.env`, add the account to your authenticator app
 with the setup key it shows, then `docker compose up -d`. A login lasts 30 days per
 device; Log out is on the Settings page. Changing the password or key logs out every
 device.
+
+The third line, `JERON_API_TOKEN`, is what the web app sends the backend API, so no
+other program on the computer (and no web page using DNS rebinding) can read or change
+your journal through it. If you set up the login before this existed, make just the
+token with `docker compose run --rm backend python -m app.cli api-token`. The Setup page
+says whether it is set.
 
 ### Backups
 

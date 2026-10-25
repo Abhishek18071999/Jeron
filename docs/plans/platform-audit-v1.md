@@ -60,6 +60,27 @@ Ranked by risk reduction and decision quality for real money, then effort.
 5. **Journal sample-size honesty.** A minimum-sample warning and a 95% interval on the
    average R per strategy in the journal stats.
 
+## Status (2026-10-25)
+
+All five slices are built on `claude/project-thread-2ydnzm`.
+
+| Slice | Built | Tests (all run here) |
+|---|---|---|
+| 1. API token + Host check | `app/api/security.py`, `apiHeaders()` in the web app, `api-token` command, Setup step, CI smoke step | `tests/test_api_security.py` (7, one walks every route in the OpenAPI schema); the CI compose job checks 401 / 200 / 400 against the real stack |
+| 2. Data outage alert + retry | `app/alerts/late.py`, `daily-retry` job, `due_session()` | `test_late_data_is_told_once`, `test_data_on_time_sends_nothing`, `test_due_session`, `test_retry_only_when_the_scan_is_missing` |
+| 3. Real-account guardrails | `guardrails()` in the plan, `account_state()`, 4 settings, Portfolio card | 7 rows added to `tests/test_risk_rules.py`; plan and portfolio DB tests extended |
+| 4. Backtest risk profile | `risk_profile()` in `stats.py`, stored per run, report card table | `tests/test_backtest_stats.py` (4, hand-worked numbers) |
+| 5. Journal sample size | 95% range of the average R, notes under 30 trades, weekly line | `tests/test_journal_sample.py` (4, hand-worked numbers) |
+
+Backend: 582 passed (556 before), ruff and mypy clean. Web: lint, typecheck and build
+pass. The Portfolio, Journal, Setup and Settings pages were opened in Chromium against a
+local backend with the token on (desktop and phone width) and showed the new parts with
+a test journal entry; the backtest report's new table was not seen with real data (no
+run in the local database). Docker Compose was not run here; CI runs it.
+
+No migration: the new settings live in `setting_changes` like the others, and the new
+report numbers are inside each run's stored summary.
+
 ## Not built, and why
 
 - **Live order placement / broker execution.** Spec section 12: "No automatic order

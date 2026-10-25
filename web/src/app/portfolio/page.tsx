@@ -236,10 +236,12 @@ function Guardrails({ a }: { a: AccountGuardrails }) {
     const lost = Math.max(0, -Number(realised));
     return {
       value: <span className={signTone(realised)}>{inrSigned(realised)}</span>,
-      sub: limit ? `limit ${inr(limit, 0)} lost` : "no limit set",
+      sub: limit ? `limit: a loss of ${inr(limit, 0)}` : "no limit set",
       tone: (limit && lost >= Number(limit) ? "bad" : "neutral") as "bad" | "neutral",
+      hit: Boolean(limit && lost >= Number(limit)),
     };
   };
+  const stops = a.limits_block ? "new trade plans are blocked" : "new trade plans get a warning";
   const today = loss(a.realised_today, a.daily_loss_limit);
   const week = loss(a.realised_week, a.weekly_loss_limit);
   const capped = a.max_entries_week !== null && a.entries_week >= a.max_entries_week;
@@ -256,6 +258,23 @@ function Guardrails({ a }: { a: AccountGuardrails }) {
         <Notice tone="warn">
           The account is {pctText(a.drawdown_pct, 1)} below its peak: new trade plans risk half the usual amount
           until it is back within {pctText(a.drawdown_halve_pct, 0)}.
+        </Notice>
+      )}
+      {today.hit && (
+        <Notice tone={a.limits_block ? "bad" : "warn"}>
+          Today&apos;s realised losses ({inr(-Number(a.realised_today), 0)}) reached the daily limit of{" "}
+          {inr(a.daily_loss_limit, 0)}: {stops} until tomorrow.
+        </Notice>
+      )}
+      {week.hit && (
+        <Notice tone={a.limits_block ? "bad" : "warn"}>
+          This week&apos;s realised losses ({inr(-Number(a.realised_week), 0)}) reached the weekly limit of{" "}
+          {inr(a.weekly_loss_limit, 0)}: {stops} until Monday.
+        </Notice>
+      )}
+      {capped && (
+        <Notice tone={a.limits_block ? "bad" : "warn"}>
+          {a.entries_week} new positions this week, the cap set on Settings: {stops} until Monday.
         </Notice>
       )}
       <Card title="Guardrails">

@@ -40,7 +40,8 @@ are part of done, never commit secrets.
     `docs/plans/combined-book-v1.md`; `momentum-v1` (invest tier, monthly 12-1 momentum
     leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`),
     `walkforward.py` (folds, holdout, gates), `stats.py` (also the Nifty 500 cash-sweep
-    line reported beside the gates, M8 part 2), `job.py` (database). A strategy may set
+    line reported beside the gates, M8 part 2, and `risk_profile`: Sortino, streaks, time
+    under water, exposure, turnover; reporting only), `job.py` (database). A strategy may set
     `single_regime` (Gate 5 judged in its own regimes) only if registered from 2026-10-18.
     Changing a strategy's rules means a new strategy version; runs are never
     overwritten. The engine is also the risk manager (spec section 5); the sector cap,
@@ -68,7 +69,8 @@ are part of done, never commit secrets.
     skip with a reason, "I bought it" and the fill typed back; each update stored once in
     `bot_updates`; `docs/plans/ui-v2.md`). Research-only signals
     are only in the summary unless `JERON_ALERT_RESEARCH_SIGNALS` is on.
-  - `app/journal/` the journal: `calc.py` (positions from fills, stats; pure) and
+  - `app/journal/` the journal: `calc.py` (positions from fills, stats with a 95% range
+    of the average R and a note under 30 closed trades; pure) and
     `service.py` (database). Every signal without an entry is pending. `tradebook.py`
     reads Zerodha's tradebook CSV (pure); `importer.py` turns it into fills, stored with
     the broker's trade id so a re-import adds nothing.
@@ -91,12 +93,18 @@ are part of done, never commit secrets.
     exposure vs settings, idle cash to park in a liquid fund or, with
     `JERON_IDLE_CASH_IN_INDEX`, an index fund; tax timing notes with the rupee tax of selling
     now vs after the 12-month mark; the financial year's ₹1.25 lakh long-term exemption used,
-    from journal sales matched first in, first out; pure) and `service.py` (journal positions
-    + the pre-open exit plan). Served at `/portfolio`.
+    from journal sales matched first in, first out; `account_state`: equity, peak and
+    drawdown, realised today and this week, entries this week; pure) and `service.py`
+    (journal positions + the pre-open exit plan). Served at `/portfolio` (with `account`,
+    the Guardrails card).
   - `app/plan/` trade plans (decision 0010): `calc.py` (the engine's `position_size` and
     `reward_risk`, spec section 4 checks, heat and sector after the buy, the 5-item
     checklist, the small-trade warning when fixed charges pass 0.1R
-    (`costs.small_trade_warning`, also on signal alerts and Trade cards); pure) and `service.py` (database). `GET /plan/{symbol}`, `POST /plans`;
+    (`costs.small_trade_warning`, also on signal alerts and Trade cards); the real
+    account's guardrails (`guardrails`: spec section 5's drawdown brake and max positions
+    per tier, always hard; daily/weekly realised loss limits and a weekly entries cap from
+    settings, hard unless `JERON_RISK_LIMITS_BLOCK` is off; decision 0015); pure) and
+    `service.py` (database). `GET /plan/{symbol}`, `POST /plans`;
     plans are never changed (a new one supersedes), journal entries carry `plan_id`.
   - `app/watchlist/` `calc.py` (alert hits, alert keys; pure) and `service.py`; served at
     `/watchlist`. The alerts job sends one alert per item and price (`watch:` keys).
@@ -106,7 +114,8 @@ are part of done, never commit secrets.
     (`auth-setup`). The news labeller records spend in `llm_usage` and stops at the
     monthly cap (decision 0012).
   - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
-    days, `weekly` after the last session of the week; `catch_up` on start runs what was
+    days, `daily-retry` 21:30 IST (only when the session has no scan yet), `weekly` after
+    the last session of the week; `catch_up` on start runs what was
     missed while the computer was off; the autopilot every minute. Runs as the
     `scheduler` service.
   - `app/autopilot.py` sets an install up without commands (`docs/plans/autopilot-v1.md`):
@@ -118,7 +127,10 @@ are part of done, never commit secrets.
     `backend/seed/nse-results-2016-2026.zip` once when no results are loaded. Each step
     is a CLI command in its own process. `GET /setup` (`app/api/setup.py`) says what is
     done, running, or needs the owner.
-  - `app/api/` routes; `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
+  - `app/api/` routes; `security.py` (the Host check against DNS rebinding and the
+    `JERON_API_TOKEN` bearer token on every route but `/health`; the web app sends it,
+    `web/src/lib/api.ts` `apiHeaders`; `tests/test_api_security.py` walks every route);
+    `market.py` serves `/market/mood`, `portfolio.py` `/portfolio`;
     `analytics.py` serves `/analytics/compare` and `/analytics/weekly`;
     `stocks.py` `/stocks/ranked` (the latest scan, by industry), `plan.py`, `watchlist.py`;
     `deals.py` `/stocks/{symbol}/deals`; `news.py` `/stocks/{symbol}/news` and `/news/latest`
@@ -130,7 +142,8 @@ are part of done, never commit secrets.
     `events` (board-meeting and announcement history from the PR bundles),
     `events-import` (a board-meeting CSV saved from nseindia.com), `deals` (the day's bulk and
     block deals; `daily` runs it too), `deals-import FILE` (bulk/block deals or insider
-    trades saved from nseindia.com), `fundamentals-import FILE...` (quarterly results from
+    trades saved from nseindia.com), `api-token` (the web app's token for the API),
+    `fundamentals-import FILE...` (quarterly results from
     Financial Results CSVs saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
     `tradebook FILE`, `auth-setup` (the web login's secrets).
@@ -196,5 +209,10 @@ Everything: `docker compose up --build` from the repo root.
   settings (capital, risk %, position limits, sector cap) and the alert secrets (Telegram
   token, SMTP password), which live only in `.env`. Every spec section 5 rule has
   a test listed in `tests/test_risk_rules.py`.
+- Every API route needs the API token when `JERON_API_TOKEN` is set (`app/api/security.py`);
+  `/health` is the only open path. Server-side web code calls the backend through
+  `apiHeaders()`, never a bare `fetch`.
+- The trade plan is where the real account's risk rules live: a new limit goes in
+  `app/plan/calc.py` `guardrails` with a row in `tests/test_risk_rules.py`.
 - CI (`.github/workflows/ci.yml`) runs backend checks, web checks, and a Docker Compose
   smoke test. Keep it green.
