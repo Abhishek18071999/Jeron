@@ -89,11 +89,14 @@ are part of done, never commit secrets.
     strength; pure) and `service.py` (database). Served at `/market/mood`.
   - `app/portfolio/` my real portfolio: `calc.py` (open risk, heat, give-back, sector
     exposure vs settings, idle cash to park in a liquid fund or, with
-    `JERON_IDLE_CASH_IN_INDEX`, an index fund; tax timing notes; pure) and `service.py` (journal positions + the pre-open exit
-    plan). Served at `/portfolio`.
+    `JERON_IDLE_CASH_IN_INDEX`, an index fund; tax timing notes with the rupee tax of selling
+    now vs after the 12-month mark; the financial year's ₹1.25 lakh long-term exemption used,
+    from journal sales matched first in, first out; pure) and `service.py` (journal positions
+    + the pre-open exit plan). Served at `/portfolio`.
   - `app/plan/` trade plans (decision 0010): `calc.py` (the engine's `position_size` and
     `reward_risk`, spec section 4 checks, heat and sector after the buy, the 5-item
-    checklist; pure) and `service.py` (database). `GET /plan/{symbol}`, `POST /plans`;
+    checklist, the small-trade warning when fixed charges pass 0.1R
+    (`costs.small_trade_warning`, also on signal alerts and Trade cards); pure) and `service.py` (database). `GET /plan/{symbol}`, `POST /plans`;
     plans are never changed (a new one supersedes), journal entries carry `plan_id`.
   - `app/watchlist/` `calc.py` (alert hits, alert keys; pure) and `service.py`; served at
     `/watchlist`. The alerts job sends one alert per item and price (`watch:` keys).
@@ -131,7 +134,9 @@ are part of done, never commit secrets.
     Financial Results CSVs saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
     `tradebook FILE`, `auth-setup` (the web login's secrets).
-  - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`.
+  - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`. From
+    November, a missing next year is warned on `/setup` and in the pre-open check, and
+    `tests/test_calendar.py` fails from 1 January of a year not in the file.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
 - `backup/backup.sh` the nightly `pg_dump` run by the `backup` service.
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Navigation: Today (`/`),

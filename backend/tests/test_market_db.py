@@ -148,6 +148,17 @@ def test_portfolio(empty_session):
     assert Decimal(t["heat_pct"]) < 1 and Decimal(t["capital"]) == Decimal("1000000")
     assert [x["sector"] for x in t["sectors"]] == ["IT", "Banks"]
     assert any("without a stop" in w for w in t["warnings"])
+    assert t["exemption"]["used"] == "0.00" and t["exemption"]["left"] == "125000.00"
+
+    # A closed trade sold this financial year, held over a year: long-term gain used.
+    sold = manual_entry(s, "UP")
+    add_fill(s, sold, DAYS[0], "buy", 10, Decimal("100"))
+    add_fill(s, sold, DAYS[-1], "sell", 10, Decimal("150"))
+    t = client.get("/portfolio", params={"day": str(next_session(CAL, DAYS[-1]))}).json()["totals"]
+    assert t["positions"] == 2  # the closed entry is not a holding
+    assert Decimal(t["exemption"]["long_term"]) == Decimal(500)
+    assert Decimal(t["exemption"]["left"]) == Decimal(124500)
+    assert t["exemption"]["line"].startswith("FY 2025-26: ₹500 of the ₹125,000")
 
 
 def test_results_ahead_for_signals(empty_session):

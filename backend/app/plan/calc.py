@@ -15,7 +15,8 @@ the inputs from the database.
   6%; the sector at most JERON_SECTOR_CAP_PCT of capital after the buy; no results
   board meeting within the blackout (3 sessions before it through the meeting day).
 - Warnings (shown, not blocking): heat at the 5% warning level, defend mode, a results
-  calendar that isn't loaded, ex-dates ahead.
+  calendar that isn't loaded, ex-dates ahead, and a trade so small that fixed charges
+  (the DP charge per day with a sale) cost more than 0.1R (`costs.small_trade_warning`).
 """
 
 import math
@@ -23,7 +24,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 
-from app.backtest.costs import CostModel
+from app.backtest.costs import CostModel, small_trade_warning
 from app.backtest.engine import PortfolioRules, position_size, reward_risk, round_trip_costs
 from app.backtest.strategies import TIERS, Tier
 
@@ -238,6 +239,9 @@ def build_plan(p: PlanInputs) -> Plan:
 
     risk_amount = _q(one_r * shares)
     value = _q(p.entry * shares)
+    small = small_trade_warning(float(risk_amount), COSTS) if shares >= 1 else None
+    if small:
+        checks.append(Check("small_trade", "Charges worth the trade", "warn", small, hard=False))
     heat_before = _q(p.open_risk / p.capital * 100) if p.capital > 0 else ZERO
     heat_after = _q((p.open_risk + risk_amount) / p.capital * 100) if p.capital > 0 else ZERO
     if heat_after > p.heat_block_pct:

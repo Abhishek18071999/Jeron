@@ -10,14 +10,16 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.backtest.costs import financial_year
 from app.backtest.engine import PortfolioRules
 from app.calendar.nse import TradingCalendar
 from app.config import Settings
 from app.enums import Exchange
 from app.exits.job import PositionCheck, PreOpen, build_preopen, check_day
+from app.journal.calc import Fill
 from app.journal.service import EntryView, entry_views
-from app.models import Instrument, JournalEntry, SignalRecord
-from app.portfolio.calc import Holding, PortfolioTotals, totals
+from app.models import Instrument, JournalEntry, JournalFill, SignalRecord
+from app.portfolio.calc import Holding, PortfolioTotals, Sale, realised_sales, totals
 from app.settings_store import effective_settings
 from app.signals.build import IST
 
@@ -94,6 +96,34 @@ def pending_cost(session: Session, signal_day: date | None) -> Decimal:
     )
 
 
+def sales_this_year(session: Session, as_of: date) -> list[Sale]:
+    """Every journal sale in `as_of`'s financial year, lots matched first in, first out
+    within each journal entry."""
+    start = date(financial_year(as_of), 4, 1)
+    ids = session.scalars(
+        select(JournalFill.entry_id).where(
+            JournalFill.side == "sell", JournalFill.trade_date >= start
+        )
+    ).all()
+    if not ids:
+        return []
+    fills: dict[tuple[int, str], list[Fill]] = {}
+    for f, ticker in session.execute(
+        select(JournalFill, JournalEntry.ticker)
+        .join(JournalEntry, JournalEntry.id == JournalFill.entry_id)
+        .where(JournalFill.entry_id.in_(set(ids)))
+    ):
+        fills.setdefault((f.entry_id, ticker), []).append(
+            Fill(f.trade_date, f.side, f.shares, f.price, f.charges)
+        )
+    return [
+        s
+        for (_, ticker), own in fills.items()
+        for s in realised_sales(ticker, own)
+        if s.sell_date >= start
+    ]
+
+
 def portfolio(
     session: Session,
     day: date | None = None,
@@ -122,6 +152,7 @@ def portfolio(
         ).all()
     )
     holdings = [holding(c, views[c.entry_id], sectors.get(c.ticker)) for c in p.positions]
+    as_of = p.data_as_of or p.expected
     return Portfolio(
         day=p.day,
         data_as_of=p.data_as_of,
@@ -136,6 +167,7 @@ def portfolio(
             Decimal(str(settings.sector_cap_pct)),
             pending_cost(session, p.data_as_of),
             settings.idle_cash_in_index,
-            p.data_as_of or p.expected,
+            as_of,
+            sales_this_year(session, as_of),
         ),
     )

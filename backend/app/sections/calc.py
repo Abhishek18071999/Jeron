@@ -17,6 +17,7 @@ from typing import Any
 from uuid import UUID
 
 from app.alerts.format import inr, order_line
+from app.backtest.costs import small_trade_warning
 from app.backtest.strategies import Tier
 
 
@@ -288,5 +289,5 @@ def card(
             f"profit factor {'n/a' if pf is None else f'{_dec(pf):.2f}'}, max drawdown "
             f"{_dec(bt['max_drawdown_pct']):.1f}% ({bt['period']})"
         ),
-        notes=list(p.get("notes", [])),
+        notes=[*p.get("notes", []), *filter(None, [small_trade_warning(float(at_risk))])],
     )

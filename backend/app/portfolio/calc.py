@@ -23,17 +23,28 @@ Definitions (the engine's, `app.backtest.engine`):
   held a year, when selling turns from short-term (20%) to long-term (12.5%) tax; and in
   February and March, positions below cost whose loss would count against this
   financial year's gains if sold before 31 March. The exit plan still decides; a note
-  never says to hold past a stop. Days count from the first buy.
+  never says to hold past a stop. Days count from the first buy. The long-term note
+  gives the rupee tax of selling now (20% short-term) against selling after the mark
+  (12.5% on the gain above the long-term exemption left in the financial year the sale
+  would fall in).
+- long-term exemption used (roadmap item 6): the first ₹1.25 lakh of net long-term gains
+  in a financial year is tax free. Realised sales come from the journal's fills, lots
+  matched first in, first out (as the tax law does) with each fill's charges in its cost
+  or proceeds; this year's short-term losses are set off against long-term gains first.
+  An estimate for planning, not a tax computation: other accounts and income are not
+  known to Jeron.
 
 Capital is `JERON_CAPITAL`: the journal does not know the account's cash.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Any
 
-from app.backtest.costs import TaxRules
+from app.backtest.costs import TaxRules, financial_year
+from app.journal.calc import Fill
 
 ZERO = Decimal(0)
 # Below this, idle cash isn't worth a reminder.
@@ -139,12 +150,121 @@ class PortfolioTotals:
     idle_cash: Decimal = ZERO
     cash_action: str | None = None  # park idle cash, or free some up
     tax_notes: list[str] = field(default_factory=list)
+    exemption: "LongTermExemption | None" = None  # None without a day
 
 
-def tax_notes(holdings: Sequence[Holding], as_of: date) -> list[str]:
-    """Tax timing notes for the open positions (see the module docstring)."""
+@dataclass(frozen=True)
+class Sale:
+    """Shares of one lot sold: the gain after the lot's share of charges."""
+
+    ticker: str
+    sell_date: date
+    shares: int
+    gain: Decimal
+    held_days: int
+
+    @property
+    def long_term(self) -> bool:
+        return self.held_days > TAX.long_term_days
+
+
+def realised_sales(ticker: str, fills: Sequence[Fill]) -> list[Sale]:
+    """One position's sales matched first in, first out against its buys. A buy's
+    charges are spread over its shares, and so are a sale's."""
+    lots: list[list[Any]] = []  # [buy date, shares left, cost per share incl. charges]
+    sales = []
+    for f in sorted(fills, key=lambda f: (f.trade_date, f.side != "buy")):
+        if f.shares <= 0:
+            continue
+        if f.side == "buy":
+            lots.append([f.trade_date, f.shares, f.price + f.charges / f.shares])
+            continue
+        net = f.price - f.charges / f.shares
+        left = f.shares
+        while left and lots:
+            lot = lots[0]
+            n = min(left, lot[1])
+            sales.append(
+                Sale(ticker, f.trade_date, n, _q((net - lot[2]) * n), (f.trade_date - lot[0]).days)
+            )
+            lot[1] -= n
+            left -= n
+            if not lot[1]:
+                lots.pop(0)
+    return sales
+
+
+@dataclass(frozen=True)
+class LongTermExemption:
+    """This financial year's long-term gains against the yearly exemption."""
+
+    year: int  # the financial year, named by its starting year (2026 = 2026-27)
+    long_term: Decimal  # net long-term gains realised
+    short_term: Decimal  # net short-term gains realised (negative: a loss)
+    exemption: Decimal
+    used: Decimal
+    left: Decimal
+
+    @property
+    def label(self) -> str:
+        return f"{self.year}-{(self.year + 1) % 100:02d}"
+
+    @property
+    def line(self) -> str:
+        if self.used >= self.exemption:
+            return (
+                f"FY {self.label}: the ₹{self.exemption:,.0f} long-term exemption is used up "
+                f"(net long-term gains ₹{self.long_term:,.0f}); further long-term gains are "
+                f"taxed at {_g(Decimal(str(TAX.ltcg_new_pct)))}%."
+            )
+        return (
+            f"FY {self.label}: ₹{self.used:,.0f} of the ₹{self.exemption:,.0f} long-term "
+            f"exemption used, ₹{self.left:,.0f} left. Long-term gains up to that are tax free "
+            "this financial year."
+        )
+
+
+def long_term_exemption(sales: Iterable[Sale], as_of: date) -> LongTermExemption:
+    """How much of `as_of`'s financial year's long-term exemption the journal's sales
+    used: net long-term gains after this year's short-term losses, up to the exemption."""
+    year = financial_year(as_of)
+    st = lt = ZERO
+    for s in sales:
+        if financial_year(s.sell_date) != year or s.sell_date > as_of:
+            continue
+        if s.long_term:
+            lt += s.gain
+        else:
+            st += s.gain
+    exemption = Decimal(str(TAX.ltcg_exempt_new))
+    taxable_lt = max(ZERO, lt - max(ZERO, -st))
+    used = min(exemption, taxable_lt)
+    return LongTermExemption(year, _q(lt), _q(st), exemption, _q(used), _q(exemption - used))
+
+
+def sell_now_or_later(
+    gain: Decimal, now: date, turns: date, exemption_left: Decimal
+) -> tuple[Decimal, Decimal, Decimal]:
+    """Tax on a `gain` sold `now` (short-term) against sold on `turns` (long-term),
+    and the exemption the later sale could use: what is left this financial year, or a
+    whole new one when the mark falls in the next. Before other gains and losses."""
+    st_pct, lt_pct = Decimal(str(TAX.stcg_new_pct)), Decimal(str(TAX.ltcg_new_pct))
+    if financial_year(turns) != financial_year(now):
+        exemption_left = Decimal(str(TAX.ltcg_exempt_new))
+    tax_now = max(ZERO, gain) * st_pct / 100
+    tax_later = max(ZERO, gain - exemption_left) * lt_pct / 100
+    return _q(tax_now, "1"), _q(tax_later, "1"), exemption_left
+
+
+def tax_notes(
+    holdings: Sequence[Holding], as_of: date, exemption_left: Decimal | None = None
+) -> list[str]:
+    """Tax timing notes for the open positions (see the module docstring).
+    `exemption_left` is this financial year's unused long-term exemption (the whole of
+    it when not given)."""
     long_after = TAX.long_term_days
     st_pct, lt_pct = Decimal(str(TAX.stcg_new_pct)), Decimal(str(TAX.ltcg_new_pct))
+    left = Decimal(str(TAX.ltcg_exempt_new)) if exemption_left is None else exemption_left
     notes = []
     for h in holdings:
         if h.last_close is None:
@@ -153,12 +273,18 @@ def tax_notes(holdings: Sequence[Holding], as_of: date) -> list[str]:
         held = h.days_held(as_of)
         if gain > 0 and long_after - LTCG_SOON_DAYS <= held <= long_after:
             turns = h.first_date + timedelta(days=long_after + 1)
-            saving = gain * (st_pct - lt_pct) / 100
+            now, later, exempt = sell_now_or_later(gain, as_of, turns, left)
+            which = (
+                "next financial year's"
+                if financial_year(turns) != financial_year(as_of)
+                else "this financial year's"
+            )
             notes.append(
                 f"{h.ticker} becomes long-term on {turns:%d %b %Y} (in {(turns - as_of).days} "
-                f"days): sold after that, today's ₹{gain:,.0f} gain is taxed at {_g(lt_pct)}% "
-                f"instead of {_g(st_pct)}%, up to ₹{saving:,.0f} less. Follow the exit plan "
-                "if the stop is hit first."
+                f"days): on today's ₹{gain:,.0f} gain, selling now costs about ₹{now:,.0f} in "
+                f"tax ({_g(st_pct)}% short-term), selling after that about ₹{later:,.0f} "
+                f"({_g(lt_pct)}% above the ₹{exempt:,.0f} of {which} exemption left), "
+                f"₹{now - later:,.0f} less. Follow the exit plan if the stop is hit first."
             )
         if gain < 0 and as_of.month in (2, 3):
             notes.append(
@@ -201,6 +327,7 @@ def totals(
     pending_cost: Decimal = ZERO,
     idle_in_index: bool = False,
     as_of: date | None = None,
+    sales: Sequence[Sale] = (),
 ) -> PortfolioTotals:
     value = sum((h.value or ZERO for h in holdings), ZERO)
     pnl = sum((h.pnl or ZERO for h in holdings), ZERO)
@@ -249,6 +376,10 @@ def totals(
         )
     invested = sum((h.cost for h in holdings), ZERO)
     idle = capital - invested - pending_cost
+    exemption, notes = None, []
+    if as_of is not None:
+        exemption = long_term_exemption(sales, as_of)
+        notes = tax_notes(holdings, as_of, exemption.left)
     return PortfolioTotals(
         positions=len(holdings),
         value=_q(value),
@@ -267,5 +398,6 @@ def totals(
         pending_cost=_q(pending_cost),
         idle_cash=_q(idle),
         cash_action=idle_cash_line(idle, idle_in_index),
-        tax_notes=[] if as_of is None else tax_notes(holdings, as_of),
+        tax_notes=notes,
+        exemption=exemption,
     )

@@ -93,5 +93,15 @@ def test_card_says_what_when_how_much_and_why():
     assert c.why == ["one", "two", "three"]
     assert c.holding == "3 to 15 sessions; time stop 15 sessions"
     assert c.backtest.startswith("412 trades out of sample, expectancy 0.19R")
+    assert not any("Small trade" in n for n in c.notes)
+    small = card(
+        uuid4(),
+        date(2026, 10, 1),
+        "score-swing",
+        False,
+        payload | {"capital_at_risk": "200"},
+        Decimal(1_000_000),
+    )
+    assert small.notes[-1].startswith("Small trade: fixed charges")
     research = card(uuid4(), date(2026, 10, 1), "score-swing", True, payload, Decimal(1_000_000))
     assert research.what.startswith("Research only, not a trade: Buy AAA")
