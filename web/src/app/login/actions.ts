@@ -11,12 +11,10 @@ import {
   newSession,
   recordFailure,
   recordSuccess,
+  safeNext,
   verifyPassword,
   verifyTotp,
 } from "@/lib/auth";
-
-// Only paths inside Jeron, never another site.
-const safeNext = (value: string) => (value.startsWith("/") && !value.startsWith("//") ? value : "/");
 
 function fail(next: string, error: string): never {
   const params = new URLSearchParams({ error });

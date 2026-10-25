@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # Files dropped here (or uploaded on the Setup page) are imported by the scheduler
     # (app/autopilot.py); Docker Compose maps it to the `imports` folder next to it.
     imports_dir: str = "imports"
+    # The backup service's folder as the backend sees it (read only; Docker Compose mounts
+    # it at /backups), for the Setup page and the pre-open check (app/backups.py). Empty:
+    # not checked. `backup_dir` is the folder on the computer, shown to the owner.
+    backups_mount: str = ""
+    backup_dir: str = ""
     # Seconds between requests, to stay polite to NSE and Yahoo.
     nse_request_interval: float = 1.0
     yahoo_request_interval: float = 0.5

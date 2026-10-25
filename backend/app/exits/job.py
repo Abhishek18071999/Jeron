@@ -18,6 +18,7 @@ from app.alerts.channels import Channel, channels_from
 from app.alerts.format import inr
 from app.alerts.job import NOT_SET_UP, AlertOutcome, _send
 from app.backtest.strategies import Tier
+from app.backups import configured_status
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
 from app.config import Settings
 from app.data import store
@@ -254,6 +255,17 @@ def build_preopen(session: Session, day: date, calendar: TradingCalendar | None 
     return PreOpen(day, data_as_of, expected, checks, paper[0], paper[1])
 
 
+def backup_note(session: Session, settings: Settings) -> str | None:
+    """What is wrong with the backups (app/backups.py), if anything. "No backup yet" is
+    only said once the journal has something to lose."""
+    status = configured_status(settings.backups_mount, settings.backup_dir)
+    if status is None or status.problem is None:
+        return None
+    if status.newest is None and not session.scalar(select(func.count(JournalEntry.id))):
+        return None
+    return status.problem
+
+
 ORDER = (Action.SELL_ALL, Action.SELL_HALF, Action.HOLD)
 HEADINGS = {
     Action.SELL_ALL: "SELL ALL at the open",
@@ -274,7 +286,11 @@ def _line(c: PositionCheck) -> str:
 
 
 def preopen_message(
-    p: PreOpen, web_url: str = "", cash_action: str | None = None, calendar_note: str | None = None
+    p: PreOpen,
+    web_url: str = "",
+    cash_action: str | None = None,
+    calendar_note: str | None = None,
+    backup_note: str | None = None,
 ) -> str:
     lines = [f"Jeron pre-open check, {p.day:%a %-d %b %Y}"]
     if p.stale:
@@ -308,6 +324,8 @@ def preopen_message(
         lines += ["", "CASH", f"- {cash_action}"]
     if calendar_note:
         lines += ["", "CALENDAR", f"- {calendar_note}"]
+    if backup_note:
+        lines += ["", "BACKUP", f"- {backup_note}"]
     if p.paper_open:
         lines += [
             "",
@@ -337,7 +355,9 @@ def run_preopen(
     from app.portfolio.service import portfolio  # it builds on this module
 
     cash = portfolio(session, settings=settings, pre=p).totals.cash_action
-    text = preopen_message(p, settings.web_url, cash, calendar.coverage_warning(day))
+    text = preopen_message(
+        p, settings.web_url, cash, calendar.coverage_warning(day), backup_note(session, settings)
+    )
     log(text)
     outcome = AlertOutcome(day, "ok")
     if not send:

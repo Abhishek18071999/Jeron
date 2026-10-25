@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app import autopilot
 from app.backtest.strategies import COMBINED, STRATEGIES, Combined, Strategy
+from app.backups import BackupStatus, configured_status
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.db import get_session
@@ -26,6 +27,7 @@ from app.models import NewsLabel as NewsLabelRow
 from app.news.job import labeller_name, missing_key
 from app.news.labels import PROMPT_VERSION
 from app.paper.job import latest_scan_date
+from app.signals.build import IST
 
 router = APIRouter(tags=["setup"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -69,6 +71,34 @@ def _env_line(settings: Any) -> str:
 
 def _working(now: dict[str, Any] | None, *names: str) -> bool:
     return bool(now and now.get("step") in names)
+
+
+def _backup_step(b: BackupStatus) -> Step:
+    """Backups (app/backups.py): when the newest was written and whether it restores."""
+    if b.newest is None or b.newest_at is None:
+        detail = "No backup yet: the first is written after 02:00 IST (JERON_BACKUP_TIME)."
+        return Step(
+            key="backups",
+            title="Backups",
+            state="waiting",
+            detail=" ".join([detail, *b.notes]),
+        )
+    at = b.newest_at.astimezone(IST)
+    detail = (
+        f"{b.count} nightly backups ({b.size_bytes / 2**20:,.1f} MB), newest {b.newest} "
+        f"written {at:%a %-d %b %H:%M} IST."
+    )
+    if b.check is not None and b.check.ok and b.check.at is not None:
+        detail += f" Restore test passed {b.check.at.astimezone(IST):%a %-d %b}" + (
+            f": {b.check.detail}." if b.check.detail else "."
+        )
+    return Step(
+        key="backups",
+        title="Backups",
+        state="you" if b.problem else "done",
+        detail=" ".join([detail, *b.notes]),
+        todo=[b.problem] if b.problem else [],
+    )
 
 
 @router.get("/setup")
@@ -264,6 +294,10 @@ def setup_view(session: SessionDep) -> SetupView:
             ],
         )
     )
+
+    backups = configured_status(settings.backups_mount, settings.backup_dir)
+    if backups is not None:
+        steps.append(_backup_step(backups))
 
     alerts_ready = settings.telegram_ready or settings.email_ready
     steps.append(
