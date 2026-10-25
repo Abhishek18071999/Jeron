@@ -6,6 +6,7 @@ import {
   type BacktestView,
   type CurveStats,
   type EquityPoint,
+  type RiskProfile,
   type TradeStats,
 } from "@/lib/api";
 
@@ -118,6 +119,72 @@ function StatsTable({ rows }: { rows: { label: string; trades: TradeStats; curve
         ))}
       </tbody>
     </table>
+  );
+}
+
+function ProfileTable({ rows }: { rows: { label: string; p: RiskProfile | undefined }[] }) {
+  if (rows.every((r) => !r.p)) {
+    return (
+      <p className="mt-2 text-sm text-muted">
+        This run predates the risk profile (Sortino, losing streaks, time under water, exposure): the next backtest of
+        this strategy adds it.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="text-left text-muted">
+          <tr>
+            <th className="py-1 pr-3"></th>
+            <th className="pr-3 text-right" title="Returns above the cash rate over downside deviation, a year">
+              Sortino
+            </th>
+            <th className="pr-3 text-right">Losing streak</th>
+            <th className="pr-3 text-right" title="Longest stretch below an earlier peak, in sessions">
+              Longest under water
+            </th>
+            <th className="pr-3 text-right" title="Deepest drawdown: sessions from peak to trough, then back to the peak">
+              Deepest fall / recovery
+            </th>
+            <th className="pr-3 text-right" title="Average share of equity in positions rather than cash">
+              Exposure
+            </th>
+            <th className="pr-3 text-right">Trades a year</th>
+            <th className="text-right" title="Rupees bought a year over the average equity">
+              Turnover
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ label, p }) => (
+            <tr key={label} className="border-t border-line">
+              <td className="py-1 pr-3">{label}</td>
+              {p ? (
+                <>
+                  <td className="pr-3 text-right">{num(p.sortino)}</td>
+                  <td className="pr-3 text-right">
+                    {p.max_losing_streak} losses (best run {p.max_winning_streak} wins)
+                  </td>
+                  <td className="pr-3 text-right">{p.longest_underwater_sessions} sessions</td>
+                  <td className="pr-3 text-right">
+                    {p.max_drawdown_sessions} /{" "}
+                    {p.recovery_sessions === null ? "not recovered" : `${p.recovery_sessions} sessions`}
+                  </td>
+                  <td className="pr-3 text-right">{num(p.exposure_pct, 0)}%</td>
+                  <td className="pr-3 text-right">{num(p.trades_per_year, 1)}</td>
+                  <td className="text-right">{num(p.turnover, 1)}x</td>
+                </>
+              ) : (
+                <td colSpan={7} className="text-right text-muted">
+                  not in this run
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -253,6 +320,13 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
         rows={[
           { label: "Walk-forward test", trades: oos.trades, curve: oos.curve },
           { label: "Final 12-month holdout", trades: summary.holdout.trades, curve: summary.holdout.curve },
+        ]}
+      />
+      <h3 className="mt-6 font-medium">Risk profile</h3>
+      <ProfileTable
+        rows={[
+          { label: "Walk-forward test", p: oos.profile },
+          { label: "Final 12-month holdout", p: summary.holdout.profile },
         ]}
       />
       <p className="mt-2 text-sm text-muted">

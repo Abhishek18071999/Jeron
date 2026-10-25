@@ -132,6 +132,106 @@ def curve_stats(curve: Array, risk_free_pct: float = 0.0) -> CurveStats:
     )
 
 
+def sortino(curve: Array, risk_free_pct: float = 0.0) -> float:
+    """Annualised Sortino ratio: the mean daily return above the risk-free (cash) rate
+    over the downside deviation, sqrt(mean(min(0, r - rf)^2)) over every session (Sortino
+    and Price's form). 0 when no session fell short of the rate."""
+    rets = daily_returns(curve)
+    if len(rets) < 2:
+        return 0.0
+    excess = rets - daily_rate(risk_free_pct)
+    downside = math.sqrt(float(np.mean(np.minimum(excess, 0.0) ** 2)))
+    if downside == 0:
+        return 0.0
+    return float(np.mean(excess)) / downside * math.sqrt(SESSIONS_PER_YEAR)
+
+
+def streaks(trades: Sequence[Trade]) -> tuple[int, int]:
+    """(longest run of losing trades, longest run of winning trades), in exit order. A
+    trade at 0R or below is a loss, as in `trade_stats`."""
+    worst = best = losing = winning = 0
+    for t in sorted(trades, key=lambda t: (t.exit_day, t.entry_day, t.symbol)):
+        if t.r_multiple > 0:
+            winning, losing = winning + 1, 0
+        else:
+            losing, winning = losing + 1, 0
+        worst, best = max(worst, losing), max(best, winning)
+    return worst, best
+
+
+@dataclass(frozen=True)
+class Underwater:
+    longest_sessions: int  # the longest stretch below an earlier peak
+    # The deepest drawdown: sessions from its peak to its trough, and from the trough
+    # back to that peak (None: not recovered by the end of the curve).
+    max_drawdown_sessions: int
+    recovery_sessions: int | None
+
+
+def underwater(curve: Array) -> Underwater:
+    curve = np.asarray(curve, dtype=float)
+    if len(curve) < 2:
+        return Underwater(0, 0, 0)
+    peaks = np.maximum.accumulate(curve)
+    below = curve < peaks
+    longest = run = 0
+    for b in below:
+        run = run + 1 if b else 0
+        longest = max(longest, run)
+    dd = 1 - curve / peaks
+    trough = int(np.argmax(dd))
+    if dd[trough] <= 0:
+        return Underwater(longest, 0, 0)
+    peak = int(np.argmax(curve[: trough + 1]))
+    back = np.nonzero(curve[trough:] >= curve[peak])[0]
+    return Underwater(longest, trough - peak, int(back[0]) if len(back) else None)
+
+
+@dataclass(frozen=True)
+class RiskProfile:
+    """What the gates don't show: downside-only risk, losing streaks, time under water,
+    how much of the money was at work, and how often it traded."""
+
+    sortino: float  # annualised, returns above the cash rate
+    max_losing_streak: int
+    max_winning_streak: int
+    longest_underwater_sessions: int
+    max_drawdown_sessions: int
+    recovery_sessions: int | None
+    exposure_pct: float  # average share of equity in positions (not cash)
+    trades_per_year: float
+    turnover: float  # rupees bought a year over the average equity (one way)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {k: _clean(v) for k, v in asdict(self).items()}
+
+
+def risk_profile(
+    curve: Array, cash: Array, trades: Sequence[Trade], risk_free_pct: float = 0.0
+) -> RiskProfile:
+    """`curve` and `cash` are one value a session over the period; `trades` are the
+    period's (entered in it)."""
+    curve = np.asarray(curve, dtype=float)
+    cash = np.asarray(cash, dtype=float)
+    years = (len(curve) - 1) / SESSIONS_PER_YEAR if len(curve) > 1 else 0.0
+    invested = np.clip(1 - cash / curve, 0.0, 1.0) if len(curve) and (curve > 0).all() else None
+    mean_equity = float(np.mean(curve)) if len(curve) else 0.0
+    bought = sum(t.entry * t.shares for t in trades)
+    worst, best = streaks(trades)
+    water = underwater(curve)
+    return RiskProfile(
+        sortino=sortino(curve, risk_free_pct),
+        max_losing_streak=worst,
+        max_winning_streak=best,
+        longest_underwater_sessions=water.longest_sessions,
+        max_drawdown_sessions=water.max_drawdown_sessions,
+        recovery_sessions=water.recovery_sessions,
+        exposure_pct=float(np.mean(invested)) * 100 if invested is not None else 0.0,
+        trades_per_year=len(trades) / years if years > 0 else 0.0,
+        turnover=bought / mean_equity / years if years > 0 and mean_equity > 0 else 0.0,
+    )
+
+
 def grouped(trades: Sequence[Trade], key: Callable[[Trade], str]) -> dict[str, TradeStats]:
     groups: dict[str, list[Trade]] = {}
     for t in trades:

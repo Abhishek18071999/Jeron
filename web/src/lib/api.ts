@@ -170,6 +170,19 @@ export type TradeStats = {
   avg_sessions: number;
 };
 
+// backend app/backtest/stats.py risk_profile
+export type RiskProfile = {
+  sortino: number;
+  max_losing_streak: number;
+  max_winning_streak: number;
+  longest_underwater_sessions: number;
+  max_drawdown_sessions: number;
+  recovery_sessions: number | null; // null: not recovered by the end of the period
+  exposure_pct: number;
+  trades_per_year: number;
+  turnover: number;
+};
+
 export type CurveStats = {
   start_value: number;
   end_value: number;
@@ -214,6 +227,8 @@ export type BacktestSummary = {
   out_of_sample: {
     trades: TradeStats;
     curve: CurveStats;
+    // Missing on runs made before 2026-10-25.
+    profile?: RiskProfile;
     benchmark: CurveStats;
     by_year: Record<string, TradeStats>;
     by_regime: Record<string, TradeStats>;
@@ -223,7 +238,7 @@ export type BacktestSummary = {
     variants_tried: number;
     tax: TaxView;
   };
-  holdout: { trades: TradeStats; curve: CurveStats; benchmark: CurveStats };
+  holdout: { trades: TradeStats; curve: CurveStats; profile?: RiskProfile; benchmark: CurveStats };
   gates: Gate[];
   // M8 part 2: idle cash in Nifty 500 instead of a liquid fund; never in the gates.
   // Missing on runs made before it.

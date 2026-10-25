@@ -40,6 +40,7 @@ from app.backtest.stats import (
     gates,
     grouped,
     per_period_sharpe,
+    risk_profile,
     trade_stats,
     yearly_returns,
 )
@@ -576,6 +577,9 @@ def _report(
             "benchmark_yearly_returns": yearly_returns(
                 oos_days, m.nifty500[oos_start : folds.holdout_start]
             ),
+            "profile": risk_profile(
+                oos_curve, sim.cash[:split], oos_trades, rules.cash_rate_pct
+            ).to_dict(),
             "deflated_sharpe": round(dsr, 4),
             "variants_tried": len(trial_sharpes),
             "tax": tax_view(oos_trades, oos_start, folds.holdout_start - 1),
@@ -583,6 +587,9 @@ def _report(
         "holdout": {
             "trades": holdout_stats.to_dict(),
             "curve": curve_stats(holdout_curve, rules.cash_rate_pct).to_dict(),
+            "profile": risk_profile(
+                holdout_curve, sim.cash[split - 1 :], holdout_trades, rules.cash_rate_pct
+            ).to_dict(),
             "benchmark": bench(folds.holdout_start - 1, folds.end).to_dict(),
         },
         "gates": [g.to_dict() for g in gate_list],
