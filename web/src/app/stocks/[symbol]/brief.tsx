@@ -1,3 +1,4 @@
+import { SignalHowTo } from "@/components/strategy-guide";
 import { Badge, Card, Notice, type Tone, shortDate } from "@/components/ui";
 import type { BriefFact, ExplainView, StockBrief } from "@/lib/api";
 
@@ -70,6 +71,12 @@ export function BriefCard({ view }: { view: ExplainView }) {
             <span className="font-medium">Is the signal still valid? </span>
             {b.setup.still_valid ? "Yes" : "No"}: {b.setup.reasons.join("; ")}.
           </p>
+        )}
+        {b.strategy && (
+          <div className="rounded-lg border border-line bg-surface-2 p-3">
+            <h3 className="mb-1 font-medium">How to use this signal</h3>
+            <SignalHowTo brief={b} compact />
+          </div>
         )}
         {b.why_in_scan.length > 0 && (
           <div>

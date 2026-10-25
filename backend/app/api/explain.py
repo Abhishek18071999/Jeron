@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.data import store
 from app.db import get_session
 from app.explain.facts import Brief, Fact
 from app.explain.narrate import MAX_QUESTION_CHARS, PROMPT_VERSION
@@ -34,6 +35,7 @@ class FactOut(BaseModel):
     source: str
     as_of: date | None
     stance: str
+    number: float | None
 
 
 class CheckOut(BaseModel):
@@ -84,6 +86,14 @@ class BriefOut(BaseModel):
     checklist: list[CheckOut]
     unknowns: list[str]
     setup: SetupOut | None
+    strategy: str | None
+    research_only: bool | None
+
+
+class CompareOut(BaseModel):
+    briefs: list[BriefOut]
+    # What was asked for and matched no stock with prices.
+    not_found: list[str]
 
 
 class ExplainOut(BaseModel):
@@ -107,6 +117,7 @@ def _fact(f: Fact) -> FactOut:
         source=f.source,
         as_of=f.as_of,
         stance=f.stance.value,
+        number=f.number,
     )
 
 
@@ -125,6 +136,8 @@ def brief_out(b: Brief) -> BriefOut:
         checklist=[CheckOut(**asdict(c)) for c in b.checklist],
         unknowns=b.unknowns,
         setup=None if b.setup is None else SetupOut(**asdict(b.setup)),
+        strategy=b.strategy,
+        research_only=b.research_only,
     )
 
 
@@ -170,13 +183,27 @@ def _brief(session: Session, symbol: str) -> Brief:
 @router.get("/stocks/compare")
 def compare(
     session: SessionDep,
-    symbols: Annotated[str, Query(min_length=1, max_length=120)],
-) -> list[BriefOut]:
-    """Two or three stocks' briefs, in the order asked. No LLM."""
+    symbols: Annotated[str, Query(min_length=1, max_length=200)],
+) -> CompareOut:
+    """Up to three stocks' briefs, in the order asked. No LLM. Each entry is a symbol or,
+    failing that, what the search box would match first (a company name, a short name, an
+    old symbol); one that matches nothing is listed in `not_found` instead of failing
+    the rest."""
     wanted = list(dict.fromkeys(s.strip().upper() for s in symbols.split(",") if s.strip()))
     if not 1 <= len(wanted) <= MAX_COMPARE:
         raise HTTPException(422, f"Compare 1 to {MAX_COMPARE} stocks, separated by commas.")
-    return [brief_out(_brief(session, s)) for s in wanted]
+    briefs: dict[str, Brief] = {}
+    not_found: list[str] = []
+    for asked in wanted:
+        found = explain(session, asked)
+        if found is None:
+            match = next(iter(store.stock_search(session, asked, 1)), None)
+            found = None if match is None else explain(session, match.symbol)
+        if found is None:
+            not_found.append(asked)
+        else:
+            briefs.setdefault(found[1].symbol, found[1])
+    return CompareOut(briefs=[brief_out(b) for b in briefs.values()], not_found=not_found)
 
 
 @router.get("/stocks/{symbol}/explain")

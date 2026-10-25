@@ -69,9 +69,14 @@ export default async function Stocks({ searchParams }: { searchParams: Promise<S
         title="Stocks"
         subtitle="Find a stock, see which industries lead, and browse the latest scan."
         action={
-          <LinkButton href="/watchlist" variant="secondary">
-            Watchlist
-          </LinkButton>
+          <div className="flex gap-2">
+            <LinkButton href="/stocks/compare" variant="secondary">
+              Compare
+            </LinkButton>
+            <LinkButton href="/watchlist" variant="secondary">
+              Watchlist
+            </LinkButton>
+          </div>
         }
       />
       <Card>
