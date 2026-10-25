@@ -14,6 +14,13 @@ the inputs from the database.
   T2 at least 2 after costs; at least one share; portfolio heat after the buy at most
   6%; the sector at most JERON_SECTOR_CAP_PCT of capital after the buy; no results
   board meeting within the blackout (3 sessions before it through the meeting day).
+- The real account's guardrails (`app.portfolio.calc.account_state`, docs/plans/
+  platform-audit-v1.md slice 3). Spec section 5, always hard: 10% or more below the
+  account's peak halves the risk per trade (with the mood's halving, a quarter); 15% or
+  more stops new entries; the tier's open positions at most JERON_MAX_POSITIONS_<TIER>.
+  Settings, hard unless JERON_RISK_LIMITS_BLOCK is off: today's realised loss below
+  JERON_DAILY_LOSS_LIMIT_PCT of capital, this week's below JERON_WEEKLY_LOSS_LIMIT_PCT,
+  and fewer than JERON_MAX_ENTRIES_WEEK positions first bought this week.
 - Warnings (shown, not blocking): heat at the 5% warning level, defend mode, a results
   calendar that isn't loaded, ex-dates ahead, and a trade so small that fixed charges
   (the DP charge per day with a sale) cost more than 0.1R (`costs.small_trade_warning`).
@@ -27,6 +34,7 @@ from decimal import Decimal
 from app.backtest.costs import CostModel, small_trade_warning
 from app.backtest.engine import PortfolioRules, position_size, reward_risk, round_trip_costs
 from app.backtest.strategies import TIERS, Tier
+from app.portfolio.calc import AccountState
 
 ZERO = Decimal(0)
 RULES = PortfolioRules()
@@ -49,6 +57,17 @@ def _q(value: Decimal | float, places: str = "0.01") -> Decimal:
 
 def _g(value: float | Decimal) -> str:
     return f"{float(value):g}"
+
+
+@dataclass(frozen=True)
+class Limits:
+    """The guardrails' settings; a 0 turns that limit off."""
+
+    max_positions: int  # open positions in the plan's tier
+    daily_loss_pct: float = 2.0
+    weekly_loss_pct: float = 4.0
+    max_entries_week: int = 5
+    block: bool = True  # False: the loss and entry limits warn instead
 
 
 @dataclass(frozen=True)
@@ -77,6 +96,9 @@ class PlanInputs:
     ex_dates: Sequence[str] = ()
     heat_warn_pct: Decimal = Decimal(str(RULES.heat_warn_pct))
     heat_block_pct: Decimal = Decimal(str(RULES.heat_block_pct))
+    # The real account and its limits; without them the guardrails aren't checked.
+    account: AccountState | None = None
+    limits: Limits | None = None
 
 
 @dataclass(frozen=True)
@@ -158,9 +180,15 @@ def build_plan(p: PlanInputs) -> Plan:
         )
     )
     shares = 0
+    multiplier = p.risk_multiplier
+    braked = p.account is not None and p.account.drawdown_pct >= Decimal(
+        str(rules.drawdown_halve_pct)
+    )
+    if braked:
+        multiplier *= 0.5
     if valid:
         avg = math.nan if p.avg_volume20 is None else p.avg_volume20
-        shares = max(0, position_size(capital, rules, p.risk_multiplier, entry, stop, 1.0, avg))
+        shares = max(0, position_size(capital, rules, multiplier, entry, stop, 1.0, avg))
     one_r = p.entry - p.stop if valid else ZERO
     target1 = _q(p.entry + Decimal(str(rules.t1_r)) * one_r)
     target2 = _q(p.entry + Decimal(str(rules.t2_r)) * one_r)
@@ -328,6 +356,7 @@ def build_plan(p: PlanInputs) -> Plan:
         checks.append(
             Check("mood", "Market mood", "pass", f"{p.mood}: full risk per trade", hard=False)
         )
+    checks += guardrails(p, rules, braked)
     return Plan(
         inputs=p,
         shares=shares,
@@ -350,6 +379,81 @@ def build_plan(p: PlanInputs) -> Plan:
         sector_after_pct=sector_after,
         checks=checks,
     )
+
+
+def _inr(value: Decimal) -> str:
+    return f"₹{abs(value):,.0f}"
+
+
+def guardrails(p: PlanInputs, rules: PortfolioRules, braked: bool) -> list[Check]:
+    """The real account's limits (module notes). Empty without the account."""
+    a, lim = p.account, p.limits
+    if a is None or lim is None:
+        return []
+    checks = []
+    halve, pause = Decimal(str(rules.drawdown_halve_pct)), Decimal(str(rules.drawdown_pause_pct))
+    where = f"account {a.drawdown_pct}% below its peak of {_inr(a.peak)}"
+    if a.drawdown_pct >= pause:
+        checks.append(
+            Check(
+                "drawdown",
+                f"Drawdown brake (halve at {_g(halve)}%, pause at {_g(pause)}%)",
+                "fail",
+                f"{where}: new entries paused (spec section 5). Review the journal's "
+                "recent trades before the next one.",
+            )
+        )
+    else:
+        checks.append(
+            Check(
+                "drawdown",
+                f"Drawdown brake (halve at {_g(halve)}%, pause at {_g(pause)}%)",
+                "warn" if braked else "pass",
+                f"{where}: risk per trade halved" if braked else where,
+                hard=False,
+            )
+        )
+    tier = p.tier.value
+    held = a.open_by_tier.get(tier, 0)
+    checks.append(
+        Check(
+            "positions",
+            f"{tier.capitalize()} positions at most {lim.max_positions}",
+            "fail" if held >= lim.max_positions else "pass",
+            f"{held} open now" + (": close one first" if held >= lim.max_positions else ""),
+        )
+    )
+    capital = p.capital
+    for key, label, pct, lost, when in (
+        ("daily_loss", "Daily loss limit", lim.daily_loss_pct, a.realised_today, "today"),
+        ("weekly_loss", "Weekly loss limit", lim.weekly_loss_pct, a.realised_week, "this week"),
+    ):
+        if pct <= 0 or capital <= 0:
+            continue
+        limit = capital * Decimal(str(pct)) / 100
+        over = lost < 0 and -lost >= limit
+        realised = f"realised {when}: {'-' if lost < 0 else ''}{_inr(lost)}"
+        checks.append(
+            Check(
+                key,
+                f"{label} {_g(pct)}% ({_inr(limit)})",
+                ("fail" if lim.block else "warn") if over else "pass",
+                realised + (": no new entries until the limit resets" if over else ""),
+                hard=lim.block,
+            )
+        )
+    if lim.max_entries_week > 0:
+        over = a.entries_week >= lim.max_entries_week
+        checks.append(
+            Check(
+                "entries_week",
+                f"New positions this week at most {lim.max_entries_week}",
+                ("fail" if lim.block else "warn") if over else "pass",
+                f"{a.entries_week} since Monday" + (": the week's cap is reached" if over else ""),
+                hard=lim.block,
+            )
+        )
+    return checks
 
 
 def missing_checklist(ticked: Iterable[str]) -> list[str]:

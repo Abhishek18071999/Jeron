@@ -1,6 +1,13 @@
 """Journal maths (spec section 8): a position from my fills, and stats per strategy.
-Pure functions; prices are raw rupees per share."""
+Pure functions; prices are raw rupees per share.
 
+A few trades say little: each strategy's average R comes with a 95% range (Student's t
+on the closed trades' R), and fewer than `MIN_SAMPLE` closed trades (the paper gate's
+30) gets a note saying so. The range assumes trades are independent draws, which
+overlapping trades in one market are not quite, so read it as the least uncertainty
+there is."""
+
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -8,6 +15,53 @@ from decimal import Decimal
 
 ZERO = Decimal(0)
 DECISIONS = ("taken", "skipped", "modified")
+MIN_SAMPLE = 30
+# Two-sided 95% critical values of Student's t by degrees of freedom.
+T95 = (
+    12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228,
+    2.201, 2.179, 2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086,
+    2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048, 2.045, 2.042,
+)  # fmt: skip
+Z95 = 1.959964
+
+
+def t95(df: int) -> float:
+    """From the table to 30 degrees of freedom, then the first Cornish-Fisher term
+    (within 0.003 of the exact value from 31 on)."""
+    if df < 1:
+        raise ValueError("need at least one degree of freedom")
+    if df <= len(T95):
+        return T95[df - 1]
+    return Z95 + (Z95**3 + Z95) / (4 * df)
+
+
+def mean_interval(values: Sequence[Decimal]) -> tuple[Decimal, Decimal] | None:
+    """The 95% range of the mean; None for fewer than two values."""
+    n = len(values)
+    if n < 2:
+        return None
+    xs = [float(v) for v in values]
+    mean = sum(xs) / n
+    sd = math.sqrt(sum((x - mean) ** 2 for x in xs) / (n - 1))
+    half = t95(n - 1) * sd / math.sqrt(n)
+    return _q(Decimal(str(mean - half))), _q(Decimal(str(mean + half)))
+
+
+def sample_note(n: int, interval: tuple[Decimal, Decimal] | None) -> str | None:
+    """What the sample can't tell yet, in plain words."""
+    if n == 0:
+        return None
+    span = ""
+    if interval is not None:
+        span = f"; the average R could be anywhere from {interval[0]:.2f}R to {interval[1]:.2f}R"
+    if n < MIN_SAMPLE:
+        return (
+            f"{n} closed trade{'s' if n > 1 else ''}: too few to judge "
+            f"(Jeron's gates want {MIN_SAMPLE}){span}."
+        )
+    if interval is not None and interval[0] <= 0 <= interval[1]:
+        return f"{n} closed trades and the range still includes 0R{span}."
+    return None
 
 
 @dataclass(frozen=True)
@@ -121,6 +175,10 @@ class StrategyStats:
     deviated_avg_r: Decimal | None = None
     followed: int = 0
     deviated: int = 0
+    # The 95% range of avg_r, and what the sample can't tell yet (module notes).
+    avg_r_low: Decimal | None = None
+    avg_r_high: Decimal | None = None
+    sample_note: str | None = None
 
 
 def _mean(values: Sequence[Decimal]) -> Decimal | None:
@@ -149,6 +207,10 @@ def strategy_stats(rows: Iterable[JournalRow]) -> list[StrategyStats]:
         s.wins = sum(p > 0 for p in pnls)
         s.win_rate = _q(Decimal(s.wins) / len(pnls)) if pnls else None
         s.avg_r = _mean(rs)
+        interval = mean_interval(rs)
+        if interval is not None:
+            s.avg_r_low, s.avg_r_high = interval
+        s.sample_note = sample_note(len(rs), interval)
         gains = sum((p for p in pnls if p > 0), ZERO)
         losses = -sum((p for p in pnls if p < 0), ZERO)
         s.profit_factor = _q(gains / losses) if losses else None

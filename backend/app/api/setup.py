@@ -246,6 +246,25 @@ def setup_view(session: SessionDep) -> SetupView:
         )
     )
 
+    steps.append(
+        Step(
+            key="api_token",
+            title="API token",
+            state="done" if settings.api_token else "you",
+            detail="The backend answers only the web app, which sends the API token."
+            if settings.api_token
+            else "No API token: any program on this computer can read and change your "
+            "journal through the backend.",
+            todo=[]
+            if settings.api_token
+            else [
+                "Run `docker compose exec backend python -m app.cli api-token` and put the "
+                "JERON_API_TOKEN line it prints in .env.",
+                "Run `docker compose up -d` so the backend and the web app both read it.",
+            ],
+        )
+    )
+
     alerts_ready = settings.telegram_ready or settings.email_ready
     steps.append(
         Step(

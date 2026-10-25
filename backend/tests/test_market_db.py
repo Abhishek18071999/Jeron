@@ -149,6 +149,22 @@ def test_portfolio(empty_session):
     assert [x["sector"] for x in t["sectors"]] == ["IT", "Banks"]
     assert any("without a stop" in w for w in t["warnings"])
     assert t["exemption"]["used"] == "0.00" and t["exemption"]["left"] == "125000.00"
+    # The guardrails: no sales yet, so equity is the capital plus the open marks.
+    a = p["account"]
+    assert a["open_by_tier"] == {"swing": 2} and a["brake"] == "normal"
+    assert Decimal(a["realised_week"]) == 0 and Decimal(a["daily_loss_limit"]) == 20000
+    open_marks = sum(
+        (Decimal(x["last_close"]) - Decimal(x["avg_entry"])) * x["shares"] for x in by.values()
+    )
+    assert Decimal(a["equity"]) == Decimal(t["capital"]) + open_marks
+
+    # The daily equity curve: from the first buy, marked at each close, Nifty 500 beside.
+    e = client.get("/portfolio/equity").json()
+    assert e["points"][0]["day"] == str(DAYS[280]) and e["points"][-1]["day"] == str(DAYS[-1])
+    assert len(e["points"]) == len(DAYS) - 280
+    assert Decimal(e["points"][0]["index"]) == Decimal(e["capital"])
+    assert Decimal(e["index_return_pct"]) == Decimal(f"{(1.001**19 - 1) * 100:.2f}")
+    assert Decimal(e["points"][-1]["equity"]) == Decimal(a["equity"])
 
     # A closed trade sold this financial year, held over a year: long-term gain used.
     sold = manual_entry(s, "UP")

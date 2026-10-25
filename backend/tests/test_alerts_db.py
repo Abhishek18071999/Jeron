@@ -13,6 +13,7 @@ from alembic import command
 from app.alerts.channels import AlertError
 from app.alerts.job import run_alerts, send_test
 from app.backtest.job import run_backtests
+from app.calendar.nse import TradingCalendar
 from app.config import Settings, get_settings
 from app.db import get_engine
 from app.enums import Exchange
@@ -406,3 +407,37 @@ def test_signal_alerts_carry_buttons(session):
     ]
     assert signal_buttons and all(b[0][0]["text"] == "I bought it" for b in signal_buttons)
     assert telegram.buttons[-1] is None  # the summary has none
+
+
+def test_late_data_is_told_once(empty_session):
+    """The day's NSE data did not arrive: one alert saying what is loaded and when Jeron
+    tries again; the retry run (or a manual one) doesn't send it twice."""
+    from app.alerts.late import data_late
+
+    calendar = TradingCalendar.default()
+    channel = FakeChannel()
+    friday = datetime(2026, 10, 23, 19, 5, tzinfo=IST)
+    settings = Settings(telegram_bot_token="t", telegram_chat_id="1")
+    assert data_late(empty_session, calendar, now=friday, settings=settings, channels=[channel])
+    ((subject, text),) = channel.sent
+    assert "Fri 23 Oct 2026 has not arrived" in text
+    assert "No prices are loaded yet." in text
+    assert "tries again at 21:30 IST" in text
+    late = empty_session.scalar(select(Alert).where(Alert.key == "late:2026-10-23"))
+    assert late is not None and late.kind == "late" and late.status == "sent"
+    # The 21:30 retry still finds nothing: no second message.
+    retry = datetime(2026, 10, 23, 21, 35, tzinfo=IST)
+    assert data_late(empty_session, calendar, now=retry, settings=settings, channels=[channel])
+    assert len(channel.sent) == 1
+
+
+def test_data_on_time_sends_nothing(session):
+    from app.alerts.late import data_late
+
+    channel = FakeChannel()
+    newest = DAYS[-1]
+    # The evening of the newest loaded session, after the daily time: nothing is late.
+    evening = datetime(newest.year, newest.month, newest.day, 19, 30, tzinfo=IST)
+    calendar = TradingCalendar.default()
+    assert not data_late(session, calendar, now=evening, settings=Settings(), channels=[channel])
+    assert channel.sent == []

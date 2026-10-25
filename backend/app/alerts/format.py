@@ -320,3 +320,24 @@ def watch_message(
         f"Plan: {base}/plan/{ticker} · Watchlist: {base}/watchlist",
     ]
     return "\n".join(lines)
+
+
+def data_late_message(
+    due: date, newest: date | None, retry_at: str | None, web_url: str | None = None
+) -> str:
+    """The day's NSE data has not arrived by the daily run: say what is loaded, what
+    Jeron does not do until it arrives, and when it tries again. Nothing is estimated."""
+    lines = [
+        f"Jeron: NSE data for {_day(due)} has not arrived.",
+        f"Newest prices loaded: {_day(newest)}." if newest else "No prices are loaded yet.",
+        "Until it arrives there is no scan, no new signal and no paper trade for that day; "
+        "nothing is filled in or guessed.",
+        f"Jeron tries again at {retry_at} IST"
+        if retry_at
+        else "Jeron tries again at the next daily run",
+        "(to try now: docker compose exec backend python -m app.cli daily).",
+        "The pre-open check still runs on the newest prices and marks them as stale.",
+    ]
+    if web_url:
+        lines.append(f"Setup: {web_url.rstrip('/')}/setup")
+    return "\n".join(lines)

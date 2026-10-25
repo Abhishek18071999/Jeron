@@ -5,6 +5,7 @@ import { WatchStar } from "@/components/watch-star";
 import { Card, LinkButton, ResearchBadge, inr, rMultiple, shortDate } from "@/components/ui";
 import { NewsCard } from "@/components/news";
 import {
+  type ExplainView,
   type NewsView,
   type StockDeals,
   type StockFundamentals,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/api";
 
 import { signClass } from "../../backtests/format";
+import { BriefCard } from "./brief";
 import { type Level, PriceChart } from "./chart";
 import { DealsPanel } from "./deals";
 import { FundamentalsPanel } from "./fundamentals";
@@ -22,12 +24,13 @@ export const dynamic = "force-dynamic";
 
 export default async function StockPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
-  const [result, watch, deals, fundamentals, news] = await Promise.all([
+  const [result, watch, deals, fundamentals, news, explain] = await Promise.all([
     getJson<StockView>(`/stocks/${encodeURIComponent(symbol)}?sessions=500`),
     getJson<Watchlist>("/watchlist"),
     getJson<StockDeals>(`/stocks/${encodeURIComponent(symbol)}/deals`),
     getJson<StockFundamentals>(`/stocks/${encodeURIComponent(symbol)}/fundamentals`),
     getJson<NewsView>(`/stocks/${encodeURIComponent(symbol)}/news`),
+    getJson<ExplainView>(`/stocks/${encodeURIComponent(symbol)}/explain`),
   ]);
   if (!result.ok) {
     return (
@@ -81,12 +84,17 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
             {scan && ` · technical score ${Number(scan.score).toFixed(1)} (rank ${scan.rank})`}
           </p>
         </div>
-        <LinkButton
-          href={latest ? `/plan/${s.symbol}?signal=${latest.signal.signal_id}` : `/plan/${s.symbol}`}
-          variant="primary"
-        >
-          Plan trade
-        </LinkButton>
+        <div className="flex gap-2">
+          <LinkButton href={`/stocks/compare?symbols=${s.symbol}`} variant="secondary">
+            Compare
+          </LinkButton>
+          <LinkButton
+            href={latest ? `/plan/${s.symbol}?signal=${latest.signal.signal_id}` : `/plan/${s.symbol}`}
+            variant="primary"
+          >
+            Plan trade
+          </LinkButton>
+        </div>
       </div>
 
       <Card title="Price (split/bonus-adjusted)">
@@ -165,6 +173,14 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
               </Link>
             </p>
           </div>
+        </Card>
+      )}
+
+      {explain.ok ? (
+        <BriefCard view={explain.data} />
+      ) : (
+        <Card title="Explain this stock">
+          <p className="text-sm text-muted">{explain.error}</p>
         </Card>
       )}
 

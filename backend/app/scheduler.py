@@ -3,12 +3,15 @@
 - 08:30 IST on trading days: `preopen` (pre-open check of open positions);
 - 19:00 IST on weekdays: `daily` (data, quality, scan, news, paper, alerts), then
   `weekly` (summary and revalidation) after the last session of the week;
+- 21:30 IST on weekdays: `daily` again, only if the day's data had not arrived at 19:00
+  (NSE publishes late some days; the first run told me so, `app/alerts/late.py`);
 - every few minutes: the autopilot (app/autopilot.py), which sets up a new install and
   imports files dropped in the imports folder;
 - every minute, when Telegram is set up: the buttons pressed under signal alerts.
 
 Every job is safe to re-run, so a missed or repeated run does no harm. Times come from
-`JERON_SCHEDULE_PREOPEN` and `JERON_SCHEDULE_DAILY` (HH:MM, IST).
+`JERON_SCHEDULE_PREOPEN`, `JERON_SCHEDULE_DAILY` and `JERON_SCHEDULE_DAILY_RETRY`
+(HH:MM, IST).
 
 Jeron runs on my own computer, which can be asleep or off at those times. A job missed
 while the computer slept runs when it wakes (until 15:30 for the pre-open check, until
@@ -21,7 +24,7 @@ latest session's scan is missing and the pre-open check if it is market hours.
 import logging
 import threading
 from collections.abc import Callable
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from typing import TYPE_CHECKING
 
 from apscheduler.schedulers.base import BaseScheduler
@@ -32,7 +35,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from app import autopilot, cli
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
-from app.exits.job import is_session, next_session
+from app.exits.job import due_session, is_session, next_session
 from app.paper.job import latest_scan_date
 from app.signals.build import IST
 
@@ -43,7 +46,7 @@ log = logging.getLogger("jeron.scheduler")
 Runner = Callable[[list[str]], int]
 # How late a job missed while the computer slept may still run: the pre-open check until
 # about 15:30, the daily run until the next morning.
-GRACE_SECONDS = {"preopen": 7 * 3600, "daily": 12 * 3600}
+GRACE_SECONDS = {"preopen": 7 * 3600, "daily": 12 * 3600, "daily-retry": 10 * 3600}
 MARKET_CLOSE = time(15, 30)
 AUTOPILOT_MINUTES = 1
 TELEGRAM_MINUTES = 1
@@ -82,13 +85,6 @@ def daily_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> int
     return code
 
 
-def _previous_session(calendar: TradingCalendar, day: date) -> date:
-    day -= timedelta(days=1)
-    while not is_session(calendar, day):
-        day -= timedelta(days=1)
-    return day
-
-
 def _latest_scan() -> date | None:
     from sqlalchemy.orm import Session
 
@@ -117,10 +113,7 @@ def catch_up(
         time(*_hm(settings.schedule_preopen)),
     )
     ran = []
-    if is_session(calendar, today) and clock >= daily_at:
-        last = today
-    else:
-        last = _previous_session(calendar, today)
+    last = due_session(calendar, at, daily_at)
     scanned = latest_scan()
     if scanned is None:
         # A new install: app/autopilot.py downloads the history, then runs `daily`.
@@ -136,6 +129,22 @@ def catch_up(
         run(["preopen", "--date", today.isoformat()])  # sent once a day, so re-runs are quiet
         ran.append("preopen")
     return ran
+
+
+def retry_job(
+    run: Runner = cli.main,
+    now: Callable[[], datetime] = lambda: datetime.now(IST),
+    latest_scan: Callable[[], date | None] = _latest_scan,
+) -> int | None:
+    """The daily run again when the session it should have scanned has no scan yet
+    (the day's data was late at the first run). Otherwise nothing."""
+    at = now().astimezone(IST)
+    due = due_session(TradingCalendar.default(), at, time(*_hm(get_settings().schedule_daily)))
+    scanned = latest_scan()
+    if scanned is None or scanned >= due:
+        return None
+    log.info("No scan for %s yet: running the daily job again", due)
+    return run(["daily"])
 
 
 def _safe(job: Callable[[], int | None], name: str, lock: bool = True) -> Callable[[], None]:
@@ -159,6 +168,7 @@ def build(scheduler: BaseScheduler) -> BaseScheduler:
     for name, job, at in (
         ("preopen", preopen_job, settings.schedule_preopen),
         ("daily", daily_job, settings.schedule_daily),
+        ("daily-retry", retry_job, settings.schedule_daily_retry),
     ):
         hour, minute = _hm(at)
         scheduler.add_job(

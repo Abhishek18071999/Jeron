@@ -1,5 +1,6 @@
 """My real portfolio: open journal positions with exit plans, heat and sector exposure."""
 
+from dataclasses import asdict
 from datetime import date
 from decimal import Decimal
 from typing import Annotated
@@ -8,9 +9,14 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.backtest.engine import PortfolioRules
 from app.db import get_session
-from app.portfolio.calc import Holding, SectorExposure
+from app.portfolio.calc import AccountState, Holding, SectorExposure
+from app.portfolio.service import equity_history
 from app.portfolio.service import portfolio as build_portfolio
+from app.settings_store import effective_settings
+
+RULES = PortfolioRules()
 
 router = APIRouter(tags=["portfolio"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -76,6 +82,27 @@ class TotalsOut(BaseModel):
     exemption: ExemptionOut | None
 
 
+class AccountOut(BaseModel):
+    """The real account's guardrails as the trade plan applies them (app/plan/calc.py)."""
+
+    as_of: date
+    equity: Decimal
+    peak: Decimal
+    drawdown_pct: Decimal
+    drawdown_halve_pct: Decimal
+    drawdown_pause_pct: Decimal
+    # "normal" / "halved" (risk per trade halved) / "paused" (no new entries)
+    brake: str
+    realised_today: Decimal
+    realised_week: Decimal
+    daily_loss_limit: Decimal | None  # rupees; None when the limit is off
+    weekly_loss_limit: Decimal | None
+    entries_week: int
+    max_entries_week: int | None
+    limits_block: bool
+    open_by_tier: dict[str, int]
+
+
 class PortfolioOut(BaseModel):
     day: date
     data_as_of: date | None
@@ -83,6 +110,35 @@ class PortfolioOut(BaseModel):
     stale: bool
     holdings: list[HoldingOut]
     totals: TotalsOut
+    account: AccountOut | None = None
+
+
+def _account(a: AccountState, session: Session) -> AccountOut:
+    settings = effective_settings(session)
+    halve, pause = Decimal(str(RULES.drawdown_halve_pct)), Decimal(str(RULES.drawdown_pause_pct))
+
+    def limit(pct: float) -> Decimal | None:
+        return None if pct <= 0 else (a.capital * Decimal(str(pct)) / 100).quantize(Decimal(1))
+
+    return AccountOut(
+        as_of=a.as_of,
+        equity=a.equity,
+        peak=a.peak,
+        drawdown_pct=a.drawdown_pct,
+        drawdown_halve_pct=halve,
+        drawdown_pause_pct=pause,
+        brake="paused"
+        if a.drawdown_pct >= pause
+        else ("halved" if a.drawdown_pct >= halve else "normal"),
+        realised_today=a.realised_today,
+        realised_week=a.realised_week,
+        daily_loss_limit=limit(settings.daily_loss_limit_pct),
+        weekly_loss_limit=limit(settings.weekly_loss_limit_pct),
+        entries_week=a.entries_week,
+        max_entries_week=settings.max_entries_week or None,
+        limits_block=settings.risk_limits_block,
+        open_by_tier=a.open_by_tier,
+    )
 
 
 def _holding(h: Holding, as_of: date) -> HoldingOut:
@@ -126,4 +182,43 @@ def portfolio(session: SessionDep, day: date | None = None) -> PortfolioOut:
         stale=p.stale,
         holdings=[_holding(h, as_of) for h in p.holdings],
         totals=TotalsOut.model_validate(p.totals, from_attributes=True),
+        account=None if p.account is None else _account(p.account, session),
+    )
+
+
+class EquityPointOut(BaseModel):
+    day: date
+    equity: Decimal
+    drawdown_pct: Decimal
+    index: Decimal | None
+
+
+class EquityOut(BaseModel):
+    capital: Decimal
+    points: list[EquityPointOut]
+    peak: Decimal | None
+    max_drawdown_pct: Decimal
+    return_pct: Decimal | None
+    index_return_pct: Decimal | None
+    note: str
+
+
+@router.get("/portfolio/equity")
+def portfolio_equity(session: SessionDep) -> EquityOut:
+    """The real account's equity each session from the journal, with the same capital in
+    the Nifty 500 beside it."""
+    capital = Decimal(str(effective_settings(session).capital))
+    c = equity_history(session, capital)
+    return EquityOut(
+        capital=capital,
+        points=[EquityPointOut(**asdict(p)) for p in c.points],
+        peak=c.peak,
+        max_drawdown_pct=c.max_drawdown_pct,
+        return_pct=c.return_pct,
+        index_return_pct=c.index_return_pct,
+        note=(
+            "From your journal's fills, marked at each day's NSE close, on a fixed capital "
+            "(deposits and withdrawals aren't known). Nifty 500 is the price index, "
+            "without dividends."
+        ),
     )

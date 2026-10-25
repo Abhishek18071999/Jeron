@@ -2,11 +2,18 @@
 // so the same build works locally and inside Docker Compose.
 export const apiUrl = () => process.env.JERON_API_URL ?? "http://localhost:8000";
 
+// The token the backend requires when JERON_API_TOKEN is set (backend/app/api/security.py).
+// Server-side only: the variable has no NEXT_PUBLIC_ prefix, so it never reaches a bundle.
+export function apiHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = process.env.JERON_API_TOKEN?.trim();
+  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra };
+}
+
 export type Health = { status: "ok" | "degraded"; database: "ok" | "unreachable" };
 
 export async function fetchHealth(): Promise<Health | null> {
   try {
-    const res = await fetch(`${apiUrl()}/health`, { cache: "no-store" });
+    const res = await fetch(`${apiUrl()}/health`, { headers: apiHeaders(), cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as Health;
   } catch {
@@ -163,6 +170,19 @@ export type TradeStats = {
   avg_sessions: number;
 };
 
+// backend app/backtest/stats.py risk_profile
+export type RiskProfile = {
+  sortino: number;
+  max_losing_streak: number;
+  max_winning_streak: number;
+  longest_underwater_sessions: number;
+  max_drawdown_sessions: number;
+  recovery_sessions: number | null; // null: not recovered by the end of the period
+  exposure_pct: number;
+  trades_per_year: number;
+  turnover: number;
+};
+
 export type CurveStats = {
   start_value: number;
   end_value: number;
@@ -207,6 +227,8 @@ export type BacktestSummary = {
   out_of_sample: {
     trades: TradeStats;
     curve: CurveStats;
+    // Missing on runs made before 2026-10-25.
+    profile?: RiskProfile;
     benchmark: CurveStats;
     by_year: Record<string, TradeStats>;
     by_regime: Record<string, TradeStats>;
@@ -216,7 +238,7 @@ export type BacktestSummary = {
     variants_tried: number;
     tax: TaxView;
   };
-  holdout: { trades: TradeStats; curve: CurveStats; benchmark: CurveStats };
+  holdout: { trades: TradeStats; curve: CurveStats; profile?: RiskProfile; benchmark: CurveStats };
   gates: Gate[];
   // M8 part 2: idle cash in Nifty 500 instead of a liquid fund; never in the gates.
   // Missing on runs made before it.
@@ -421,7 +443,7 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export async function getJson<T>(path: string): Promise<ApiResult<T>> {
   try {
-    const res = await fetch(`${apiUrl()}${path}`, { cache: "no-store" });
+    const res = await fetch(`${apiUrl()}${path}`, { headers: apiHeaders(), cache: "no-store" });
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
       const detail = typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`;
@@ -529,6 +551,10 @@ export type JournalStats = {
   deviated: number;
   followed_avg_r: string | null;
   deviated_avg_r: string | null;
+  // The 95% range of avg_r, and a note when the sample is too small to judge.
+  avg_r_low?: string | null;
+  avg_r_high?: string | null;
+  sample_note?: string | null;
 };
 
 export type JournalView = {
@@ -659,7 +685,7 @@ export async function sendJson<T>(
   try {
     const res = await fetch(`${apiUrl()}${path}`, {
       method,
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      headers: apiHeaders(body === undefined ? undefined : { "Content-Type": "application/json" }),
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: "no-store",
     });
@@ -788,12 +814,32 @@ export type Holding = {
   notes: string[];
 };
 
+// The real account's guardrails, as the trade plan applies them (backend app/plan/calc.py).
+export type AccountGuardrails = {
+  as_of: string;
+  equity: string;
+  peak: string;
+  drawdown_pct: string;
+  drawdown_halve_pct: string;
+  drawdown_pause_pct: string;
+  brake: "normal" | "halved" | "paused";
+  realised_today: string;
+  realised_week: string;
+  daily_loss_limit: string | null; // rupees; null when off
+  weekly_loss_limit: string | null;
+  entries_week: number;
+  max_entries_week: number | null;
+  limits_block: boolean;
+  open_by_tier: Record<string, number>;
+};
+
 export type Portfolio = {
   day: string;
   data_as_of: string | null;
   expected: string;
   stale: boolean;
   holdings: Holding[];
+  account: AccountGuardrails | null;
   totals: {
     positions: number;
     value: string;
@@ -1211,4 +1257,70 @@ export type NewsView = {
   labeller_ready: boolean;
   note: string | null;
   score: number | null;
+};
+
+// --- Explain a stock (decision 0016) ------------------------------------------------
+
+export type BriefFact = {
+  id: string;
+  topic: string;
+  label: string;
+  value: string;
+  kind: "data" | "calculated" | "model" | "rule";
+  source: string;
+  as_of: string | null;
+  stance: "for" | "against" | "neutral";
+};
+
+export type BriefCheck = { label: string; status: "pass" | "fail" | "unknown"; detail: string; facts: string[] };
+
+export type StockBrief = {
+  symbol: string;
+  name: string | null;
+  as_of: string | null;
+  stale: boolean;
+  facts: BriefFact[];
+  why_in_scan: string[];
+  supporting: string[];
+  against: string[];
+  cancels: string[];
+  scenarios: Partial<Record<"bullish" | "neutral" | "bearish", string>>;
+  checklist: BriefCheck[];
+  unknowns: string[];
+  setup: { state: string; still_valid: boolean; reasons: string[]; facts: string[] } | null;
+};
+
+export type Narration = {
+  id: number;
+  status: "ok" | "rejected" | "failed";
+  model: string;
+  prompt_version: string;
+  question: string | null;
+  points: { text: string; facts: string[] }[];
+  problems: string[];
+  cost_usd: string | null;
+  created_at: string;
+};
+
+export type ExplainView = {
+  brief: StockBrief;
+  narration: Narration | null;
+  writer: {
+    ready: boolean;
+    model: string | null;
+    note: string | null;
+    budget_cap_usd: string;
+    budget_spent_usd: string;
+  };
+  prompt_version: string;
+};
+
+export type EquityCurve = {
+  capital: string;
+  points: { day: string; equity: string; drawdown_pct: string; index: string | null }[];
+  peak: string | null;
+  max_drawdown_pct: string;
+  return_pct: string | null;
+  index_return_pct: string | null;
+  note: string;
 };

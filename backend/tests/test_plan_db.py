@@ -69,6 +69,10 @@ def test_plan_view_and_save(empty_session):
     assert plan["shares"] == int(200_000 // LAST) and plan["sized_by"] == "20% of capital"
     assert plan["ok"] is True and Decimal(plan["target2"]) == LAST + 18
     assert len(view["checklist"]) == 5 and view["saved"] == []
+    # The real account's guardrails are checked (nothing held, no losses).
+    status = {c["key"]: c["status"] for c in plan["checks"]}
+    assert status["drawdown"] == status["positions"] == status["daily_loss"] == "pass"
+    assert status["weekly_loss"] == status["entries_week"] == "pass"
 
     sized = client.get("/plan/UP", params={"entry": "180", "stop": "179"}).json()["plan"]
     assert sized["ok"] is False

@@ -20,7 +20,7 @@ import {
   signTone,
   RunCommand,
 } from "@/components/ui";
-import { type Portfolio, getJson } from "@/lib/api";
+import { type AccountGuardrails, type EquityCurve, type Portfolio, getJson } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,10 @@ export const dynamic = "force-dynamic";
 export default async function PortfolioPage({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
   const { day } = await searchParams;
   const dayParam = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `?day=${day}` : "";
-  const result = await getJson<Portfolio>(`/portfolio${dayParam}`);
+  const [result, equity] = await Promise.all([
+    getJson<Portfolio>(`/portfolio${dayParam}`),
+    getJson<EquityCurve>("/portfolio/equity"),
+  ]);
   if (!result.ok) {
     return (
       <Page>
@@ -82,6 +85,8 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
         <Notice key={n}>{n}</Notice>
       ))}
       {t.exemption && <Notice>{t.exemption.line}</Notice>}
+      {p.account && <Guardrails a={p.account} />}
+      {equity.ok && equity.data.points.length > 1 && <EquityCard c={equity.data} />}
 
       {t.positions === 0 ? (
         <Card>
@@ -226,5 +231,141 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
         </>
       )}
     </Page>
+  );
+}
+
+// The limits a new trade plan is checked against (spec section 5 and the Settings page).
+function Guardrails({ a }: { a: AccountGuardrails }) {
+  const loss = (realised: string, limit: string | null) => {
+    const lost = Math.max(0, -Number(realised));
+    return {
+      value: <span className={signTone(realised)}>{inrSigned(realised)}</span>,
+      sub: limit ? `limit: a loss of ${inr(limit, 0)}` : "no limit set",
+      tone: (limit && lost >= Number(limit) ? "bad" : "neutral") as "bad" | "neutral",
+      hit: Boolean(limit && lost >= Number(limit)),
+    };
+  };
+  const stops = a.limits_block ? "new trade plans are blocked" : "new trade plans get a warning";
+  const today = loss(a.realised_today, a.daily_loss_limit);
+  const week = loss(a.realised_week, a.weekly_loss_limit);
+  const capped = a.max_entries_week !== null && a.entries_week >= a.max_entries_week;
+  return (
+    <>
+      {a.brake === "paused" && (
+        <Notice tone="bad">
+          The account is {pctText(a.drawdown_pct, 1)} below its peak of {inr(a.peak, 0)}: new trade plans are
+          blocked until it recovers above {pctText(a.drawdown_pause_pct, 0)}. Review the recent trades in the
+          journal before the next one.
+        </Notice>
+      )}
+      {a.brake === "halved" && (
+        <Notice tone="warn">
+          The account is {pctText(a.drawdown_pct, 1)} below its peak: new trade plans risk half the usual amount
+          until it is back within {pctText(a.drawdown_halve_pct, 0)}.
+        </Notice>
+      )}
+      {today.hit && (
+        <Notice tone={a.limits_block ? "bad" : "warn"}>
+          Today&apos;s realised losses ({inr(-Number(a.realised_today), 0)}) reached the daily limit of{" "}
+          {inr(a.daily_loss_limit, 0)}: {stops} until tomorrow.
+        </Notice>
+      )}
+      {week.hit && (
+        <Notice tone={a.limits_block ? "bad" : "warn"}>
+          This week&apos;s realised losses ({inr(-Number(a.realised_week), 0)}) reached the weekly limit of{" "}
+          {inr(a.weekly_loss_limit, 0)}: {stops} until Monday.
+        </Notice>
+      )}
+      {capped && (
+        <Notice tone={a.limits_block ? "bad" : "warn"}>
+          {a.entries_week} new positions this week, the cap set on Settings: {stops} until Monday.
+        </Notice>
+      )}
+      <Card title="Guardrails">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Stat
+            label="Below the peak"
+            value={pctText(a.drawdown_pct, 1)}
+            tone={a.brake === "paused" ? "bad" : a.brake === "halved" ? "warn" : "neutral"}
+            sub={`equity ${inr(a.equity, 0)}, peak ${inr(a.peak, 0)}`}
+            help={`At ${pctText(a.drawdown_halve_pct, 0)} below the peak the risk per trade is halved; at ${pctText(a.drawdown_pause_pct, 0)} new entries stop (spec section 5).`}
+            how="Equity is your capital setting plus every realised gain or loss in the journal plus the open positions at the last close. The peak is the highest equity on any session since your first buy, open positions marked at each day's close (the equity chart below)."
+          />
+          <Stat
+            label="Realised today"
+            value={today.value}
+            tone={today.tone}
+            sub={today.sub}
+            help="Gains and losses of today's sales in the journal, after charges. At the daily loss limit a new plan is blocked (or warned, per Settings)."
+          />
+          <Stat
+            label="Realised this week"
+            value={week.value}
+            tone={week.tone}
+            sub={week.sub}
+            help="Sales from Monday on, after charges, against the weekly loss limit."
+          />
+          <Stat
+            label="New positions this week"
+            value={a.max_entries_week === null ? String(a.entries_week) : `${a.entries_week} of ${a.max_entries_week}`}
+            tone={capped ? "warn" : "neutral"}
+            sub={a.limits_block ? "limits block a plan" : "limits only warn"}
+            help="Journal positions first bought from Monday on, against the weekly cap set on Settings (against overtrading)."
+          />
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function EquityCard({ c }: { c: EquityCurve }) {
+  const W = 600;
+  const H = 140;
+  const eq = c.points.map((p) => Number(p.equity));
+  const ix = c.points.map((p) => (p.index === null ? null : Number(p.index)));
+  const all = [...eq, ...ix.filter((v): v is number => v !== null)];
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const span = hi - lo || 1;
+  const x = (i: number) => ((i / (c.points.length - 1)) * W).toFixed(1);
+  const y = (v: number) => (H - ((v - lo) / span) * (H - 8) - 4).toFixed(1);
+  const path = (values: (number | null)[]) => {
+    let d = "";
+    let pen = false;
+    values.forEach((v, i) => {
+      if (v === null) {
+        pen = false;
+        return;
+      }
+      d += `${pen ? "L" : "M"}${x(i)},${y(v)} `;
+      pen = true;
+    });
+    return d.trim();
+  };
+  const first = c.points[0];
+  const last = c.points[c.points.length - 1];
+  return (
+    <Card
+      title="Account equity"
+      subtitle={`${shortDate(first.day)} to ${shortDate(last.day)} · solid: your account, dashed: the same capital in the Nifty 500`}
+    >
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat label="Your return" value={pctText(c.return_pct, 2, true)} tone={Number(c.return_pct) > 0 ? "good" : Number(c.return_pct) < 0 ? "bad" : "neutral"} />
+        <Stat label="Nifty 500 (price)" value={c.index_return_pct === null ? "n/a" : pctText(c.index_return_pct, 2, true)} />
+        <Stat label="Worst drawdown" value={pctText(c.max_drawdown_pct, 2)} sub={c.peak ? `peak ${inr(c.peak, 0)}` : undefined} />
+        <Stat label="Equity now" value={inr(last.equity, 0)} sub={`capital ${inr(c.capital, 0)}`} />
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="mt-3 h-36 w-full"
+        role="img"
+        aria-label="Account equity against the Nifty 500"
+      >
+        <path d={path(ix)} fill="none" className="stroke-muted" strokeWidth={1.2} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />
+        <path d={path(eq)} fill="none" className="stroke-accent" strokeWidth={1.8} vectorEffect="non-scaling-stroke" />
+      </svg>
+      <p className="mt-2 text-xs text-muted">{c.note}</p>
+    </Card>
   );
 }

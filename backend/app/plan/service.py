@@ -23,8 +23,15 @@ from app.journal.service import SignalInfo, signal_info
 from app.market.mood import Mood
 from app.market.service import latest_ok_scan, mood_on
 from app.models import Instrument, ScanResult, TradePlan
-from app.plan.calc import CHECKLIST_KEYS, Plan, PlanInputs, build_plan, missing_checklist
-from app.portfolio.calc import UNKNOWN_SECTOR
+from app.plan.calc import (
+    CHECKLIST_KEYS,
+    Limits,
+    Plan,
+    PlanInputs,
+    build_plan,
+    missing_checklist,
+)
+from app.portfolio.calc import UNKNOWN_SECTOR, AccountState
 from app.portfolio.service import portfolio
 from app.settings_store import effective_settings
 
@@ -72,6 +79,23 @@ class Context:
     sector_value: Decimal
     sector_cap_pct: Decimal
     signal: SignalInfo | None
+    account: AccountState | None = None
+    settings: Settings | None = None
+
+
+def limits_for(settings: Settings, tier: Tier) -> Limits:
+    """The guardrails' settings for a plan in `tier`."""
+    return Limits(
+        max_positions={
+            Tier.SWING: settings.max_positions_swing,
+            Tier.POSITIONAL: settings.max_positions_positional,
+            Tier.INVEST: settings.max_positions_invest,
+        }[tier],
+        daily_loss_pct=settings.daily_loss_limit_pct,
+        weekly_loss_pct=settings.weekly_loss_limit_pct,
+        max_entries_week=settings.max_entries_week,
+        block=settings.risk_limits_block,
+    )
 
 
 def _f(value: object) -> float | None:
@@ -189,6 +213,8 @@ def context(
         sector_value=held if facts.sector else Decimal(0),
         sector_cap_pct=Decimal(str(settings.sector_cap_pct)),
         signal=signal,
+        account=p.account,
+        settings=settings,
     )
 
 
@@ -258,6 +284,8 @@ def plan_for(ctx: Context, entry: Decimal, stop: Decimal, tier: Tier) -> Plan:
             results_blackout=ctx.events.blackout,
             results_line=ctx.events.results_line,
             ex_dates=ctx.events.ex_dates,
+            account=ctx.account,
+            limits=None if ctx.settings is None else limits_for(ctx.settings, tier),
         )
     )
 
@@ -285,6 +313,7 @@ def _details(plan: Plan, ctx: Context) -> dict[str, Any]:
         "results_date": None if ctx.events.results_date is None else str(ctx.events.results_date),
         "results_line": ctx.events.results_line,
         "ex_dates": list(ctx.events.ex_dates),
+        "drawdown_pct": None if ctx.account is None else str(ctx.account.drawdown_pct),
         "checks": [asdict(c) for c in plan.checks],
     }
 

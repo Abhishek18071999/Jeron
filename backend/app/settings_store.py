@@ -38,6 +38,24 @@ EDITABLE: dict[str, Editable] = {
         "Long-term positions at most", "Open long-term investments at once."
     ),
     "sector_cap_pct": Editable("Sector cap (%)", "Most of capital in one sector."),
+    "daily_loss_limit_pct": Editable(
+        "Daily loss limit (% of capital)",
+        "No new plan once today's realised losses reach this. 0 turns it off.",
+    ),
+    "weekly_loss_limit_pct": Editable(
+        "Weekly loss limit (% of capital)",
+        "No new plan once this week's realised losses (from Monday) reach this. 0 turns it off.",
+    ),
+    "max_entries_week": Editable(
+        "New positions a week at most",
+        "Against overtrading: positions first bought this week, Monday on. 0 turns it off.",
+    ),
+    "risk_limits_block": Editable(
+        "Loss and entry limits block a plan",
+        "On: a plan past the daily or weekly loss limit or the weekly entries cap can't be "
+        "saved. Off: it is a warning. The drawdown brake, heat and position limits always "
+        "block.",
+    ),
     "idle_cash_in_index": Editable(
         "Park idle cash in an index fund",
         "On: Jeron says to keep idle cash in a Nifty index fund instead of a liquid fund. "

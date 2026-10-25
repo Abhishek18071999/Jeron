@@ -1,4 +1,4 @@
-import { apiUrl } from "@/lib/api";
+import { apiHeaders, apiUrl } from "@/lib/api";
 
 // Same-origin proxy for the search box, so the browser never calls the backend itself.
 export async function GET(request: Request) {
@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   if (!q) return Response.json([]);
   try {
     const res = await fetch(`${apiUrl()}/stocks/search?${new URLSearchParams({ q, limit: "8" })}`, {
+      headers: apiHeaders(),
       cache: "no-store",
     });
     return Response.json(res.ok ? await res.json() : []);

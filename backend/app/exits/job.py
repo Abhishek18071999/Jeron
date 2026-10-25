@@ -8,7 +8,7 @@ counted. If the latest prices are missing, the check says so and gives no action
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -87,6 +87,18 @@ def next_session(calendar: TradingCalendar, day: date) -> date:
     day += timedelta(days=1)
     while not is_session(calendar, day):
         day += timedelta(days=1)
+    return day
+
+
+def due_session(calendar: TradingCalendar, at: datetime, daily_at: time) -> date:
+    """The newest session whose data the daily run should have by `at` (IST): today
+    once the daily time has passed on a trading day, else the session before."""
+    at = at.astimezone(IST)
+    if is_session(calendar, at.date()) and at.time() >= daily_at:
+        return at.date()
+    day = at.date() - timedelta(days=1)
+    while not is_session(calendar, day):
+        day -= timedelta(days=1)
     return day
 
 

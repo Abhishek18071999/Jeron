@@ -107,6 +107,9 @@ class StatsOut(BaseModel):
     deviated: int
     followed_avg_r: Decimal | None
     deviated_avg_r: Decimal | None
+    avg_r_low: Decimal | None = None
+    avg_r_high: Decimal | None = None
+    sample_note: str | None = None
 
 
 class JournalView(BaseModel):

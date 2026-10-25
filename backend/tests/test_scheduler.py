@@ -1,24 +1,34 @@
 """The scheduler: jobs at the right IST times, nothing on holidays, weekly after the
 last session of the week."""
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.calendar.nse import TradingCalendar
-from app.scheduler import build, catch_up, daily_job, last_session_of_week, preopen_job
+from app.exits.job import due_session
+from app.scheduler import (
+    build,
+    catch_up,
+    daily_job,
+    last_session_of_week,
+    preopen_job,
+    retry_job,
+)
 from app.signals.build import IST
 
 
 def test_jobs_run_at_ist_times_on_weekdays():
     scheduler = build(BackgroundScheduler(timezone=IST))
     jobs = {j.id: j for j in scheduler.get_jobs()}
-    assert set(jobs) == {"preopen", "daily", "autopilot"}
+    assert set(jobs) == {"preopen", "daily", "daily-retry", "autopilot"}
     start = datetime(2025, 3, 14, 12, 0, tzinfo=IST)  # a Friday
     fire = jobs["preopen"].trigger.get_next_fire_time(None, start)
     assert (fire.date(), fire.hour, fire.minute) == (date(2025, 3, 17), 8, 30)  # Monday
     fire = jobs["daily"].trigger.get_next_fire_time(None, start)
     assert (fire.date(), fire.hour, fire.minute) == (date(2025, 3, 14), 19, 0)
+    fire = jobs["daily-retry"].trigger.get_next_fire_time(None, start)
+    assert (fire.date(), fire.hour, fire.minute) == (date(2025, 3, 14), 21, 30)
 
 
 def test_holidays_skip_and_weekly_after_the_last_session():
@@ -72,3 +82,33 @@ def test_catch_up_after_the_computer_was_off():
 
     # A new install with no scan yet waits for the backfill.
     assert catch_up(run, at(date(2026, 10, 24), 10), lambda: None) == []
+
+
+def test_due_session():
+    calendar = TradingCalendar.default()
+    seven = time(19, 0)
+
+    def at(day, hour, minute=0):
+        return datetime(day.year, day.month, day.day, hour, minute, tzinfo=IST)
+
+    mon = date(2026, 10, 19)
+    assert due_session(calendar, at(mon, 19, 0), seven) == mon
+    assert due_session(calendar, at(mon, 18, 59), seven) == date(2026, 10, 16)  # Friday
+    # Tuesday 20 Oct 2026 is Dussehra: Monday is still the newest session that evening.
+    assert due_session(calendar, at(date(2026, 10, 20), 21), seven) == mon
+    assert due_session(calendar, at(date(2026, 10, 25), 10), seven) == date(2026, 10, 23)
+
+
+def test_retry_only_when_the_scan_is_missing():
+    ran: list[list[str]] = []
+
+    def run(args):
+        ran.append(args)
+        return 0
+
+    evening = lambda: datetime(2026, 10, 23, 21, 30, tzinfo=IST)  # noqa: E731 - a Friday
+    assert retry_job(run, evening, lambda: date(2026, 10, 23)) is None  # scanned at 19:00
+    assert retry_job(run, evening, lambda: None) is None  # a new install: the autopilot
+    assert ran == []
+    assert retry_job(run, evening, lambda: date(2026, 10, 22)) == 0  # Friday's data was late
+    assert ran == [["daily"]]

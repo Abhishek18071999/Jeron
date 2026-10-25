@@ -23,6 +23,7 @@ python -m app.cli telegram --setup              # find your chat id after messag
 python -m app.cli daily                         # update, scan, paper-trade, send alerts
 python -m app.cli holidays --year 2025          # holidays as NSE's files show them
 python -m app.cli auth-setup                    # password and TOTP for the web login
+python -m app.cli api-token                     # the token the web app sends the API
 """
 
 import argparse
@@ -40,6 +41,7 @@ from sqlalchemy.orm import Session
 from app import auth
 from app.alerts.channels import AlertError, TelegramChannel
 from app.alerts.job import NOT_SET_UP, run_alerts, send_test
+from app.alerts.late import data_late
 from app.analytics.weekly import run_weekly
 from app.backtest.job import run_backtests
 from app.backtest.strategies import COMBINED, STRATEGIES
@@ -105,16 +107,27 @@ def _auth_setup() -> int:
         return 1
     secret = auth.new_totp_secret()
     _log(
-        "\nAdd these two lines to .env (they replace any earlier ones), then run "
+        "\nAdd these three lines to .env (they replace any earlier ones), then run "
         "`docker compose up -d` so the web app reads them:\n\n"
         f"JERON_LOGIN_PASSWORD_HASH={auth.hash_password(password)}\n"
-        f"JERON_LOGIN_TOTP_SECRET={secret}\n\n"
+        f"JERON_LOGIN_TOTP_SECRET={secret}\n"
+        f"JERON_API_TOKEN={auth.new_api_token()}\n\n"
         "In your authenticator app (Google Authenticator, Authy, 1Password...), add an "
         f"account by setup key: {secret} (time-based, 6 digits).\n"
         f"Or make a QR code of this link: {auth.otpauth_uri(secret)}\n"
         f"Check it: the app should now show {auth.totp(secret)} (it changes every 30 "
         "seconds).\nKeep the setup key somewhere safe: it is the only way to add the "
         "account to a new phone. Changing the password or key logs out every device."
+    )
+    return 0
+
+
+def _api_token() -> int:
+    """Print a new `.env` line for the token the web app sends the API."""
+    _log(
+        "Add this line to .env (it replaces any earlier one), then run "
+        "`docker compose up -d` so the backend and the web app both read it:\n\n"
+        f"JERON_API_TOKEN={auth.new_api_token()}"
     )
     return 0
 
@@ -268,10 +281,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--year", type=int, required=True)
 
     sub.add_parser("auth-setup", help="make the web login's password hash and TOTP secret")
+    sub.add_parser("api-token", help="make the token the web app sends the API")
 
     args = parser.parse_args(argv)
     if args.command == "auth-setup":
         return _auth_setup()
+    if args.command == "api-token":
+        return _api_token()
     calendar = TradingCalendar.default()
     today = _today()
 
@@ -487,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "daily":
             report = pipeline.daily_update(session, _archive(), _yahoo(), calendar, today, log=_log)
+            late = data_late(session, calendar, log=_log)
             if report is None:
                 return 1
             _log(f"{report.trade_date}: data quality {report.status.value.upper()}")
@@ -500,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
                 ok = run_paper(session, report.trade_date, log=_log).status == "ok"
             # The summary goes out even when the day was blocked, saying why.
             sent = run_alerts(session, report.trade_date, log=_log)
-            return 0 if ok and not sent.failed else 1
+            return 0 if ok and not late and not sent.failed else 1
 
         if args.command == "news-label":
             settings = get_settings()
