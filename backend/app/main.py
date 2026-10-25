@@ -22,6 +22,7 @@ from app.api import (
     stocks,
     watchlist,
 )
+from app.api.security import ApiGuard
 from app.config import get_settings
 
 app = FastAPI(title="Jeron API", version="0.1.0")
@@ -31,6 +32,8 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+# Added last, so it runs first: unknown hosts and requests without the token stop here.
+app.add_middleware(ApiGuard)
 app.include_router(health.router)
 app.include_router(data.router)
 app.include_router(scan.router)

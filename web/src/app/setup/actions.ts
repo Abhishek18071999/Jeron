@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { apiUrl } from "@/lib/api";
+import { apiHeaders, apiUrl } from "@/lib/api";
 
 // Uploads go into the imports folder through the backend; the scheduler imports them.
 export async function uploadFiles(form: FormData) {
@@ -15,7 +15,7 @@ export async function uploadFiles(form: FormData) {
     try {
       const res = await fetch(`${apiUrl()}/imports/${encodeURIComponent(file.name)}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/octet-stream" },
+        headers: apiHeaders({ "Content-Type": "application/octet-stream" }),
         body: Buffer.from(await file.arrayBuffer()),
         cache: "no-store",
       });

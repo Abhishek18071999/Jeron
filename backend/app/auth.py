@@ -2,8 +2,9 @@
 
 The web app checks the login; this module only makes what goes in `.env`, through
 `python -m app.cli auth-setup`: an scrypt hash of the password and a TOTP secret for an
-authenticator app. `web/src/lib/auth.ts` reads the same formats. The hash has no `$`,
-so Docker Compose leaves it alone in `.env`. Pure: no database.
+authenticator app, and the token the web app sends the API (`app/api/security.py`).
+`web/src/lib/auth.ts` reads the same formats. The hash has no `$`, so Docker Compose
+leaves it alone in `.env`. Pure: no database.
 """
 
 import base64
@@ -49,6 +50,11 @@ def verify_password(password: str, stored: str) -> bool:
     except ValueError:
         return False
     return hmac.compare_digest(found, _unb64(key))
+
+
+def new_api_token() -> str:
+    """256 random bits in base64url, for JERON_API_TOKEN (no `$`, so Compose keeps it)."""
+    return secrets.token_urlsafe(32)
 
 
 def new_totp_secret() -> str:

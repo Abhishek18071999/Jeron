@@ -3,6 +3,8 @@
 x-backend-env: &backend-env
   JERON_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-jeron}:${POSTGRES_PASSWORD:-jeron}@db:5432/${POSTGRES_DB:-jeron}
   JERON_CORS_ORIGINS: http://localhost:3000
+  # The web app's token for the API (app/api/security.py); .env only.
+  JERON_API_TOKEN: ${JERON_API_TOKEN:-}
   JERON_DATA_DIR: /data
   JERON_IMPORTS_DIR: /imports
   JERON_CAPITAL: ${JERON_CAPITAL:-1000000}
@@ -102,6 +104,7 @@ services:
       JERON_LOGIN_PASSWORD_HASH: ${JERON_LOGIN_PASSWORD_HASH:-}
       JERON_LOGIN_TOTP_SECRET: ${JERON_LOGIN_TOTP_SECRET:-}
       JERON_LOGIN_DISABLED: ${JERON_LOGIN_DISABLED:-false}
+      JERON_API_TOKEN: ${JERON_API_TOKEN:-}
     depends_on:
       backend:
         condition: service_healthy

@@ -2,11 +2,18 @@
 // so the same build works locally and inside Docker Compose.
 export const apiUrl = () => process.env.JERON_API_URL ?? "http://localhost:8000";
 
+// The token the backend requires when JERON_API_TOKEN is set (backend/app/api/security.py).
+// Server-side only: the variable has no NEXT_PUBLIC_ prefix, so it never reaches a bundle.
+export function apiHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = process.env.JERON_API_TOKEN?.trim();
+  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...extra };
+}
+
 export type Health = { status: "ok" | "degraded"; database: "ok" | "unreachable" };
 
 export async function fetchHealth(): Promise<Health | null> {
   try {
-    const res = await fetch(`${apiUrl()}/health`, { cache: "no-store" });
+    const res = await fetch(`${apiUrl()}/health`, { headers: apiHeaders(), cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as Health;
   } catch {
@@ -421,7 +428,7 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export async function getJson<T>(path: string): Promise<ApiResult<T>> {
   try {
-    const res = await fetch(`${apiUrl()}${path}`, { cache: "no-store" });
+    const res = await fetch(`${apiUrl()}${path}`, { headers: apiHeaders(), cache: "no-store" });
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
       const detail = typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`;
@@ -659,7 +666,7 @@ export async function sendJson<T>(
   try {
     const res = await fetch(`${apiUrl()}${path}`, {
       method,
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      headers: apiHeaders(body === undefined ? undefined : { "Content-Type": "application/json" }),
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: "no-store",
     });

@@ -73,6 +73,16 @@ jobs:
           curl -sf localhost:8000/health | tee /dev/stderr | grep -q '"database":"ok"'
           curl -sf localhost:3000 | grep -q 'data-database="connected"'
           curl -sf localhost:3000/settings | grep -q 'Risk and alerts'
+      - name: API token (backend refuses calls without it, web sends it)
+        run: |
+          sed -i "s/^JERON_API_TOKEN=.*/JERON_API_TOKEN=ci-token/" .env
+          docker compose up -d --wait --wait-timeout 300 backend web
+          for i in $(seq 1 30); do curl -sf localhost:3000 >/dev/null && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/settings)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer ci-token' localhost:8000/settings)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' localhost:8000/health)" = 400
+          curl -sf localhost:8000/health | grep -q '"database":"ok"'
+          curl -sf localhost:3000/settings | grep -q 'Risk and alerts'
       - name: Backup
         run: |
           docker compose exec -T backup sh /backup.sh now

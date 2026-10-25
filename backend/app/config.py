@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://jeron:jeron@localhost:5432/jeron"
     # Comma-separated origins allowed to call the API from a browser.
     cors_origins: str = "http://localhost:3000"
+    # The web app sends this as a bearer token (app/api/security.py). Empty: the API
+    # takes requests from any local process, as before.
+    api_token: str = ""
+    # Host names the API answers to, against DNS rebinding. "backend" is the Docker
+    # Compose service name; "testserver" is Starlette's test client. "*" allows any.
+    allowed_hosts: str = "localhost,127.0.0.1,backend,testserver"
     timezone: str = "Asia/Kolkata"
     # Downloaded exchange files are kept here, unchanged, so history can be re-read.
     data_dir: str = "data"
@@ -87,6 +93,10 @@ class Settings(BaseSettings):
     @property
     def email_ready(self) -> bool:
         return bool(self.smtp_host and self.alert_email_to)
+
+    @property
+    def allowed_host_list(self) -> list[str]:
+        return [h.strip().lower() for h in self.allowed_hosts.split(",") if h.strip()]
 
     @property
     def cors_origin_list(self) -> list[str]:

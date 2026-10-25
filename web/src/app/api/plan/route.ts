@@ -1,4 +1,4 @@
-import { apiUrl } from "@/lib/api";
+import { apiHeaders, apiUrl } from "@/lib/api";
 
 // Same-origin proxy for the trade plan form's live numbers (read only), so the browser
 // never calls the backend itself. Saving goes through a server action.
@@ -12,7 +12,10 @@ export async function GET(request: Request) {
     if (value) query.set(key, value);
   }
   try {
-    const res = await fetch(`${apiUrl()}/plan/${encodeURIComponent(symbol)}?${query}`, { cache: "no-store" });
+    const res = await fetch(`${apiUrl()}/plan/${encodeURIComponent(symbol)}?${query}`, {
+      headers: apiHeaders(),
+      cache: "no-store",
+    });
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     return Response.json(body, { status: res.status });
   } catch {
