@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     # When the scheduler runs the jobs (HH:MM, IST, weekdays that trade).
     schedule_preopen: str = "08:30"
     schedule_daily: str = "19:00"
+    # The daily run again, only if the day's data had not arrived at the first try.
+    schedule_daily_retry: str = "21:30"
 
     @property
     def telegram_ready(self) -> bool:

@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session
 from app import auth
 from app.alerts.channels import AlertError, TelegramChannel
 from app.alerts.job import NOT_SET_UP, run_alerts, send_test
+from app.alerts.late import data_late
 from app.analytics.weekly import run_weekly
 from app.backtest.job import run_backtests
 from app.backtest.strategies import COMBINED, STRATEGIES
@@ -502,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "daily":
             report = pipeline.daily_update(session, _archive(), _yahoo(), calendar, today, log=_log)
+            late = data_late(session, calendar, log=_log)
             if report is None:
                 return 1
             _log(f"{report.trade_date}: data quality {report.status.value.upper()}")
@@ -515,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
                 ok = run_paper(session, report.trade_date, log=_log).status == "ok"
             # The summary goes out even when the day was blocked, saying why.
             sent = run_alerts(session, report.trade_date, log=_log)
-            return 0 if ok and not sent.failed else 1
+            return 0 if ok and not late and not sent.failed else 1
 
         if args.command == "news-label":
             settings = get_settings()

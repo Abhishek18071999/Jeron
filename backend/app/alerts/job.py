@@ -19,6 +19,7 @@ from app.alerts.format import (
     DigestAccount,
     DigestPosition,
     DigestSection,
+    data_late_message,
     digest_message,
     digest_signals,
     signal_message,
@@ -273,6 +274,36 @@ def run_alerts(
         alert = session.scalar(select(Alert).where(Alert.key == key))
         log(f"  - {key}: {alert.error if alert else ''}")
     return outcome
+
+
+def send_data_late(
+    session: Session,
+    due: date,
+    newest: date | None,
+    *,
+    retry_at: str | None,
+    settings: Settings | None = None,
+    channels: Sequence[Channel] | None = None,
+    now: datetime | None = None,
+) -> Alert | None:
+    """One alert per session whose data did not arrive (key "late:<date>"), so the retry
+    run, or a manual one, does not send it again. None when alerts are not set up."""
+    settings = settings or effective_settings(session)
+    channels = channels_from(settings) if channels is None else channels
+    if not channels:
+        return None
+    text = data_late_message(due, newest, retry_at, settings.web_url)
+    return _send(
+        session,
+        channels,
+        f"late:{due.isoformat()}",
+        "late",
+        text,
+        f"Jeron: NSE data for {due:%-d %b} has not arrived",
+        AlertOutcome(due, "ok"),
+        now or datetime.now(IST),
+        day=due,
+    )
 
 
 def send_test(

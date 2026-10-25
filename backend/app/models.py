@@ -574,13 +574,15 @@ class PaperDay(Base):
 class Alert(Base):
     """A message sent (or tried) to me: one per key, so a re-run never sends twice.
     Keys: "signal:<signal_id>", "digest:<date>", "test:<timestamp>",
-    "watch:<watchlist id>:<above/below>:<price>"."""
+    "watch:<watchlist id>:<above/below>:<price>", "late:<date>" (the day's data did not
+    arrive)."""
 
     __tablename__ = "alerts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(String(100), unique=True)
-    kind: Mapped[str] = mapped_column(String(16))  # "signal" / "digest" / "test" / "watch"
+    # "signal" / "digest" / "test" / "watch" / "late"
+    kind: Mapped[str] = mapped_column(String(16))
     trade_date: Mapped[date | None] = mapped_column(Date, index=True)
     signal_id: Mapped[UUID | None] = mapped_column(PgUUID(as_uuid=True))
     status: Mapped[str] = mapped_column(String(16))  # "sent" / "failed"
