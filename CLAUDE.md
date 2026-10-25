@@ -76,7 +76,8 @@ are part of done, never commit secrets.
     the broker's trade id so a re-import adds nothing.
   - `app/exits/` exits for my real positions: `rules.py` (the engine's section 5 exit
     rules on one position; pure, checked against the engine) and `job.py` (the pre-open
-    check: action per open position, results and ex-dates ahead, stale-data guard).
+    check: action per open position, results and ex-dates ahead, stale-data guard;
+    `broker_stop`, the GTT stop to keep at the broker, flagged when the last close raised it).
   - `app/analytics/` `compare.py` (backtest vs paper vs real: gates, expected ranges,
     stages, causes of divergence, the 20-trade early warning; pure), `service.py` (database) and `weekly.py` (weekly
     summary and revalidation, which retires failing strategies' paper accounts).
@@ -161,7 +162,10 @@ are part of done, never commit secrets.
     November, a missing next year is warned on `/setup` and in the pre-open check, and
     `tests/test_calendar.py` fails from 1 January of a year not in the file.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
-- `backup/backup.sh` the nightly `pg_dump` run by the `backup` service.
+- `backup/backup.sh` the nightly `pg_dump` run by the `backup` service; a dump is kept only if
+  `pg_restore` reads it, and once a week (`backup.sh verify`) the newest is restored into a
+  scratch database, the result in `restore-check.txt`. `backend/app/backups.py` reads that
+  folder (`JERON_BACKUPS_MOUNT`) for Setup and the pre-open check (`docs/plans/hardening-v1.md`).
 - `web/` Next.js 16 (App Router, TypeScript, Tailwind 4). Navigation: Today (`/`),
   Trade (`/trade`, one tab per section: `/trade/swing`, `/trade/intraday`,
   `/trade/positional`, `/trade/invest`; `src/components/sections.tsx`), Stocks (sector
@@ -227,5 +231,6 @@ Everything: `docker compose up --build` from the repo root.
   `apiHeaders()`, never a bare `fetch`.
 - The trade plan is where the real account's risk rules live: a new limit goes in
   `app/plan/calc.py` `guardrails` with a row in `tests/test_risk_rules.py`.
-- CI (`.github/workflows/ci.yml`) runs backend checks, web checks, and a Docker Compose
+- CI (`.github/workflows/ci.yml`) runs backend checks, web checks, a dependency audit
+  (`pip-audit`, `npm audit`), and a Docker Compose
   smoke test. Keep it green.

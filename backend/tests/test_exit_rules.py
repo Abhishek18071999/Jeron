@@ -42,6 +42,40 @@ def test_breakeven_then_half_at_t1_then_trail():
     assert plan.action == Action.SELL_ALL and "trail" in plan.reason
 
 
+def test_stop_raised_by_the_last_close_is_flagged():
+    # Entry 100, stop 96: the second close (104.2) is +1R and moves the stop to 100.
+    rows = [(100.0, 101.0, 99.0, 100.5)]
+    plan = exit_plan(100.0, 96.0, Tier.SWING, bars(rows), half_booked=False)
+    assert plan.stop_before == 96.0 and not plan.stop_raised  # entry day: nothing moved
+    rows.append((101.0, 104.5, 100.5, 104.2))
+    plan = exit_plan(100.0, 96.0, Tier.SWING, bars(rows), half_booked=False)
+    assert plan.stop_before == 96.0 and plan.stop == 100.0 and plan.stop_raised
+    rows.append((104.0, 105.0, 103.0, 104.0))  # the next session: already at 100
+    plan = exit_plan(100.0, 96.0, Tier.SWING, bars(rows), half_booked=False)
+    assert plan.stop_before == 100.0 and not plan.stop_raised
+
+
+def test_broker_stop_order():
+    from decimal import Decimal
+
+    from app.exits.job import PositionCheck, broker_stop
+
+    rows = [(100.0, 101.0, 99.0, 100.5), (101.0, 104.5, 100.5, 104.2)]
+    hold = exit_plan(100.0, 96.0, Tier.SWING, bars(rows), half_booked=False)
+    check = PositionCheck(1, "AAA", None, Tier.SWING, False, 75, Decimal(100), 104.2, 1.05, hold)
+    assert broker_stop(check) == (75, 100.0)
+    rows.append((104.0, 109.0, 103.5, 108.5))  # T1: the plan sells 37, keeps 38
+    half = exit_plan(100.0, 96.0, Tier.SWING, bars(rows), half_booked=False)
+    assert half.action == Action.SELL_HALF
+    check.plan = half
+    assert broker_stop(check) == (38, 100.0)
+    rows.append((110.0, 110.5, 95.0, 96.0))  # stop hit: no order to keep
+    check.plan = exit_plan(100.0, 96.0, Tier.SWING, bars(rows), half_booked=True)
+    assert check.plan.action == Action.SELL_ALL and broker_stop(check) is None
+    check.plan = None
+    assert broker_stop(check) is None
+
+
 def test_trail_only_moves_up():
     rows = [(100.0, 101.0, 99.0, 100.5), (104.0, 109.0, 103.5, 108.5), (109, 112, 108, 111.0)]
     rows.append((110.0, 110.5, 108.0, 109.0))  # lower close, trail stays at 107

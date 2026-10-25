@@ -101,6 +101,10 @@ class Holding:
     events: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     tier: str | None = None  # the signal's tier; swing rules for a trade without one
+    # The stop order to keep at the broker after the next open (`app.exits.job.broker_stop`):
+    # shares, and the stop before the last close when that close raised it.
+    broker_shares: int | None = None
+    stop_raised_from: Decimal | None = None
 
     @property
     def value(self) -> Decimal | None:

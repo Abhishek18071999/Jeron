@@ -432,7 +432,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
   const p = portfolioResult.ok ? portfolioResult.data : null;
   const actions =
     (p && !p.stale
-      ? p.holdings.filter((h) => h.problem || h.action === "sell all" || h.action === "sell half").length
+      ? p.holdings.filter(
+          (h) =>
+            h.problem ||
+            h.action === "sell all" ||
+            h.action === "sell half" ||
+            (h.action === "hold" && h.stop_raised_from),
+        ).length
       : 0) + d.pending.length;
   const live = d.signals.filter((s) => !s.research_only).length;
   const research = d.signals.length - live;

@@ -77,6 +77,9 @@ def test_preopen_plans_and_events(empty_session):
     assert text.index("SELL ALL") < text.index("SELL HALF")
     assert "FLAT 50 sh" in text and "UP 100 sh" in text
     assert "EVENTS" in text and "Journal: http://jeron.local/journal" in text
+    # The broker's stop order: half of UP's 100 shares are sold at the open, 50 stay.
+    stops = text[text.index("STOPS AT THE BROKER") :].split("\n\n")[0]
+    assert "- UP: sell 50 sh, trigger" in stops and "FLAT:" not in stops
 
 
 def test_partial_sale_and_stale_prices(empty_session):

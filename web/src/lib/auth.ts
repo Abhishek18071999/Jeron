@@ -126,3 +126,12 @@ export function validSession(
   if (version !== "v1" || !Number.isInteger(at) || at * 1000 < now || !signature) return false;
   return same(Buffer.from(signature), Buffer.from(sign(sessionKey(config), at)));
 }
+
+// Where to go after logging in: only a path inside Jeron, never another site. Browsers
+// read "/\evil.com" as "//evil.com", so a backslash is refused too, and so are control
+// characters (a tab or newline inside "/\t/evil.com" is dropped by the URL parser).
+export function safeNext(value: string): string {
+  if (!value.startsWith("/") || value.startsWith("//")) return "/";
+  if (/[\\\u0000-\u001f\u007f]/.test(value)) return "/";
+  return value;
+}

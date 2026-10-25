@@ -94,6 +94,22 @@ export function SectorBars({ totals, limit }: { totals: Portfolio["totals"]; lim
   );
 }
 
+// The stop order to keep at the broker after the next open, and a flag when the last
+// close raised it (the GTT still has the old trigger).
+export function BrokerStop({ h }: { h: Holding }) {
+  if (!h.broker_shares || !h.stop) return null;
+  return (
+    <span className="block text-xs">
+      <span className="text-muted" title="A Zerodha GTT sell order: set the limit a little below the trigger so a fast fall still fills">
+        GTT {h.broker_shares.toLocaleString("en-IN")} sh at {inr(h.stop)}
+      </span>
+      {h.stop_raised_from && (
+        <span className="block font-semibold text-warn">Raised from {inr(h.stop_raised_from)}: change the GTT</span>
+      )}
+    </span>
+  );
+}
+
 const stopText = (h: Holding) =>
   h.stop_distance_pct === null ? "-" : `${pctText(h.stop_distance_pct, 1)}`;
 
@@ -133,6 +149,7 @@ export function HoldingCard({ h }: { h: Holding }) {
         </span>
         <ActionBadge h={h} />
       </div>
+      <BrokerStop h={h} />
       <RRuler entry={h.avg_entry} stop={h.initial_stop ?? h.stop} price={h.last_close} />
       {(h.problem || (h.action && h.action !== "hold")) && (
         <p className="mt-1 text-xs text-muted">{h.problem ?? h.reason}</p>

@@ -9,6 +9,7 @@ import {
   newSession,
   recordFailure,
   recordSuccess,
+  safeNext,
   totp,
   validSession,
   verifyPassword,
@@ -72,4 +73,21 @@ test("sessions are signed, expire, and end when the secrets change", () => {
   assert.equal(validSession(`${v}.${Number(expires) + 3600}.${sig}`, config, now), false); // forged expiry
   assert.equal(validSession(`v2.${expires}.${sig}`, config, now), false);
   assert.equal(validSession(`${v}.${expires}.`, config, now), false);
+});
+
+test("after login, only a path inside Jeron", () => {
+  assert.equal(safeNext("/journal?signal=1"), "/journal?signal=1");
+  assert.equal(safeNext("/stocks/M%26M"), "/stocks/M%26M");
+  for (const bad of [
+    "https://evil.com",
+    "//evil.com",
+    "/\\evil.com",
+    "/\\/evil.com",
+    "/\t/evil.com",
+    "/\n/evil.com",
+    "evil.com",
+    "",
+  ]) {
+    assert.equal(safeNext(bad), "/", JSON.stringify(bad));
+  }
 });

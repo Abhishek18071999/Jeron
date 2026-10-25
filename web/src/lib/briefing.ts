@@ -3,7 +3,7 @@
 // decision. Pure; the tick boxes live in components/briefing.tsx.
 import type { Dashboard, Portfolio, SignalBrief } from "./api";
 
-export type BriefKind = "sell" | "check" | "buy" | "record" | "cash";
+export type BriefKind = "sell" | "stop" | "check" | "buy" | "record" | "cash";
 
 export type BriefItem = {
   id: string;
@@ -67,7 +67,17 @@ export function briefing(d: Dashboard, p: Portfolio | null): { items: BriefItem[
         id: `half:${h.entry_id}`,
         kind: "sell",
         title: `Sell ${Math.floor(h.shares / 2).toLocaleString("en-IN")} of ${h.shares.toLocaleString("en-IN")} ${h.ticker}`,
-        detail: `Book half at the open. ${plainReason(h.reason)}`,
+        detail:
+          `Book half at the open. ${plainReason(h.reason)}.` +
+          (h.broker_shares && h.stop ? ` Then set the GTT stop to ${h.broker_shares.toLocaleString("en-IN")} sh at ${inr0(h.stop)}.` : ""),
+        href: `/journal/${h.entry_id}`,
+      });
+    } else if (h.action === "hold" && h.stop_raised_from && h.stop && h.broker_shares) {
+      items.push({
+        id: `stop:${h.entry_id}:${h.stop}`,
+        kind: "stop",
+        title: `Raise the GTT stop on ${h.ticker} to ${inr0(h.stop)}`,
+        detail: `The last close moved the stop up from ${inr0(h.stop_raised_from)}. Change the GTT to sell ${h.broker_shares.toLocaleString("en-IN")} sh at a trigger of ${inr0(h.stop)}.`,
         href: `/journal/${h.entry_id}`,
       });
     }

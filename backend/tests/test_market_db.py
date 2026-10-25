@@ -141,6 +141,9 @@ def test_portfolio(empty_session):
     assert Decimal(h["open_risk"]) == 0
     assert Decimal(h["stop_distance_pct"]) == Decimal("3.73")  # 1.002**19 above the entry
     assert Decimal(h["pnl"]) > 0
+    # The broker's stop after selling half: 50 shares at breakeven.
+    assert h["broker_shares"] == 50 and h["stop_raised_from"] is None
+    assert by["DOWN"]["broker_shares"] is None
     assert by["DOWN"]["problem"] == "no stop set: add one in the journal"
     assert by["DOWN"]["action"] is None and by["DOWN"]["open_risk"] is None
     t = p["totals"]

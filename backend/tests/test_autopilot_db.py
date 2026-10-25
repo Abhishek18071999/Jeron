@@ -2,7 +2,8 @@
 announcements from stored files, news, backtests, paper), the Setup page, uploads, and
 news on the stock page with or without the news brain."""
 
-from datetime import date, datetime, timedelta
+import os
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,8 +16,9 @@ from app.data import store
 from app.data.news import Announcement
 from app.data.pipeline import ANNOUNCEMENTS_SOURCE
 from app.db import get_engine
+from app.exits.job import backup_note
 from app.main import app
-from app.models import BacktestRun, ScanRun
+from app.models import BacktestRun, JournalEntry, ScanRun
 from app.scan.score import SCORE_VERSION
 from app.signals.build import IST
 from tests.conftest import requires_db
@@ -152,3 +154,36 @@ def test_setup_page_uploads_and_news(session):
     assert "without good or bad labels" in news["note"]
     latest = client.get("/news/latest").json()
     assert [i["subject"] for i in latest["items"]] == ["Bagging/Receiving of orders/contracts"]
+
+
+def test_setup_page_shows_backups(session, tmp_path, monkeypatch):
+    folder = tmp_path / "backups"
+    folder.mkdir()
+    monkeypatch.setenv("JERON_BACKUPS_MOUNT", str(folder))
+    monkeypatch.setenv("JERON_BACKUP_DIR", "D:/Google Drive/jeron-backups")
+    get_settings.cache_clear()
+    client = TestClient(app)
+    steps = {s["key"]: s for s in client.get("/setup").json()["steps"]}
+    assert steps["backups"]["state"] == "waiting"
+    # The pre-open check says "no backup yet" only once the journal has something to lose.
+    assert backup_note(session, get_settings()) is None
+    session.add(JournalEntry(ticker="AAA", decision="taken"))
+    session.commit()
+    assert "No backup has been written" in (backup_note(session, get_settings()) or "")
+    (folder / "jeron-2026-10-25.dump").write_bytes(b"x")
+    now = datetime.now(UTC)
+    (folder / "restore-check.txt").write_text(
+        f"ok\tjeron-2026-10-25.dump\t{now:%Y-%m-%dT%H:%M:%S%z}\njournal entries 3\n"
+    )
+    steps = {s["key"]: s for s in client.get("/setup").json()["steps"]}
+    assert steps["backups"]["state"] == "done"
+    assert "Restore test passed" in steps["backups"]["detail"]
+    old = (now - timedelta(days=4)).timestamp()
+    os.utime(folder / "jeron-2026-10-25.dump", (old, old))
+    steps = {s["key"]: s for s in client.get("/setup").json()["steps"]}
+    assert steps["backups"]["state"] == "you" and "4 days old" in steps["backups"]["todo"][0]
+
+    # Not mounted (a backend run outside Docker Compose): no step.
+    monkeypatch.setenv("JERON_BACKUPS_MOUNT", "")
+    get_settings.cache_clear()
+    assert "backups" not in {s["key"] for s in client.get("/setup").json()["steps"]}

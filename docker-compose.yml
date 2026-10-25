@@ -42,6 +42,10 @@ x-backend-env: &backend-env
   JERON_NEWS_MONTHLY_BUDGET_USD: ${JERON_NEWS_MONTHLY_BUDGET_USD:-20}
   JERON_SCHEDULE_PREOPEN: ${JERON_SCHEDULE_PREOPEN:-08:30}
   JERON_SCHEDULE_DAILY: ${JERON_SCHEDULE_DAILY:-19:00}
+  # The backup folder, read only, so Setup and the pre-open check can say when the last
+  # backup was written and whether it restores (app/backups.py).
+  JERON_BACKUPS_MOUNT: /backups
+  JERON_BACKUP_DIR: ${JERON_BACKUP_DIR:-./backups}
   JERON_SCHEDULE_DAILY_RETRY: ${JERON_SCHEDULE_DAILY_RETRY:-21:30}
 
 services:
@@ -73,6 +77,7 @@ services:
       # Drop NSE CSVs (results, deals, board meetings) or a tradebook here, or upload
       # them on the Setup page: the scheduler imports them (app/autopilot.py).
       - ./imports:/imports
+      - ${JERON_BACKUP_DIR:-./backups}:/backups:ro
     depends_on:
       db:
         condition: service_healthy
@@ -95,6 +100,7 @@ services:
     volumes:
       - marketdata:/data
       - ./imports:/imports
+      - ${JERON_BACKUP_DIR:-./backups}:/backups:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -116,7 +122,8 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
 
-  # A database backup every night after 02:00 IST into ./backups (backup/backup.sh).
+  # A database backup every night after 02:00 IST into ./backups (backup/backup.sh), and
+  # once a week a test restore of the newest into a scratch database.
   # Point JERON_BACKUP_DIR at a synced folder (Google Drive, iCloud...) to keep a copy
   # off this machine.
   backup:

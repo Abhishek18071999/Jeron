@@ -9,6 +9,7 @@ import type { BriefItem, BriefKind } from "@/lib/briefing";
 
 const kindTone: Record<BriefKind, string> = {
   sell: "text-bad",
+  stop: "text-warn",
   check: "text-warn",
   buy: "text-accent",
   record: "text-fg",
