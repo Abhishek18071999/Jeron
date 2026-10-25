@@ -47,6 +47,11 @@ class HoldingOut(BaseModel):
     problem: str | None
     events: list[str]
     notes: list[str]
+    # The broker's stop order (GTT sell) after the next open: shares at `stop`; None
+    # when the plan sells everything or there is no plan.
+    broker_shares: int | None = None
+    # The stop before the last close, when that close raised it: change the GTT.
+    stop_raised_from: Decimal | None = None
 
 
 class ExemptionOut(BaseModel):
@@ -167,6 +172,8 @@ def _holding(h: Holding, as_of: date) -> HoldingOut:
         problem=h.problem,
         events=h.events,
         notes=h.notes,
+        broker_shares=h.broker_shares,
+        stop_raised_from=h.stop_raised_from,
     )
 
 

@@ -255,6 +255,29 @@ def build_preopen(session: Session, day: date, calendar: TradingCalendar | None 
     return PreOpen(day, data_as_of, expected, checks, paper[0], paper[1])
 
 
+def broker_stop(c: PositionCheck) -> tuple[int, float] | None:
+    """The stop order to keep at the broker (a Zerodha GTT sell) after the next open:
+    shares and trigger. A position the plan sells in full needs none; after booking half
+    at T1 (the engine sells the lower half), the rest at the plan's stop."""
+    if c.plan is None or c.plan.action == Action.SELL_ALL:
+        return None
+    shares = c.shares - c.shares // 2 if c.plan.action == Action.SELL_HALF else c.shares
+    return (shares, c.plan.stop) if shares > 0 else None
+
+
+def _stop_line(c: PositionCheck) -> str | None:
+    order = broker_stop(c)
+    if order is None or c.plan is None:
+        return None
+    shares, trigger = order
+    line = f"- {c.ticker}: sell {shares} sh, trigger {inr(round(trigger, 2))}"
+    if c.plan.stop_raised and c.plan.stop_before is not None:
+        line += f" (CHANGED: raised from {inr(round(c.plan.stop_before, 2))} at the last close)"
+    elif c.plan.action == Action.SELL_HALF:
+        line += " (after selling half)"
+    return line
+
+
 def backup_note(session: Session, settings: Settings) -> str | None:
     """What is wrong with the backups (app/backups.py), if anything. "No backup yet" is
     only said once the journal has something to lose."""
@@ -312,6 +335,14 @@ def preopen_message(
             group = [c for c in p.positions if c.action == action]
             if group:
                 lines += ["", HEADINGS[action], *(_line(c) for c in group)]
+        stops = [line for c in p.positions if (line := _stop_line(c))]
+        if stops:
+            lines += [
+                "",
+                "STOPS AT THE BROKER (GTT sell; set the limit a little below the trigger "
+                "so a fast fall still fills)",
+                *stops,
+            ]
         problems = [c for c in p.positions if c.plan is None]
         if problems:
             lines += ["", "CHECK BY HAND"]

@@ -16,8 +16,8 @@ from app.data import store
 from app.data.news import Announcement
 from app.data.pipeline import ANNOUNCEMENTS_SOURCE
 from app.db import get_engine
-from app.main import app
 from app.exits.job import backup_note
+from app.main import app
 from app.models import BacktestRun, JournalEntry, ScanRun
 from app.scan.score import SCORE_VERSION
 from app.signals.build import IST

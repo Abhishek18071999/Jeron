@@ -61,6 +61,13 @@ class ExitPlan:
     # The day the rules said to exit (stop hit, trail, time stop), if any.
     exit_day: date | None = None
     notes: list[str] = field(default_factory=list)
+    # The stop before the last session's bar: below `stop` when that close moved it up
+    # (breakeven at +1R or T1), so the broker's stop order needs changing too.
+    stop_before: float | None = None
+
+    @property
+    def stop_raised(self) -> bool:
+        return self.stop_before is not None and round(self.stop, 2) > round(self.stop_before, 2)
 
 
 def _rs(price: float) -> str:
@@ -93,7 +100,10 @@ def exit_plan(
     sessions = 0
     exit_day: date | None = None
     reason = ""
+    before = stop
     for i, b in enumerate(bars):
+        if i == len(bars) - 1:
+            before = current
         hit = None
         if i > 0 and b.open <= current:
             hit = b.open
@@ -173,4 +183,5 @@ def exit_plan(
         reason=reason,
         exit_day=exit_day,
         notes=notes,
+        stop_before=before,
     )

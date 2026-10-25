@@ -85,7 +85,8 @@ def _backup_step(b: BackupStatus) -> Step:
         )
     at = b.newest_at.astimezone(IST)
     detail = (
-        f"{b.count} nightly backups ({b.size_bytes / 2**20:,.1f} MB), newest {b.newest} "
+        f"{b.count} nightly backup{'' if b.count == 1 else 's'} "
+        f"({b.size_bytes / 2**20:,.1f} MB), newest {b.newest} "
         f"written {at:%a %-d %b %H:%M} IST."
     )
     if b.check is not None and b.check.ok and b.check.at is not None:

@@ -812,6 +812,10 @@ export type Holding = {
   problem: string | null;
   events: string[];
   notes: string[];
+  // The broker's stop order (GTT sell) after the next open: shares at `stop`.
+  broker_shares: number | null;
+  // The stop before the last close, when that close raised it: change the GTT.
+  stop_raised_from: string | null;
 };
 
 // The real account's guardrails, as the trade plan applies them (backend app/plan/calc.py).

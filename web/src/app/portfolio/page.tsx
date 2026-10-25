@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ActionBadge, HeatMeter, HoldingCard, SectorBars } from "@/components/portfolio";
+import { ActionBadge, BrokerStop, HeatMeter, HoldingCard, SectorBars } from "@/components/portfolio";
 import {
   Card,
   EmptyState,
@@ -177,6 +177,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
                       <Td label="To stop" num title={h.stop ? `Stop ${inr(h.stop)}` : "No stop"}>
                         {h.stop_distance_pct === null ? "-" : pctText(h.stop_distance_pct, 1)}
                         <span className="block text-xs text-muted">{h.stop ? inr(h.stop) : "no stop"}</span>
+                        <BrokerStop h={h} />
                       </Td>
                       <Td label="Held"
                         num

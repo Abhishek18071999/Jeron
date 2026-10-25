@@ -17,7 +17,7 @@ from app.config import Settings
 from app.data import store
 from app.data.nse_lists import NIFTY_500
 from app.enums import Exchange
-from app.exits.job import PositionCheck, PreOpen, build_preopen, check_day
+from app.exits.job import PositionCheck, PreOpen, broker_stop, build_preopen, check_day
 from app.journal.calc import Fill
 from app.journal.service import EntryView, entry_views
 from app.models import Instrument, JournalEntry, JournalFill, SignalRecord
@@ -60,12 +60,15 @@ def holding(check: PositionCheck, view: EntryView, sector: str | None) -> Holdin
         pnl = pos.realised_pnl + pos.open_pnl
     avg_entry, last_close, stop = pos.avg_entry or Decimal(0), view.last_close, view.stop
     initial_stop, sessions, action, reason, notes = view.stop, None, None, None, []
+    order, raised_from = broker_stop(check), None
     if plan is not None and check.last_close is not None:
         # The plan's prices are on today's basis (adjusted for any split since the buy).
         avg_entry, last_close = _price(plan.entry), _price(check.last_close)
         stop, initial_stop = _price(plan.stop), _price(plan.initial_stop)
         sessions, action, reason = plan.sessions, plan.action.value, plan.reason
         notes = list(plan.notes)
+        if plan.stop_raised and plan.stop_before is not None:
+            raised_from = _price(plan.stop_before)
     return Holding(
         entry_id=view.entry.id,
         ticker=view.entry.ticker,
@@ -87,6 +90,8 @@ def holding(check: PositionCheck, view: EntryView, sector: str | None) -> Holdin
         events=list(check.events),
         notes=notes,
         tier=check.tier.value,
+        broker_shares=order[0] if order else None,
+        stop_raised_from=raised_from,
     )
 
 
