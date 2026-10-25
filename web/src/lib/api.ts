@@ -795,12 +795,32 @@ export type Holding = {
   notes: string[];
 };
 
+// The real account's guardrails, as the trade plan applies them (backend app/plan/calc.py).
+export type AccountGuardrails = {
+  as_of: string;
+  equity: string;
+  peak: string;
+  drawdown_pct: string;
+  drawdown_halve_pct: string;
+  drawdown_pause_pct: string;
+  brake: "normal" | "halved" | "paused";
+  realised_today: string;
+  realised_week: string;
+  daily_loss_limit: string | null; // rupees; null when off
+  weekly_loss_limit: string | null;
+  entries_week: number;
+  max_entries_week: number | null;
+  limits_block: boolean;
+  open_by_tier: Record<string, number>;
+};
+
 export type Portfolio = {
   day: string;
   data_as_of: string | null;
   expected: string;
   stale: boolean;
   holdings: Holding[];
+  account: AccountGuardrails | null;
   totals: {
     positions: number;
     value: string;

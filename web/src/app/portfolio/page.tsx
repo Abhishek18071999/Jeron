@@ -20,7 +20,7 @@ import {
   signTone,
   RunCommand,
 } from "@/components/ui";
-import { type Portfolio, getJson } from "@/lib/api";
+import { type AccountGuardrails, type Portfolio, getJson } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +82,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
         <Notice key={n}>{n}</Notice>
       ))}
       {t.exemption && <Notice>{t.exemption.line}</Notice>}
+      {p.account && <Guardrails a={p.account} />}
 
       {t.positions === 0 ? (
         <Card>
@@ -226,5 +227,70 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
         </>
       )}
     </Page>
+  );
+}
+
+// The limits a new trade plan is checked against (spec section 5 and the Settings page).
+function Guardrails({ a }: { a: AccountGuardrails }) {
+  const loss = (realised: string, limit: string | null) => {
+    const lost = Math.max(0, -Number(realised));
+    return {
+      value: <span className={signTone(realised)}>{inrSigned(realised)}</span>,
+      sub: limit ? `limit ${inr(limit, 0)} lost` : "no limit set",
+      tone: (limit && lost >= Number(limit) ? "bad" : "neutral") as "bad" | "neutral",
+    };
+  };
+  const today = loss(a.realised_today, a.daily_loss_limit);
+  const week = loss(a.realised_week, a.weekly_loss_limit);
+  const capped = a.max_entries_week !== null && a.entries_week >= a.max_entries_week;
+  return (
+    <>
+      {a.brake === "paused" && (
+        <Notice tone="bad">
+          The account is {pctText(a.drawdown_pct, 1)} below its peak of {inr(a.peak, 0)}: new trade plans are
+          blocked until it recovers above {pctText(a.drawdown_pause_pct, 0)}. Review the recent trades in the
+          journal before the next one.
+        </Notice>
+      )}
+      {a.brake === "halved" && (
+        <Notice tone="warn">
+          The account is {pctText(a.drawdown_pct, 1)} below its peak: new trade plans risk half the usual amount
+          until it is back within {pctText(a.drawdown_halve_pct, 0)}.
+        </Notice>
+      )}
+      <Card title="Guardrails">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Stat
+            label="Below the peak"
+            value={pctText(a.drawdown_pct, 1)}
+            tone={a.brake === "paused" ? "bad" : a.brake === "halved" ? "warn" : "neutral"}
+            sub={`equity ${inr(a.equity, 0)}, peak ${inr(a.peak, 0)}`}
+            help={`At ${pctText(a.drawdown_halve_pct, 0)} below the peak the risk per trade is halved; at ${pctText(a.drawdown_pause_pct, 0)} new entries stop (spec section 5).`}
+            how="Equity is your capital setting plus every realised gain or loss in the journal plus the open positions at the last close. The peak is the highest of that on each sale day and today. Open profit on past days isn't recorded, so a broker's drawdown can be higher."
+          />
+          <Stat
+            label="Realised today"
+            value={today.value}
+            tone={today.tone}
+            sub={today.sub}
+            help="Gains and losses of today's sales in the journal, after charges. At the daily loss limit a new plan is blocked (or warned, per Settings)."
+          />
+          <Stat
+            label="Realised this week"
+            value={week.value}
+            tone={week.tone}
+            sub={week.sub}
+            help="Sales from Monday on, after charges, against the weekly loss limit."
+          />
+          <Stat
+            label="New positions this week"
+            value={a.max_entries_week === null ? String(a.entries_week) : `${a.entries_week} of ${a.max_entries_week}`}
+            tone={capped ? "warn" : "neutral"}
+            sub={a.limits_block ? "limits block a plan" : "limits only warn"}
+            help="Journal positions first bought from Monday on, against the weekly cap set on Settings (against overtrading)."
+          />
+        </div>
+      </Card>
+    </>
   );
 }

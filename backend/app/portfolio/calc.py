@@ -34,7 +34,18 @@ Definitions (the engine's, `app.backtest.engine`):
   An estimate for planning, not a tax computation: other accounts and income are not
   known to Jeron.
 
-Capital is `JERON_CAPITAL`: the journal does not know the account's cash.
+- the account's guardrails (docs/plans/platform-audit-v1.md, slice 3): equity =
+  capital + every realised sale's gain (lots first in, first out, after charges) + the
+  open positions marked at the last close. The peak is the highest of capital plus the
+  running realised total on each sale day, and today's equity. Open profit on past days
+  is not known (there is no daily mark of the journal), so a peak reached only on paper
+  and given back before selling is missed: the drawdown can read lower than a broker's.
+  Spec section 5: at 10% below the peak risk per trade is halved, at 15% new entries
+  stop. Realised today / this week (Monday to `as_of`) and first buys this week feed
+  the daily and weekly loss limits and the weekly entries cap.
+
+Capital is `JERON_CAPITAL`: the journal does not know the account's cash, deposits or
+withdrawals.
 """
 
 from collections.abc import Iterable, Sequence
@@ -88,6 +99,7 @@ class Holding:
     problem: str | None = None
     events: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    tier: str | None = None  # the signal's tier; swing rules for a trade without one
 
     @property
     def value(self) -> Decimal | None:
@@ -400,4 +412,65 @@ def totals(
         cash_action=idle_cash_line(idle, idle_in_index),
         tax_notes=notes,
         exemption=exemption,
+    )
+
+
+def week_start(day: date) -> date:
+    """The Monday of `day`'s week."""
+    return day - timedelta(days=day.weekday())
+
+
+@dataclass(frozen=True)
+class AccountState:
+    """The real account from the journal, for the trade plan's guardrails."""
+
+    capital: Decimal
+    equity: Decimal
+    peak: Decimal
+    drawdown_pct: Decimal  # below the peak; 0 at the peak
+    realised_today: Decimal  # net gain of sales on `as_of`, negative for a loss
+    realised_week: Decimal  # Monday to `as_of`
+    entries_week: int  # journal positions first bought Monday to `as_of`
+    open_by_tier: dict[str, int]
+    as_of: date
+
+
+def account_state(
+    capital: Decimal,
+    sales: Iterable[Sale],
+    first_buys: Iterable[date],
+    holdings: Sequence[Holding],
+    as_of: date,
+) -> AccountState:
+    """Equity, peak and drawdown, and this day's and week's results (module notes)."""
+    by_day: dict[date, Decimal] = {}
+    for sale in sales:
+        if sale.sell_date <= as_of:
+            by_day[sale.sell_date] = by_day.get(sale.sell_date, ZERO) + sale.gain
+    running = peak_realised = ZERO
+    for day in sorted(by_day):
+        running += by_day[day]
+        peak_realised = max(peak_realised, running)
+    open_pnl = sum(
+        ((h.last_close - h.avg_entry) * h.shares for h in holdings if h.last_close is not None),
+        ZERO,
+    )
+    equity = capital + running + open_pnl
+    peak = max(capital + peak_realised, equity)
+    drawdown = (1 - equity / peak) * 100 if peak > 0 else ZERO
+    monday = week_start(as_of)
+    tiers: dict[str, int] = {}
+    for h in holdings:
+        tier = h.tier or "swing"
+        tiers[tier] = tiers.get(tier, 0) + 1
+    return AccountState(
+        capital=capital,
+        equity=_q(equity),
+        peak=_q(peak),
+        drawdown_pct=_q(max(drawdown, ZERO)),
+        realised_today=_q(by_day.get(as_of, ZERO)),
+        realised_week=_q(sum((g for d, g in by_day.items() if d >= monday), ZERO)),
+        entries_week=sum(1 for d in first_buys if monday <= d <= as_of),
+        open_by_tier=tiers,
+        as_of=as_of,
     )

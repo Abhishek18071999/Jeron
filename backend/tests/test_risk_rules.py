@@ -23,9 +23,25 @@
 | no entry from 3 sessions before results until the day after | test_results_blackout |
 | pre-open job (08:30 IST) | M7 (spec milestone list: "Exit engine: pre-open checks") |
 
+The same rules on my real account, in the trade plan before a real buy
+(docs/plans/platform-audit-v1.md, slice 3), and the brief's daily/weekly limits:
+
+| Rule | Test |
+|---|---|
+| real account: drawdown 10% -> halve risk | test_real_drawdown_10_pct_halves_risk |
+| real account: drawdown 15% -> no new entries | test_real_drawdown_15_pct_blocks_the_plan |
+| real account: max open positions per tier | test_real_max_open_positions_per_tier |
+| daily and weekly realised loss limits | test_real_daily_and_weekly_loss_limits |
+| at most N new positions a week (overtrading) | test_real_weekly_entries_cap |
+| limits warn instead when JERON_RISK_LIMITS_BLOCK is off | test_real_limits_can_warn_instead |
+| equity, peak and drawdown from the journal | test_account_state_from_the_journal |
+
 Scenarios use the golden-test conventions: signal close 100, ATR 2, stop 96, entry
 zone up to 101.
 """
+
+from datetime import date
+from decimal import Decimal
 
 import numpy as np
 import pytest
@@ -37,6 +53,8 @@ from app.backtest.market import Market
 from app.backtest.strategies import Tier
 from app.config import Settings
 from app.paper.job import MAX_CORRELATED, order_notes, portfolio_rules
+from app.plan.calc import Limits, PlanInputs, build_plan
+from app.portfolio.calc import AccountState, Holding, Sale, account_state
 from app.signals.schema import Signal
 from tests.backtest_helpers import (
     NO_COSTS,
@@ -280,3 +298,165 @@ def test_positional_review_at_60():
 
 def test_costs_in_pnl_and_r():
     golden.test_costs_and_slippage_on_a_losing_trade()
+
+
+# --- The real account, in the trade plan ------------------------------------------------
+
+REAL = dict(
+    ticker="AAA",
+    tier=Tier.SWING,
+    entry=Decimal("101"),
+    stop=Decimal("96"),
+    capital=Decimal("1000000"),
+    risk_pct=1.0,
+    risk_multiplier=1.0,
+    mood="normal",
+    atr=2.0,
+    avg_volume20=1e9,
+    median_turnover=2e9,
+    sector="IT",
+    open_risk=Decimal(0),
+    sector_value=Decimal(0),
+    sector_cap_pct=Decimal(30),
+    results_blackout=False,
+    results_line="No results meeting announced in the next 30 days.",
+)
+TODAY = date(2026, 10, 21)  # a Wednesday
+
+
+def _account(drawdown="0", today="0", week="0", entries=0, swing=0) -> AccountState:
+    return AccountState(
+        capital=Decimal("1000000"),
+        equity=Decimal("1000000"),
+        peak=Decimal("1000000"),
+        drawdown_pct=Decimal(drawdown),
+        realised_today=Decimal(today),
+        realised_week=Decimal(week),
+        entries_week=entries,
+        open_by_tier={"swing": swing} if swing else {},
+        as_of=TODAY,
+    )
+
+
+def _plan(account: AccountState, limits: Limits | None = None, **changes):
+    inputs = PlanInputs(**{**REAL, **changes}, account=account, limits=limits or Limits(5))
+    return build_plan(inputs)
+
+
+def _check(plan, key):
+    (check,) = [c for c in plan.checks if c.key == key]
+    return check
+
+
+def test_real_drawdown_10_pct_halves_risk():
+    # 0.5% risk: 5,000 / 5 = 1,000 shares (the 20% cap is 1,980, so risk binds).
+    assert _plan(_account("9.99"), risk_pct=0.5).shares == 1000
+    braked = _plan(_account("10"), risk_pct=0.5)
+    assert braked.shares == 500
+    assert _check(braked, "drawdown").status == "warn"
+    assert braked.ok
+    # With the mood's halving too: a quarter.
+    assert _plan(_account("12"), risk_pct=0.5, risk_multiplier=0.5).shares == 250
+
+
+def test_real_drawdown_15_pct_blocks_the_plan():
+    plan = _plan(_account("15"))
+    assert _check(plan, "drawdown").status == "fail"
+    assert not plan.ok
+    assert _plan(_account("14.99")).ok
+
+
+def test_real_max_open_positions_per_tier():
+    assert _plan(_account(swing=4)).ok
+    full = _plan(_account(swing=5))
+    assert _check(full, "positions").status == "fail" and not full.ok
+    # Five swing trades open don't stop a positional one.
+    assert _plan(_account(swing=5), Limits(8), tier=Tier.POSITIONAL, stop=Decimal("92")).ok
+
+
+def test_real_daily_and_weekly_loss_limits():
+    # 2% of 10 lakh = 20,000 a day; 4% = 40,000 a week.
+    assert _plan(_account(today="-19999")).ok
+    day = _plan(_account(today="-20000", week="-20000"))
+    assert _check(day, "daily_loss").status == "fail" and not day.ok
+    week = _plan(_account(today="0", week="-40000"))
+    assert _check(week, "weekly_loss").status == "fail" and not week.ok
+    assert _plan(_account(today="5000", week="-39999")).ok
+    off = Limits(5, daily_loss_pct=0, weekly_loss_pct=0)
+    assert _plan(_account(today="-90000", week="-90000"), off).ok
+
+
+def test_real_weekly_entries_cap():
+    assert _plan(_account(entries=4)).ok
+    capped = _plan(_account(entries=5))
+    assert _check(capped, "entries_week").status == "fail" and not capped.ok
+    assert _plan(_account(entries=50), Limits(5, max_entries_week=0)).ok
+
+
+def test_real_limits_can_warn_instead():
+    warn = Limits(5, block=False)
+    plan = _plan(_account(today="-50000", week="-50000", entries=9), warn)
+    assert plan.ok
+    assert {_check(plan, k).status for k in ("daily_loss", "weekly_loss", "entries_week")} == {
+        "warn"
+    }
+    # The spec's rules still block.
+    assert not _plan(_account("15"), warn).ok
+    assert not _plan(_account(swing=5), warn).ok
+
+
+def _sale(day: date, gain: str) -> Sale:
+    return Sale("AAA", day, 10, Decimal(gain), 30)
+
+
+def _held(close: str, entry: str = "100", shares: int = 100, tier: str = "swing") -> Holding:
+    return Holding(
+        entry_id=1,
+        ticker="BBB",
+        strategy_key=None,
+        sector=None,
+        shares=shares,
+        avg_entry=Decimal(entry),
+        last_close=Decimal(close),
+        last_close_date=TODAY,
+        stop=Decimal("90"),
+        initial_stop=Decimal("90"),
+        pnl=None,
+        r_multiple=None,
+        first_date=date(2026, 9, 1),
+        sessions_held=10,
+        action="hold",
+        reason="stop",
+        tier=tier,
+    )
+
+
+def test_account_state_from_the_journal():
+    capital = Decimal("1000000")
+    sales = [
+        _sale(date(2026, 9, 1), "60000"),  # running 60,000: the peak is 10,60,000
+        _sale(date(2026, 10, 5), "-30000"),  # 30,000
+        _sale(date(2026, 10, 19), "-50000"),  # Monday: -20,000
+        _sale(date(2026, 10, 21), "-25000"),  # today: -45,000
+        _sale(date(2026, 10, 22), "-99999"),  # after `as_of`: not counted
+    ]
+    # Open: 100 shares bought at 100, last close 80: -2,000.
+    a = account_state(capital, sales, [date(2026, 10, 19), date(2026, 10, 1)], [_held("80")], TODAY)
+    assert a.equity == Decimal("953000.00")  # 10,00,000 - 45,000 - 2,000
+    assert a.peak == Decimal("1060000.00")
+    # 1 - 9,53,000 / 10,60,000 = 10.094...%
+    assert a.drawdown_pct == Decimal("10.09")
+    assert a.realised_today == Decimal("-25000.00")
+    assert a.realised_week == Decimal("-75000.00")  # Monday and today
+    assert a.entries_week == 1
+    assert a.open_by_tier == {"swing": 1}
+    # At a new high (open profit above the realised peak) the drawdown is 0.
+    up = account_state(capital, sales[:1], [], [_held("200")], TODAY)
+    assert (up.equity, up.peak, up.drawdown_pct) == (
+        Decimal("1070000.00"),
+        Decimal("1070000.00"),
+        Decimal("0.00"),
+    )
+    # No trades yet: the capital, no drawdown.
+    empty = account_state(capital, [], [], [], TODAY)
+    assert (empty.equity, empty.drawdown_pct, empty.entries_week) == (capital, Decimal("0.00"), 0)

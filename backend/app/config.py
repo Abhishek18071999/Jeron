@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     max_positions_positional: int = Field(default=8, ge=1)
     max_positions_invest: int = Field(default=15, ge=1)
     sector_cap_pct: float = Field(default=30.0, gt=0, le=100)
+    # The real account's guardrails in the trade plan (app/plan/calc.py). 0 turns one off.
+    daily_loss_limit_pct: float = Field(default=2.0, ge=0, le=100)
+    weekly_loss_limit_pct: float = Field(default=4.0, ge=0, le=100)
+    max_entries_week: int = Field(default=5, ge=0)
+    # True: a plan past one of the three limits above can't be saved; False: a warning.
+    risk_limits_block: bool = True
     # Where idle cash goes: off = a liquid fund (what the backtests credit), on = a Nifty
     # index fund (the backtests' cash-sweep line). An allocation choice, not an edge.
     idle_cash_in_index: bool = False
