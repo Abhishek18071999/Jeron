@@ -188,7 +188,14 @@ export default async function Journal({
                     <td className="pr-3 text-right">
                       {s.win_rate === null ? "-" : `${(Number(s.win_rate) * 100).toFixed(0)}%`}
                     </td>
-                    <td className="pr-3 text-right">{s.avg_r === null ? "-" : rMultiple(s.avg_r)}</td>
+                    <td className="pr-3 text-right">
+                      {s.avg_r === null ? "-" : rMultiple(s.avg_r)}
+                      {s.avg_r_low != null && s.avg_r_high != null && (
+                        <span className="block text-xs text-muted" title="95% range of the average R">
+                          {rMultiple(s.avg_r_low)} to {rMultiple(s.avg_r_high)}
+                        </span>
+                      )}
+                    </td>
                     <td className="pr-3 text-right">{fmt(s.profit_factor)}</td>
                     <td className={`pr-3 text-right ${signClass(s.net_pnl)}`}>{inr(s.net_pnl, 0)}</td>
                     <td className="text-right">
@@ -202,8 +209,17 @@ export default async function Journal({
           </div>
         )}
         <p className="mt-2 text-xs text-muted">
-          Expectancy is the average R of closed trades.
+          Expectancy is the average R of closed trades; below it, the range the true average could be in (95%,
+          treating trades as independent). A range that spans 0R means the journal can&apos;t yet tell an edge from
+          luck.
         </p>
+        {j.stats
+          .filter((s) => s.sample_note)
+          .map((s) => (
+            <p key={s.strategy_key ?? "own"} className="mt-1 text-xs text-warn">
+              {s.strategy_key ?? "Own ideas"}: {s.sample_note}
+            </p>
+          ))}
       </Card>
 
       {weekly.ok && (

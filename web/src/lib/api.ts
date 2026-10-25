@@ -551,6 +551,10 @@ export type JournalStats = {
   deviated: number;
   followed_avg_r: string | null;
   deviated_avg_r: string | null;
+  // The 95% range of avg_r, and a note when the sample is too small to judge.
+  avg_r_low?: string | null;
+  avg_r_high?: string | null;
+  sample_note?: string | null;
 };
 
 export type JournalView = {
