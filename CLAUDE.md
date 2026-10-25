@@ -86,6 +86,15 @@ are part of done, never commit secrets.
     Long-term is the invest tier (`Tier.INVEST`, wider target and trail in `TIERS`) with
     `quality-trend-v1`, the first strategy on `Market.fund_score` (point-in-time fund-v1)
     and the first with its own exit rule. Intraday is "not running": no intraday data.
+  - `app/explain/` explain a stock (decision 0016, `docs/plans/explain-v1.md`):
+    `facts.py` (every line a fact with source, date and kind; the brief: why in the scan,
+    for, against, what cancels, level scenarios, checklist, unknowns, the setup check;
+    pure, no LLM), `narrate.py` (the optional LLM wording: prompt `explain-v1`, the
+    checks that every number is in the cited facts and nothing reads as advice or a
+    forecast; pure), `writers.py` (the news provider's transport; tests use a fake) and
+    `service.py` (database; narrations stored in `explanations`, spend in `llm_usage` as
+    `explain:<model>` against the news cap). Served at `/stocks/{symbol}/explain`,
+    `/stocks/{symbol}/explain/narrate` and `/stocks/compare`.
   - `app/market/` the market mood (decision 0009): `mood.py` (breadth above the 200-day
     EMA, 52-week highs/lows, the engine's regime filter, attack/normal/defend, sector
     strength; pure) and `service.py` (database). Served at `/market/mood`.
@@ -94,9 +103,10 @@ are part of done, never commit secrets.
     `JERON_IDLE_CASH_IN_INDEX`, an index fund; tax timing notes with the rupee tax of selling
     now vs after the 12-month mark; the financial year's ₹1.25 lakh long-term exemption used,
     from journal sales matched first in, first out; `account_state`: equity, peak and
-    drawdown, realised today and this week, entries this week; pure) and `service.py`
-    (journal positions + the pre-open exit plan). Served at `/portfolio` (with `account`,
-    the Guardrails card).
+    drawdown, realised today and this week, entries this week; pure), `equity.py` (the
+    account's daily equity from the journal against the Nifty 500; its peak is the
+    guardrails' peak; pure) and `service.py` (journal positions + the pre-open exit plan).
+    Served at `/portfolio` (with `account`, the Guardrails card) and `/portfolio/equity`.
   - `app/plan/` trade plans (decision 0010): `calc.py` (the engine's `position_size` and
     `reward_risk`, spec section 4 checks, heat and sector after the buy, the 5-item
     checklist, the small-trade warning when fixed charges pass 0.1R
@@ -158,7 +168,9 @@ are part of done, never commit secrets.
   heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
   compare, data, spot check, setup), Learn (`/learn`, lessons in `src/lib/learn/`, one
   file per track, assembled in `src/lib/lessons.ts`; their Jeron numbers mirror the backend;
-  `/learn/glossary`); phones get a bottom tab bar (`src/components/nav.tsx`).
+  `/learn/glossary`); `/stocks/compare` puts up to three stocks' briefs side by side and
+  every stock page has the "Explain this stock" card (`src/app/stocks/[symbol]/brief.tsx`);
+  phones get a bottom tab bar (`src/components/nav.tsx`).
   `/setup` shows the autopilot and takes uploads (`src/app/setup/actions.ts`).
   Ctrl+K opens the command palette (`src/components/command-palette.tsx`); the trade
   plan form recalculates through the read-only `/api/plan` route handler.
@@ -187,7 +199,8 @@ Backend (from `backend/`):
 - `uv run uvicorn app.main:app --reload` (needs `JERON_DATABASE_URL`)
 
 Web (from `web/`):
-- `npm ci`, `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`
+- `npm ci`, `npm run dev`, `npm run lint`, `npm run typecheck`, `npm test` (Node's test
+  runner on `src/lib/*.test.ts`), `npm run build`
 
 Everything: `docker compose up --build` from the repo root.
 

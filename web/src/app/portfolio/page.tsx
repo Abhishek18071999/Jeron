@@ -20,7 +20,7 @@ import {
   signTone,
   RunCommand,
 } from "@/components/ui";
-import { type AccountGuardrails, type Portfolio, getJson } from "@/lib/api";
+import { type AccountGuardrails, type EquityCurve, type Portfolio, getJson } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,10 @@ export const dynamic = "force-dynamic";
 export default async function PortfolioPage({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
   const { day } = await searchParams;
   const dayParam = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `?day=${day}` : "";
-  const result = await getJson<Portfolio>(`/portfolio${dayParam}`);
+  const [result, equity] = await Promise.all([
+    getJson<Portfolio>(`/portfolio${dayParam}`),
+    getJson<EquityCurve>("/portfolio/equity"),
+  ]);
   if (!result.ok) {
     return (
       <Page>
@@ -83,6 +86,7 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
       ))}
       {t.exemption && <Notice>{t.exemption.line}</Notice>}
       {p.account && <Guardrails a={p.account} />}
+      {equity.ok && equity.data.points.length > 1 && <EquityCard c={equity.data} />}
 
       {t.positions === 0 ? (
         <Card>
@@ -285,7 +289,7 @@ function Guardrails({ a }: { a: AccountGuardrails }) {
             tone={a.brake === "paused" ? "bad" : a.brake === "halved" ? "warn" : "neutral"}
             sub={`equity ${inr(a.equity, 0)}, peak ${inr(a.peak, 0)}`}
             help={`At ${pctText(a.drawdown_halve_pct, 0)} below the peak the risk per trade is halved; at ${pctText(a.drawdown_pause_pct, 0)} new entries stop (spec section 5).`}
-            how="Equity is your capital setting plus every realised gain or loss in the journal plus the open positions at the last close. The peak is the highest of that on each sale day and today. Open profit on past days isn't recorded, so a broker's drawdown can be higher."
+            how="Equity is your capital setting plus every realised gain or loss in the journal plus the open positions at the last close. The peak is the highest equity on any session since your first buy, open positions marked at each day's close (the equity chart below)."
           />
           <Stat
             label="Realised today"
@@ -311,5 +315,57 @@ function Guardrails({ a }: { a: AccountGuardrails }) {
         </div>
       </Card>
     </>
+  );
+}
+
+function EquityCard({ c }: { c: EquityCurve }) {
+  const W = 600;
+  const H = 140;
+  const eq = c.points.map((p) => Number(p.equity));
+  const ix = c.points.map((p) => (p.index === null ? null : Number(p.index)));
+  const all = [...eq, ...ix.filter((v): v is number => v !== null)];
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const span = hi - lo || 1;
+  const x = (i: number) => ((i / (c.points.length - 1)) * W).toFixed(1);
+  const y = (v: number) => (H - ((v - lo) / span) * (H - 8) - 4).toFixed(1);
+  const path = (values: (number | null)[]) => {
+    let d = "";
+    let pen = false;
+    values.forEach((v, i) => {
+      if (v === null) {
+        pen = false;
+        return;
+      }
+      d += `${pen ? "L" : "M"}${x(i)},${y(v)} `;
+      pen = true;
+    });
+    return d.trim();
+  };
+  const first = c.points[0];
+  const last = c.points[c.points.length - 1];
+  return (
+    <Card
+      title="Account equity"
+      subtitle={`${shortDate(first.day)} to ${shortDate(last.day)} · solid: your account, dashed: the same capital in the Nifty 500`}
+    >
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat label="Your return" value={pctText(c.return_pct, 2, true)} tone={Number(c.return_pct) > 0 ? "good" : Number(c.return_pct) < 0 ? "bad" : "neutral"} />
+        <Stat label="Nifty 500 (price)" value={c.index_return_pct === null ? "n/a" : pctText(c.index_return_pct, 2, true)} />
+        <Stat label="Worst drawdown" value={pctText(c.max_drawdown_pct, 2)} sub={c.peak ? `peak ${inr(c.peak, 0)}` : undefined} />
+        <Stat label="Equity now" value={inr(last.equity, 0)} sub={`capital ${inr(c.capital, 0)}`} />
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="mt-3 h-36 w-full"
+        role="img"
+        aria-label="Account equity against the Nifty 500"
+      >
+        <path d={path(ix)} fill="none" className="stroke-muted" strokeWidth={1.2} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />
+        <path d={path(eq)} fill="none" className="stroke-accent" strokeWidth={1.8} vectorEffect="non-scaling-stroke" />
+      </svg>
+      <p className="mt-2 text-xs text-muted">{c.note}</p>
+    </Card>
   );
 }

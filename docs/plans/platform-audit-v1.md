@@ -25,10 +25,10 @@ decision).
 | 1 | Audit | done | This file. |
 | 2 | Market data foundation | done, one gap | NSE bhavcopy is the source of truth, Yahoo cross-check (0.5%), raw prices kept and adjusted on read, symbol changes, delisted stocks, point-in-time Nifty 500, NSE calendar to 2026 with a missing-year warning, `Fetcher` with pacing and retries, `DataProvider` protocol, quality report (missing days, zero volume, moves without actions, stale prices, check #9). **Gap:** when the day's bhavcopy does not arrive (NSE late or down) the daily job logs it and exits, and nothing reaches the owner; the summary silently doesn't come. US markets: out of scope (spec: NSE cash only). Live/delayed labels: everything is end-of-day and the UI says "data as of". |
 | 3 | Opportunity engine | done | Scan with versioned score, 11 versioned strategies, signals with every spec section 4 field (entry zone, stop and why, T1/T2, R:R after costs, invalidation, event risk, backtest stats, data_as_of), "no trade" when the gates fail or the market mood is defend. The score is labelled a score, never a probability. |
-| 4 | AI research assistant | partial | The LLM labels announcements only (spec section 3). There is no question-answering assistant. A grounded one is possible if it only narrates numbers Jeron computed; see "Not built". |
+| 4 | AI research assistant | done (second pass) | "Explain this stock" (decision 0016): a deterministic brief of facts with sources and dates, the setup check, compare, and an optional LLM wording that may only re-word the facts (every number checked, advice refused), within the news cap. No free-form chat (spec section 3). |
 | 5 | Backtesting lab | done, metric gaps | Daily-bar engine with golden trades, Indian costs and slippage buckets, gap and circuit handling, price-band exclusion, point-in-time universe, walk-forward, untouched 12-month holdout, logged variants, deflated Sharpe, section 6 gates, Nifty 500 and cash-sweep lines, by year and regime, tax view. **Gaps:** no Sortino, no losing streak, no longest drawdown or recovery time, no exposure, turnover or trades per year in the report. |
 | 6 | Risk engine | partial | The engine (backtest and paper) has every section 5 rule. **Gaps in the real-money trade plan** (`app/plan/calc.py`), which is what the owner uses before a real buy: the drawdown brake (spec section 5: 10% halve, 15% pause) is not applied to the real account; the max open positions per tier (a setting) is not checked; there is no daily or weekly loss limit and no cap on new entries a week (brief section 6). |
-| 7 | Portfolio | done | Holdings from the journal, open risk, heat, give-back, sector exposure, idle cash, tax notes and the LTCG exemption. Marked as journal positions, never as broker balances. Benchmark-relative real returns: not built (needs a dated equity history of the real account). |
+| 7 | Portfolio | done | Holdings from the journal, open risk, heat, give-back, sector exposure, idle cash, tax notes and the LTCG exemption. Marked as journal positions, never as broker balances. Second pass: the account's daily equity against the Nifty 500 (`/portfolio/equity`). |
 | 8 | Scanner and watchlist | done | Daily scan, ranked list by industry, heatmap, watchlist with price alerts, scan history, blocked runs say why. Custom user-defined filters: not built (low value at one user). |
 | 9 | Alerts | done, one gap | Telegram + email, one row per key so re-runs never resend, attempts and error stored (delivery log), buttons. **Gap:** no alert for a data outage (see 2). |
 | 10 | Journal and coach | partial | Taken/skipped/modified, followed vs deviated, per-strategy stats, weekly mistakes (moved stop, early exit, late entry, skipped winners). **Gap:** per-strategy stats give an average R from 3 trades with no warning and no uncertainty range. |
@@ -38,7 +38,7 @@ decision).
 | 14 | Speed and reliability | done | Scheduler with catch-up, market lock, autopilot, nightly `pg_dump`, health check. |
 | 15 | Security | partial | Web: scrypt password + TOTP, signed session cookie, lockout after 5 failures, every route guarded, browser never calls the API. Secrets only in `.env`. **Gap:** the backend API has no authentication at all. It listens on 127.0.0.1 only, but any local process, and any web page through DNS rebinding (a hostile site whose name resolves to 127.0.0.1), can read the portfolio or write journal entries, settings and imports. |
 | 16 | Code quality | done | Pure calc modules beside database services, strict mypy, ruff, decisions log. |
-| 17 | Tests | done, gaps | 556 backend tests including golden trades, risk rules, TA-Lib reference, look-ahead tests. No web tests; no API authentication tests (there is no API authentication). |
+| 17 | Tests | done, gaps | 556 backend tests including golden trades, risk rules, TA-Lib reference, look-ahead tests. No web tests; no API authentication tests (there is no API authentication). Both added on this branch (`npm test`, `test_api_security.py`). |
 | 18-20 | Order, method, done | | This plan and the PR report. |
 
 ## Ranked plan (built on this branch, in this order)
@@ -81,6 +81,21 @@ run in the local database). Docker Compose was not run here; CI runs it.
 No migration: the new settings live in `setting_changes` like the others, and the new
 report numbers are inside each run's stored summary.
 
+## Second pass (2026-10-25, "do whatever is left")
+
+| Slice | Built | Tests (all run here) |
+|---|---|---|
+| 6. Explain a stock | `app/explain/` (facts, brief, setup check, LLM wording and its checks, writers), `explanations` table, 3 routes, the stock page card | `tests/test_explain.py` (16), `tests/test_explain_db.py` (4, fake LLM) |
+| 7. Compare stocks | `/stocks/compare` (API and page) | in `test_explain_db.py` |
+| 8. Account equity | `app/portfolio/equity.py`, `/portfolio/equity`, Portfolio chart; the guardrails' peak is the curve's | `tests/test_portfolio_equity.py` (3, by hand), `test_market_db.py` |
+| 9. Web tests | `npm test` (Node's runner, no new dependency), in CI | `web/src/lib/auth.test.ts` (5) |
+
+One migration: `explanations` (autogenerated, reviewed). The real LLM providers were
+not called (no key here); each writer is tested against a fake of its provider's reply.
+The stock page card, compare page and equity chart were opened in Chromium against a
+local backend with made-up data (desktop and phone width, no console errors, no
+sideways scroll).
+
 ## Not built, and why
 
 - **Live order placement / broker execution.** Spec section 12: "No automatic order
@@ -88,9 +103,8 @@ report numbers are inside each run's stored summary.
   approval and a chosen broker (remaining-work A5, C5).
 - **A free-form AI chat that answers trading questions.** Spec section 3 and
   remaining-work E: the LLM never produces prices, targets or stops, and an LLM choosing
-  trades was decided against. A narrow "explain this stock" that only re-words Jeron's
-  own computed facts, with sources, is compatible; it is the best next slice once the
-  owner confirms it (it spends LLM budget).
+  trades was decided against. The narrow "explain this stock" was built instead (second
+  pass, decision 0016).
 - **A manual paper order book (market/limit orders, partial fills, cancellations).**
   Paper trading by replay (decision 0006) already tests the rules without the owner's
   discretion, which is what the stage-2 gate needs. A sandbox order book is a separate

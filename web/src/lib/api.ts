@@ -1258,3 +1258,69 @@ export type NewsView = {
   note: string | null;
   score: number | null;
 };
+
+// --- Explain a stock (decision 0016) ------------------------------------------------
+
+export type BriefFact = {
+  id: string;
+  topic: string;
+  label: string;
+  value: string;
+  kind: "data" | "calculated" | "model" | "rule";
+  source: string;
+  as_of: string | null;
+  stance: "for" | "against" | "neutral";
+};
+
+export type BriefCheck = { label: string; status: "pass" | "fail" | "unknown"; detail: string; facts: string[] };
+
+export type StockBrief = {
+  symbol: string;
+  name: string | null;
+  as_of: string | null;
+  stale: boolean;
+  facts: BriefFact[];
+  why_in_scan: string[];
+  supporting: string[];
+  against: string[];
+  cancels: string[];
+  scenarios: Partial<Record<"bullish" | "neutral" | "bearish", string>>;
+  checklist: BriefCheck[];
+  unknowns: string[];
+  setup: { state: string; still_valid: boolean; reasons: string[]; facts: string[] } | null;
+};
+
+export type Narration = {
+  id: number;
+  status: "ok" | "rejected" | "failed";
+  model: string;
+  prompt_version: string;
+  question: string | null;
+  points: { text: string; facts: string[] }[];
+  problems: string[];
+  cost_usd: string | null;
+  created_at: string;
+};
+
+export type ExplainView = {
+  brief: StockBrief;
+  narration: Narration | null;
+  writer: {
+    ready: boolean;
+    model: string | null;
+    note: string | null;
+    budget_cap_usd: string;
+    budget_spent_usd: string;
+  };
+  prompt_version: string;
+};
+
+export type EquityCurve = {
+  capital: string;
+  points: { day: string; equity: string; drawdown_pct: string; index: string | null }[];
+  peak: string | null;
+  max_drawdown_pct: string;
+  return_pct: string | null;
+  index_return_pct: string | null;
+  note: string;
+};

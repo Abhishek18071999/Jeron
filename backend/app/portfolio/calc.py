@@ -36,10 +36,11 @@ Definitions (the engine's, `app.backtest.engine`):
 
 - the account's guardrails (docs/plans/platform-audit-v1.md, slice 3): equity =
   capital + every realised sale's gain (lots first in, first out, after charges) + the
-  open positions marked at the last close. The peak is the highest of capital plus the
-  running realised total on each sale day, and today's equity. Open profit on past days
-  is not known (there is no daily mark of the journal), so a peak reached only on paper
-  and given back before selling is missed: the drawdown can read lower than a broker's.
+  open positions marked at the last close. The peak is the daily equity curve's
+  (`app.portfolio.equity`: each session's open positions marked at that day's close),
+  so a peak reached only on paper and given back before selling counts; without a
+  curve, the highest of capital plus the running realised total on each sale day and
+  today's equity stands in for it.
   Spec section 5: at 10% below the peak risk per trade is halved, at 15% new entries
   stop. Realised today / this week (Monday to `as_of`) and first buys this week feed
   the daily and weekly loss limits and the weekly entries cap.
@@ -441,8 +442,11 @@ def account_state(
     first_buys: Iterable[date],
     holdings: Sequence[Holding],
     as_of: date,
+    curve_peak: Decimal | None = None,
 ) -> AccountState:
-    """Equity, peak and drawdown, and this day's and week's results (module notes)."""
+    """Equity, peak and drawdown, and this day's and week's results (module notes).
+    `curve_peak` is the daily equity curve's peak (`app.portfolio.equity`), open
+    profit included."""
     by_day: dict[date, Decimal] = {}
     for sale in sales:
         if sale.sell_date <= as_of:
@@ -456,7 +460,10 @@ def account_state(
         ZERO,
     )
     equity = capital + running + open_pnl
-    peak = max(capital + peak_realised, equity)
+    # The daily curve is the real peak; without one, realised sale days stand in for it.
+    peak = (
+        max(curve_peak, equity) if curve_peak is not None else max(capital + peak_realised, equity)
+    )
     drawdown = (1 - equity / peak) * 100 if peak > 0 else ZERO
     monday = week_start(as_of)
     tiers: dict[str, int] = {}

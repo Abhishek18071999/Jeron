@@ -158,6 +158,14 @@ def test_portfolio(empty_session):
     )
     assert Decimal(a["equity"]) == Decimal(t["capital"]) + open_marks
 
+    # The daily equity curve: from the first buy, marked at each close, Nifty 500 beside.
+    e = client.get("/portfolio/equity").json()
+    assert e["points"][0]["day"] == str(DAYS[280]) and e["points"][-1]["day"] == str(DAYS[-1])
+    assert len(e["points"]) == len(DAYS) - 280
+    assert Decimal(e["points"][0]["index"]) == Decimal(e["capital"])
+    assert Decimal(e["index_return_pct"]) == Decimal(f"{(1.001**19 - 1) * 100:.2f}")
+    assert Decimal(e["points"][-1]["equity"]) == Decimal(a["equity"])
+
     # A closed trade sold this financial year, held over a year: long-term gain used.
     sold = manual_entry(s, "UP")
     add_fill(s, sold, DAYS[0], "buy", 10, Decimal("100"))

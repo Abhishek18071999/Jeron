@@ -729,8 +729,9 @@ class SettingChange(Base):
 
 
 class LlmUsage(Base):
-    """What the news labeller used, one row per saved chunk or collected batch, so the
-    monthly cost cap can count the month's spend."""
+    """What the news labeller (and the explain narration, `explain:<model>`) used, one
+    row per saved chunk, collected batch or narration, so the monthly cost cap can count
+    the month's spend."""
 
     __tablename__ = "llm_usage"
 
@@ -747,6 +748,28 @@ class LlmUsage(Base):
     cache_write_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
     # Estimated US$ at list prices; null for a model without a known price.
     cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+
+
+class Explanation(Base):
+    """An LLM's wording of a stock's explain brief (decision 0016), stored once, also
+    when its checks refused it. `facts` are what the model was given; `points` what it
+    wrote, each citing fact ids (empty when rejected, with `problems` saying why)."""
+
+    __tablename__ = "explanations"
+    __table_args__ = (Index("ix_explanations_symbol_as_of", "symbol", "as_of"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    as_of: Mapped[date | None] = mapped_column(Date)  # the newest session in the facts
+    question: Mapped[str | None] = mapped_column(String(300))
+    model: Mapped[str] = mapped_column(String(64))
+    prompt_version: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16))  # "ok" / "rejected" / "failed"
+    facts: Mapped[list[Any]] = mapped_column(JSONB, default=list)
+    points: Mapped[list[Any]] = mapped_column(JSONB, default=list)
+    problems: Mapped[list[Any]] = mapped_column(JSONB, default=list)
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 Money = Numeric(20, 2)

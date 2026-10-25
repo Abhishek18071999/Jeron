@@ -1,5 +1,6 @@
 """My real portfolio: open journal positions with exit plans, heat and sector exposure."""
 
+from dataclasses import asdict
 from datetime import date
 from decimal import Decimal
 from typing import Annotated
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.backtest.engine import PortfolioRules
 from app.db import get_session
 from app.portfolio.calc import AccountState, Holding, SectorExposure
+from app.portfolio.service import equity_history
 from app.portfolio.service import portfolio as build_portfolio
 from app.settings_store import effective_settings
 
@@ -181,4 +183,42 @@ def portfolio(session: SessionDep, day: date | None = None) -> PortfolioOut:
         holdings=[_holding(h, as_of) for h in p.holdings],
         totals=TotalsOut.model_validate(p.totals, from_attributes=True),
         account=None if p.account is None else _account(p.account, session),
+    )
+
+
+class EquityPointOut(BaseModel):
+    day: date
+    equity: Decimal
+    drawdown_pct: Decimal
+    index: Decimal | None
+
+
+class EquityOut(BaseModel):
+    capital: Decimal
+    points: list[EquityPointOut]
+    peak: Decimal | None
+    max_drawdown_pct: Decimal
+    return_pct: Decimal | None
+    index_return_pct: Decimal | None
+    note: str
+
+
+@router.get("/portfolio/equity")
+def portfolio_equity(session: SessionDep) -> EquityOut:
+    """The real account's equity each session from the journal, with the same capital in
+    the Nifty 500 beside it."""
+    capital = Decimal(str(effective_settings(session).capital))
+    c = equity_history(session, capital)
+    return EquityOut(
+        capital=capital,
+        points=[EquityPointOut(**asdict(p)) for p in c.points],
+        peak=c.peak,
+        max_drawdown_pct=c.max_drawdown_pct,
+        return_pct=c.return_pct,
+        index_return_pct=c.index_return_pct,
+        note=(
+            "From your journal's fills, marked at each day's NSE close, on a fixed capital "
+            "(deposits and withdrawals aren't known). Nifty 500 is the price index, "
+            "without dividends."
+        ),
     )

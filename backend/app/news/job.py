@@ -162,14 +162,17 @@ def month_spend(session: Session, now: datetime | None = None) -> Decimal:
     return Decimal(total or 0)
 
 
-def record_usage(session: Session, model: str, used: Usage, batch: bool = False) -> Decimal:
-    """Store what a chunk or batch used. Returns its estimated US$ (0 without a price)."""
+def record_usage(
+    session: Session, model: str, used: Usage, batch: bool = False, name: str | None = None
+) -> Decimal:
+    """Store what a chunk or batch used, under `name` (default the model id). Returns its
+    estimated US$ (0 without a price)."""
     if not used.requests:
         return Decimal(0)
     cost = used.cost(model, batch=batch)
     session.add(
         LlmUsage(
-            labeller=model,
+            labeller=name or model,
             batch=batch,
             requests=used.requests,
             input_tokens=used.input_tokens,

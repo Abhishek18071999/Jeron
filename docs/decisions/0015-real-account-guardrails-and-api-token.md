@@ -17,7 +17,8 @@ should each be added without changing any strategy's results?
    realised total on each sale day, and today's equity. There is no daily mark of the
    journal, so a paper peak given back before selling is missed and the drawdown can
    read lower than the broker's. A daily equity history of the journal would fix that;
-   it is not built.
+   it is not built. (Update, same day: built, see decision 0016; the peak is now the
+   daily curve's.)
 3. Spec rules are always hard: 10% below the peak halves the risk per trade (multiplied
    with the mood's halving, as the engine does), 15% blocks new plans, and the tier's
    open positions are capped by `JERON_MAX_POSITIONS_<TIER>`. The brief's extra limits
