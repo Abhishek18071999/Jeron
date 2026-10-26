@@ -505,6 +505,29 @@ MOMENTUM = Strategy(
 MIN_NEWS_SCORE = 40.0
 
 
+# paper-review-v1: the Stocks section's 90+ tech-v1 stocks, paper-traded by the swing
+# plan. 90 is outside score-swing's grid, so it is its own version with one grid point.
+TOP_SCORE_MIN = 90.0
+
+TOP_SCORE = Strategy(
+    key="top-score",
+    version="top-score-v1",
+    name="Top technical score (90+)",
+    tier=Tier.SWING,
+    summary="Buy when a stock's tech-v1 score rises to 90 or more.",
+    grid_axes={"min_score": (TOP_SCORE_MIN,), "stop_atr": (2.0,)},
+    default={"min_score": TOP_SCORE_MIN, "stop_atr": 2.0},
+    describe=lambda p: [
+        f"Enter when the tech-v1 score closes at or above {p['min_score']:g} after being "
+        "below it the day before."
+    ],
+    condition=_score_condition,
+    results_blackout=True,
+    min_news_score=MIN_NEWS_SCORE,
+    registered_on=date(2026, 10, 26),
+)
+
+
 def with_events(base: Strategy) -> Strategy:
     """The M3 strategy with M6's results blackout and news filter."""
     return replace(
@@ -533,6 +556,7 @@ STRATEGIES = {
         SECTOR_ROTATION,
         QUALITY_TREND,
         MOMENTUM,
+        TOP_SCORE,
     )
 }
 

@@ -88,6 +88,16 @@ export const GUIDES: StrategyGuide[] = [
     lesson: "strategy-score-swing",
   },
   {
+    key: "top-score",
+    name: "Top technical score (90+)",
+    section: "swing",
+    lookFor:
+      "The tech-v1 score closing at or above 90 after being below it the day before: the Stocks section's 90+ stocks, on the day they get there. Not around results or after bad news.",
+    works: "Strong, broad uptrends where almost every technical condition lines up at once. Short holds.",
+    watch: "A 90+ score nearly always comes on a big up day, so the open can be above the entry zone; then the signal is skipped.",
+    lesson: "strategy-score-swing",
+  },
+  {
     key: "pullback-trend",
     name: "Pullback in an uptrend",
     section: "swing",

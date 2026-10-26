@@ -16,7 +16,11 @@ export default async function PaperPage() {
       <p className="mt-2 text-muted">
         Every strategy&apos;s signals, traded on paper with exactly the rules that were backtested (spec
         section 7, stage 2). A strategy that hasn&apos;t passed its backtest is traded as{" "}
-        <em>research only</em>: its signals collect evidence and are never alerts to act on.
+        <em>research only</em>: its signals collect evidence and are never alerts to act on.{" "}
+        <Link href="/paper/performance" className="underline">
+          Paper performance
+        </Link>{" "}
+        reviews each account: what worked, what failed and why, and the changes worth testing.
       </p>
 
       {!accounts.ok ? (

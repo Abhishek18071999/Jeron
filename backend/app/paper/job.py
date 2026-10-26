@@ -26,13 +26,14 @@ from uuid import UUID
 import numpy as np
 from pydantic import ValidationError
 from sqlalchemy import delete, insert, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.backtest.costs import CostModel
-from app.backtest.engine import Order, PortfolioRules, SimResult, Trade, Variant, simulate
+from app.backtest.engine import Order, PortfolioRules, SimResult, Skip, Trade, Variant, simulate
 from app.backtest.job import load_inputs
 from app.backtest.market import Market, build_market
-from app.backtest.stats import drawdown_series, trade_stats
+from app.backtest.stats import curve_stats, drawdown_series, risk_profile, trade_stats
 from app.backtest.strategies import STRATEGIES, Strategy, Tier, params_label
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
 from app.config import Settings
@@ -41,10 +42,12 @@ from app.models import (
     BacktestRun,
     PaperAccount,
     PaperDay,
+    PaperEvent,
     PaperTrade,
     ScanRun,
     SignalRecord,
 )
+from app.paper.proposals import FORWARD_SESSIONS, signal_context
 from app.scan.job import LOOKBACK_SESSIONS
 from app.scan.score import SCORE_VERSION
 from app.settings_store import effective_settings
@@ -255,7 +258,193 @@ def _trade_row(
             }
             for f in trade.exits
         ],
+        "context": signal_context(m, s, trade.signal_day),
     }
+
+
+# Skips decided at the open after the signal; the rest are decided at the signal close.
+FILL_DAY_SKIPS = (
+    "did not trade the next day",
+    "locked at the upper circuit",
+    "opened below the stop",
+    "opened above the entry zone",
+    "not enough cash",
+)
+
+
+def skip_reason(reason: str) -> str:
+    """A skip's reason without the names and numbers that make each one different."""
+    if reason.startswith("sector "):
+        return "sector cap"
+    if reason.startswith("moves with "):
+        return "moves with a stock held"
+    if reason.startswith("already ordered by"):
+        return "already ordered"
+    return reason
+
+
+def _signal_day(m: Market, skip: Skip) -> int:
+    return skip.day - 1 if skip.reason in FILL_DAY_SKIPS else skip.day
+
+
+def forward_move_r(m: Market, s: int, t: int, stop_atr: float) -> float | None:
+    """The close `FORWARD_SESSIONS` sessions after day t against day t's close, in R
+    (a stop `stop_atr` x ATR away = 1R). None when those sessions haven't happened."""
+    later = t + FORWARD_SESSIONS
+    if later >= len(m.days):
+        return None
+    c0, c1, atr = float(m.close[s, t]), float(m.close[s, later]), float(m.atr14[s, t])
+    if not (np.isfinite(c0) and np.isfinite(c1) and np.isfinite(atr)) or atr <= 0:
+        return None
+    return (c1 - c0) / (stop_atr * atr)
+
+
+def missed_summary(
+    m: Market, sim: SimResult, trades: Sequence[Trade], start: int, end: int, stop_atr: float
+) -> dict[str, Any]:
+    """Signals the rules skipped, by reason, with the stock's move over the next
+    `FORWARD_SESSIONS` sessions; the same move for the signals that were traded, so
+    the two can be compared. Only sessions up to `end` are used."""
+
+    def line(moves: list[float | None], count: int) -> dict[str, Any]:
+        known = [v for v in moves if v is not None]
+        return {
+            "count": count,
+            "measured": len(known),
+            "avg_move_r": round(sum(known) / len(known), 4) if known else None,
+            "share_up": round(sum(v > 0 for v in known) / len(known), 4) if known else None,
+        }
+
+    def move(s: int, t: int) -> float | None:
+        return forward_move_r(m, s, t, stop_atr) if t + FORWARD_SESSIONS <= end else None
+
+    by: dict[str, list[float | None]] = {}
+    for skip in sim.skipped:
+        t = _signal_day(m, skip)
+        if t < start:
+            continue
+        by.setdefault(skip_reason(skip.reason), []).append(move(skip.s, t))
+    taken = [move(tr.s, tr.signal_day) for tr in trades]
+    return {
+        "forward_sessions": FORWARD_SESSIONS,
+        "taken": line(taken, len(taken)),
+        "skipped": {
+            reason: line(moves, len(moves))
+            for reason, moves in sorted(by.items(), key=lambda kv: -len(kv[1]))
+        },
+    }
+
+
+def performance_summary(
+    m: Market, sim: SimResult, start: int, end: int, rules: PortfolioRules
+) -> dict[str, Any]:
+    """Return and risk of the account's curve against Nifty 500 over the same sessions."""
+    index = m.nifty500[start : end + 1]
+    known = index[np.isfinite(index)]
+    return {
+        "curve": curve_stats(sim.equity, rules.cash_rate_pct).to_dict(),
+        "profile": risk_profile(sim.equity, sim.cash, sim.trades, rules.cash_rate_pct).to_dict(),
+        "benchmark": curve_stats(known, rules.cash_rate_pct).to_dict() if len(known) else None,
+        "cash_rate_pct": rules.cash_rate_pct,
+    }
+
+
+def audit_events(
+    account_id: int,
+    m: Market,
+    trades: Sequence[Trade],
+    sim: SimResult,
+    start: int,
+    signals: dict[tuple[date, str], SignalRecord],
+    now: datetime,
+) -> list[dict[str, Any]]:
+    """Every signal, entry, exit and skip the replay shows, as audit rows; those
+    already stored are left as they were (`record_events`)."""
+    days = m.days
+    rows: list[dict[str, Any]] = []
+
+    def add(kind: str, t: int, ticker: str, ref: str, detail: dict[str, Any]) -> None:
+        rows.append(
+            {
+                "account_id": account_id,
+                "kind": kind,
+                "event_date": days[t],
+                "ticker": ticker,
+                "ref": ref,
+                "detail": detail,
+                "recorded_at": now,
+            }
+        )
+
+    for (signal_date, ticker), rec in signals.items():
+        payload = rec.payload
+        rows.append(
+            {
+                "account_id": account_id,
+                "kind": "signal",
+                "event_date": signal_date,
+                "ticker": ticker,
+                "ref": str(rec.signal_id),
+                "detail": {
+                    "entry_zone": payload.get("entry_zone"),
+                    "stop": (payload.get("stop") or {}).get("price"),
+                    "t1": (payload.get("targets") or {}).get("t1"),
+                    "shares": payload.get("shares"),
+                    "why": payload.get("why"),
+                    "research_only": rec.research_only,
+                },
+                "recorded_at": now,
+            }
+        )
+    for tr in trades:
+        s, ref = tr.s, str(days[tr.signal_day])
+        add(
+            "entry",
+            tr.entry_day,
+            tr.symbol,
+            ref,
+            {
+                "price": str(_raw(m, s, tr.entry_day, tr.entry)),
+                "shares": tr.raw_shares,
+                "stop": str(_raw(m, s, tr.entry_day, tr.stop0)),
+                "charges": round(tr.entry_charges, 2),
+            },
+        )
+        for i, f in enumerate(tr.exits):
+            last = i == len(tr.exits) - 1 and tr.remaining <= 1e-9
+            add(
+                "exit" if last else "partial_exit",
+                f.day,
+                tr.symbol,
+                f"{ref}/{i + 1}",
+                {
+                    "price": str(_raw(m, s, f.day, f.price)),
+                    "shares": round(f.shares * m.factor[s, f.day]),
+                    "reason": f.reason,
+                    "charges": round(f.charges, 2),
+                },
+            )
+    for skip in sim.skipped:
+        if _signal_day(m, skip) < start:
+            continue
+        add("skip", skip.day, m.symbols[skip.s], skip_reason(skip.reason), {"reason": skip.reason})
+    return rows
+
+
+def record_events(session: Session, rows: Sequence[dict[str, Any]]) -> int:
+    """Store the audit rows not stored yet; returns how many were new."""
+    new = 0
+    for i in range(0, len(rows), 1000):
+        result = session.execute(
+            pg_insert(PaperEvent)
+            .values(list(rows[i : i + 1000]))
+            .on_conflict_do_nothing(
+                index_elements=["account_id", "kind", "event_date", "ticker", "ref"]
+            )
+            .returning(PaperEvent.id)
+        )
+        new += len(result.all())
+    return new
 
 
 def order_notes(
@@ -403,6 +592,7 @@ def update_account(
     )
 
     closed_stats = trade_stats(sim.trades)
+    record_events(session, audit_events(account.id, m, trades, sim, start, recorded, now))
     today_skips = Counter(s.reason for s in sim.skipped if s.day == end)
     latest = latest_backtest_params(session, strategy)
     if latest is not None and latest != account.params_label:
@@ -425,6 +615,8 @@ def update_account(
         "skipped_today": dict(today_skips.most_common()),
         "brake_events": [{"date": str(m.days[t]), "event": e} for t, e in sim.brake_events],
         "cost_model": costs.name,
+        "performance": performance_summary(m, sim, start, end, rules),
+        "missed": missed_summary(m, sim, trades, start, end, params["stop_atr"]),
         "notes": notes,
     }
     session.commit()

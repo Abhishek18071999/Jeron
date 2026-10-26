@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.backtest.strategies import STRATEGIES
 from app.db import get_session
-from app.models import PaperAccount, PaperDay, PaperTrade, SignalRecord
+from app.models import PaperAccount, PaperDay, PaperTrade, SignalRecord, StrategyProposal
+from app.paper.optimize import account_review, audit_trail, proposal_view
 
 router = APIRouter(tags=["paper"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -196,3 +197,45 @@ def signal(signal_id: UUID, session: SessionDep) -> SignalView:
     if row is None:
         raise HTTPException(404, f"No signal {signal_id}")
     return _signal(row, _keys(session))
+
+
+class ReviewView(BaseModel):
+    """The paper performance page (paper-review-v1): simulated results only."""
+
+    account: Account
+    days: list[Day]
+    review: dict[str, Any]
+
+
+@router.get("/paper/accounts/{account_id}/review")
+def paper_review(account_id: int, session: SessionDep) -> ReviewView:
+    account = session.get(PaperAccount, account_id)
+    if account is None:
+        raise HTTPException(404, f"No paper account {account_id}")
+    days = [
+        Day.model_validate(d, from_attributes=True)
+        for d in session.scalars(
+            select(PaperDay).where(PaperDay.account_id == account_id).order_by(PaperDay.trade_date)
+        )
+    ]
+    return ReviewView(account=_account(account), days=days, review=account_review(session, account))
+
+
+@router.get("/paper/accounts/{account_id}/audit")
+def paper_audit(
+    account_id: int,
+    session: SessionDep,
+    kind: Literal["signal", "entry", "partial_exit", "exit", "skip"] | None = None,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 200,
+) -> list[dict[str, Any]]:
+    """The account's audit trail, newest first: each event as first recorded."""
+    if session.get(PaperAccount, account_id) is None:
+        raise HTTPException(404, f"No paper account {account_id}")
+    return audit_trail(session, account_id, limit, kind)
+
+
+@router.get("/paper/proposals")
+def paper_proposals(session: SessionDep) -> list[dict[str, Any]]:
+    """Every strategy proposal from the paper review, newest first."""
+    rows = session.scalars(select(StrategyProposal).order_by(StrategyProposal.id.desc()))
+    return [proposal_view(p) for p in rows]

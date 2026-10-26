@@ -59,6 +59,7 @@ from app.enums import QualityStatus
 from app.exits.job import run_preopen
 from app.fundamentals.job import cached_fetch, import_results
 from app.journal.importer import import_tradebook
+from app.models import StrategyProposal
 from app.news.deepseek import LabellerError
 from app.news.job import (
     api_error_message,
@@ -71,6 +72,7 @@ from app.news.job import (
     spent,
 )
 from app.paper.job import run_paper
+from app.paper.optimize import record_proposals, refresh_forward, validate, validate_waiting
 from app.scan.job import ASM, run_scan
 from app.scan.surveillance import read_asm_csv
 
@@ -193,6 +195,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="close the active accounts and open new ones from this day",
     )
+
+    sub.add_parser(
+        "paper-review",
+        help="record strategy proposals from the paper trades and refresh their forward checks",
+    )
+    p = sub.add_parser(
+        "proposal-validate",
+        help="backtest proposals on the history before their paper account (default: all waiting)",
+    )
+    p.add_argument("id", type=int, nargs="?", help="one proposal to (re)test")
+    p.add_argument("--limit", type=int, help="test at most this many waiting proposals")
 
     p = sub.add_parser("alerts", help="send due signal alerts and the daily summary")
     p.add_argument("--date", type=_date, help="day to send for (default: newest scan)")
@@ -445,6 +458,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "paper":
             paper = run_paper(session, args.date, args.strategy, restart=args.restart, log=_log)
             return 0 if paper.status == "ok" else 1
+
+        if args.command == "paper-review":
+            new = record_proposals(session, log=_log)
+            refreshed = refresh_forward(session)
+            _log(f"{len(new)} new proposals; {refreshed} forward checks refreshed.")
+            return 0
+
+        if args.command == "proposal-validate":
+            if args.id is not None:
+                proposal = session.get(StrategyProposal, args.id)
+                if proposal is None:
+                    _log(f"No proposal {args.id}")
+                    return 1
+                validate(session, proposal, log=_log)
+            else:
+                done = validate_waiting(session, args.limit, log=_log)
+                _log(f"{len(done)} proposals tested.")
+            return 0
 
         if args.command == "alerts":
             sent = run_alerts(session, args.date, log=_log)
