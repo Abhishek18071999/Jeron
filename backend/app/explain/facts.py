@@ -167,6 +167,9 @@ class Brief:
     unknowns: list[str]
     setup: SetupStatus | None
     stale: bool
+    # The newest signal's strategy key ("rs-pullback") and whether it is research only.
+    strategy: str | None = None
+    research_only: bool | None = None
 
     def fact(self, fact_id: str) -> Fact:
         return next(f for f in self.facts if f.id == fact_id)
@@ -630,7 +633,7 @@ def build_brief(i: StockInputs) -> Brief:
                     "Strategy's out-of-sample record",
                     f"{bt.get('trades')} trades, expectancy {exp:+.2f}R, win rate "
                     f"{float(bt.get('win_rate') or 0) * 100:.0f}%, max drawdown "
-                    f"{float(bt.get('max_drawdown_pct') or 0):.1f}% ({bt.get('period')})",
+                    f"{float(bt.get('max_drawdown_pct') or 0):.1f}%; {bt.get('period')}",
                     Kind.CALCULATED,
                     "Jeron backtest (walk-forward, after costs)",
                     sig.signal_date,
@@ -748,4 +751,6 @@ def build_brief(i: StockInputs) -> Brief:
         unknowns=unknowns,
         setup=setup,
         stale=stale,
+        strategy=None if sig is None else sig.strategy,
+        research_only=None if sig is None else sig.research_only,
     )

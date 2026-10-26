@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Command, Explain } from "@/components/explain";
 
 import type { SignalBrief } from "@/lib/api";
+import { strategyGuide } from "@/lib/strategy-guide";
 
 // --- Formatting -----------------------------------------------------------------------
 
@@ -383,6 +384,17 @@ export function ResearchBadge({ research }: { research: boolean }) {
   );
 }
 
+// A strategy key that opens its Learn lesson, when it has one.
+export function StrategyLink({ strategy }: { strategy: string }) {
+  const found = strategyGuide(strategy);
+  if (!found) return <>{strategy}</>;
+  return (
+    <Link href={`/learn/${found.guide.lesson}`} title={`${found.guide.name}: how it works and how to act on it`} className="underline decoration-dotted">
+      {strategy}
+    </Link>
+  );
+}
+
 export function SignalRow({ s, action = "Decide" }: { s: SignalBrief; action?: string }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 border-t border-line py-2.5 first:border-t-0">
@@ -392,7 +404,7 @@ export function SignalRow({ s, action = "Decide" }: { s: SignalBrief; action?: s
         </Link>
         <ResearchBadge research={s.research_only} />
         <span className="text-xs text-muted">
-          {s.strategy_key} · conviction {s.conviction}/5 · {shortDate(s.signal_date)}
+          <StrategyLink strategy={s.strategy_key} /> · conviction {s.conviction}/5 · {shortDate(s.signal_date)}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-sm">

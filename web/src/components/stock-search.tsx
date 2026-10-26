@@ -14,6 +14,9 @@ type Props = {
   name?: string;
   defaultValue?: string;
   required?: boolean;
+  // Called with the picked symbol instead of opening the stock page (Compare's picker).
+  onPick?: (symbol: string) => void;
+  autoFocus?: boolean;
 };
 
 // Type a symbol, a company name ("tata steel"), a short name ("RIL") or an old symbol
@@ -25,6 +28,8 @@ export function StockSearch({
   name,
   defaultValue = "",
   required,
+  onPick,
+  autoFocus,
 }: Props) {
   const router = useRouter();
   const listId = useId();
@@ -64,6 +69,11 @@ export function StockSearch({
   const go = (symbol: string) => {
     setOpen(false);
     setMatches([]);
+    if (onPick) {
+      setQuery("");
+      onPick(symbol);
+      return;
+    }
     if (name) {
       setQuery(symbol);
       return;
@@ -79,6 +89,7 @@ export function StockSearch({
       <input
         name={name}
         required={required}
+        autoFocus={autoFocus}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -97,7 +108,9 @@ export function StockSearch({
             // In a form, Enter with no suggestion showing submits the form as usual.
             if (name && !shown[active]) return;
             e.preventDefault();
-            const pick = shown[active]?.symbol ?? query.trim().toUpperCase().replace(/\s+/g, "");
+            // Picking for a list keeps a typed name as it is: the backend matches it.
+            const typed = onPick ? query.trim() : query.trim().toUpperCase().replace(/\s+/g, "");
+            const pick = shown[active]?.symbol ?? typed;
             if (pick) go(pick);
           } else if (e.key === "Escape") {
             setOpen(false);

@@ -5,11 +5,11 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.api import explain as explain_api
 from app.main import app
-from app.models import Explanation, LlmUsage, SignalRecord
+from app.models import Explanation, Instrument, LlmUsage, SignalRecord
 from app.news.claude import Usage
 from tests.conftest import requires_db
 from tests.test_alerts_db import _signal_day
@@ -64,10 +64,22 @@ def test_explain_and_compare(empty_session):
     assert view["narration"] is None
     assert view["writer"]["ready"] in (True, False)
 
+    assert score["number"] == 50.0 and b["strategy"] is None
+
     both = client.get("/stocks/compare", params={"symbols": "UP, splitco,UP"}).json()
-    assert [x["symbol"] for x in both] == ["UP", "SPLITCO"]
+    assert [x["symbol"] for x in both["briefs"]] == ["UP", "SPLITCO"]
+    assert both["not_found"] == []
     assert client.get("/stocks/compare", params={"symbols": "A,B,C,D"}).status_code == 422
-    assert client.get("/stocks/compare", params={"symbols": "UP,NOPE"}).status_code == 404
+    # One that matches nothing is listed, the others are still compared.
+    some = client.get("/stocks/compare", params={"symbols": "UP,NOPE"}).json()
+    assert [x["symbol"] for x in some["briefs"]] == ["UP"] and some["not_found"] == ["NOPE"]
+    # A company name is matched as the search box would; the same stock twice is once.
+    empty_session.execute(
+        update(Instrument).where(Instrument.symbol == "DOWN").values(name="Down Bank Ltd")
+    )
+    empty_session.commit()
+    named = client.get("/stocks/compare", params={"symbols": "down bank, DOWN"}).json()
+    assert [x["symbol"] for x in named["briefs"]] == ["DOWN"] and named["not_found"] == []
 
 
 def test_narration_is_checked_stored_and_capped(empty_session, writer):
@@ -137,6 +149,7 @@ def test_explain_a_signalled_stock(session):
     assert rec is not None
     b = TestClient(app).get(f"/stocks/{rec.ticker}/explain").json()["brief"]
     sig = next(f for f in b["facts"] if f["label"] == "Signal")
+    assert b["strategy"] == "score-swing" and b["research_only"] is False
     assert sig["kind"] == "rule" and sig["as_of"] == str(day)
     zone = next(f for f in b["facts"] if f["label"] == "Entry zone")
     low = Decimal(str(rec.payload["entry_zone"]["low"]))

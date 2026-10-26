@@ -172,7 +172,11 @@ are part of done, never commit secrets.
   heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
   compare, data, spot check, setup), Learn (`/learn`, lessons in `src/lib/learn/`, one
   file per track, assembled in `src/lib/lessons.ts`; their Jeron numbers mirror the backend;
-  `/learn/glossary`); `/stocks/compare` puts up to three stocks' briefs side by side and
+  `/learn/glossary`); `/stocks/compare` puts up to three stocks' briefs side by side (picked with the same
+  search box, `src/app/stocks/compare/picker.tsx`; rows, leads and differences in
+  `src/lib/compare.ts`; `docs/plans/compare-v2.md`); `src/lib/strategy-guide.ts` says how
+  to use each strategy's signal (mirrors `strategies.py`, shown on Compare and the stock
+  page, `src/components/strategy-guide.tsx`), and
   every stock page has the "Explain this stock" card (`src/app/stocks/[symbol]/brief.tsx`);
   phones get a bottom tab bar (`src/components/nav.tsx`).
   `/setup` shows the autopilot and takes uploads (`src/app/setup/actions.ts`).

@@ -1274,6 +1274,7 @@ export type BriefFact = {
   source: string;
   as_of: string | null;
   stance: "for" | "against" | "neutral";
+  number: number | null; // the value as a number, when it is one
 };
 
 export type BriefCheck = { label: string; status: "pass" | "fail" | "unknown"; detail: string; facts: string[] };
@@ -1292,7 +1293,11 @@ export type StockBrief = {
   checklist: BriefCheck[];
   unknowns: string[];
   setup: { state: string; still_valid: boolean; reasons: string[]; facts: string[] } | null;
+  strategy: string | null; // the newest signal's strategy key
+  research_only: boolean | null;
 };
+
+export type CompareView = { briefs: StockBrief[]; not_found: string[] };
 
 export type Narration = {
   id: number;
