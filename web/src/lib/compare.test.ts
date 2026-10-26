@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { BriefFact, StockBrief } from "./api.ts";
-import { checksPassed, compareRows, differences, leaders, parseSymbols } from "./compare.ts";
+import type { BriefFact, Performance, StockBrief } from "./api.ts";
+import { checksPassed, compareRows, differences, leaders, parseSymbols, performanceRows } from "./compare.ts";
 
 const fact = (topic: string, label: string, value: string, stance: BriefFact["stance"], number: number | null = null): BriefFact => ({
   id: label,
@@ -59,13 +59,16 @@ test("rows match by topic, skip what no stock has, and mark the lead", () => {
   const groups = compareRows([a, b]);
   assert.deepEqual(
     groups.map((g) => g.title),
-    ["Trend and strength", "Momentum, volume and risk"],
+    ["Trend and strength", "Momentum, volume and risk", "Events"],
   );
   const score = groups[0].rows.find((r) => r.label === "Technical score");
   assert.deepEqual(score?.leads, [0]);
   const rsi = groups[1].rows.find((r) => r.label === "RSI(14)");
   assert.deepEqual(rsi?.leads, [], "RSI has no better direction");
   assert.ok(!groups.some((g) => g.rows.some((r) => r.label === "Results")));
+  const news = groups[2].rows.find((r) => r.label === "Latest announcement");
+  assert.equal(news?.cells[0]?.label, "Results", "the headline shows as the latest announcement");
+  assert.equal(news?.cells[1], undefined);
 });
 
 test("differences: rows read for one stock and against another", () => {
@@ -90,4 +93,23 @@ test("checks passed and failed", () => {
 test("parseSymbols: commas only, names kept whole, no repeats, at most three", () => {
   assert.deepEqual(parseSymbols(" tcs, infy ,TCS,, tata  steel , wipro"), ["TCS", "INFY", "TATA STEEL"]);
   assert.deepEqual(parseSymbols(""), []);
+});
+
+test("performance rows: leads among the stocks only, never the index", () => {
+  const perf = (symbol: string, r1y: number | null, vol: number | null, dd: number | null): Performance => ({
+    symbol,
+    sector: null,
+    industry: null,
+    returns: { "1M": 1, "3M": 2, "6M": 3, "1Y": r1y },
+    volatility: vol,
+    max_drawdown: dd,
+    series: [],
+  });
+  const rows = performanceRows([perf("AAA", 40, 30, -25), perf("BBB", 10, 20, -8)], perf("Nifty 500", 90, 5, -1));
+  const by = Object.fromEntries(rows.map((r) => [r.row.label, r]));
+  assert.deepEqual(by["Return, 1 year"].leads, [0]);
+  assert.equal(by["Return, 1 year"].index, 90);
+  assert.deepEqual(by["Return, 1 month"].leads, [], "equal returns: no lead");
+  assert.deepEqual(by["Volatility, 1 year"].leads, [1], "lower is calmer");
+  assert.deepEqual(by["Worst fall, 1 year"].leads, [1], "-8% is a smaller fall than -25%");
 });

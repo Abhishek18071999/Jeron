@@ -17,6 +17,8 @@ type Props = {
   // Called with the picked symbol instead of opening the stock page (Compare's picker).
   onPick?: (symbol: string) => void;
   autoFocus?: boolean;
+  exclude?: string[]; // symbols not to suggest (already picked)
+  disabled?: boolean;
 };
 
 // Type a symbol, a company name ("tata steel"), a short name ("RIL") or an old symbol
@@ -30,11 +32,15 @@ export function StockSearch({
   required,
   onPick,
   autoFocus,
+  exclude,
+  disabled,
 }: Props) {
   const router = useRouter();
   const listId = useId();
   const [query, setQuery] = useState(defaultValue);
-  const [matches, setMatches] = useState<Match[]>([]);
+  // The suggestions and the text they were found for: while a newer search is on its
+  // way, the old ones are not shown, so Enter never picks a stock for an older query.
+  const [found, setFound] = useState<{ q: string; items: Match[] }>({ q: "", items: [] });
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -46,7 +52,7 @@ export function StockSearch({
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
-        setMatches(res.ok ? ((await res.json()) as Match[]) : []);
+        setFound({ q, items: res.ok ? ((await res.json()) as Match[]) : [] });
         setActive(0);
       } catch {
         // A newer keystroke aborted this request.
@@ -68,7 +74,7 @@ export function StockSearch({
 
   const go = (symbol: string) => {
     setOpen(false);
-    setMatches([]);
+    setFound({ q: "", items: [] });
     if (onPick) {
       setQuery("");
       onPick(symbol);
@@ -82,7 +88,8 @@ export function StockSearch({
     router.push(`/stocks/${encodeURIComponent(symbol)}`);
   };
 
-  const shown = open && query.trim() ? matches : [];
+  const fresh = found.q === query.trim() ? found.items : [];
+  const shown = open && query.trim() ? fresh.filter((m) => !exclude?.includes(m.symbol)) : [];
 
   return (
     <div ref={box} className={`relative ${className}`}>
@@ -90,11 +97,12 @@ export function StockSearch({
         name={name}
         required={required}
         autoFocus={autoFocus}
+        disabled={disabled}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
           setOpen(true);
-          if (!e.target.value.trim()) setMatches([]);
+          if (!e.target.value.trim()) setFound({ q: "", items: [] });
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
