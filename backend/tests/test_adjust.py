@@ -1,7 +1,13 @@
 from datetime import date
 from decimal import Decimal
 
-from app.data.adjust import adjust_bars, build_adjustments, price_confirms, price_factor
+from app.data.adjust import (
+    adjust_bars,
+    build_adjustments,
+    price_confirms,
+    price_factor,
+    rights_issue_price,
+)
 from app.data.provider import CorporateActionRecord
 from app.enums import CorporateActionType
 from tests.helpers import bar
@@ -26,7 +32,65 @@ def test_price_factors():
     assert price_factor(dividend, Decimal(100)) is None  # dividends off by default
     assert price_factor(dividend, Decimal(100), include_dividends=True) == Decimal("0.95")
     rights = CorporateActionRecord("X", D3, CorporateActionType.RIGHTS, Decimal(1), Decimal(5))
-    assert price_factor(rights) is None
+    assert price_factor(rights) is None  # no price in the text, no previous close
+
+
+def test_rights_issue_uses_the_theoretical_ex_rights_price():
+    # 119 new for 758 held at ₹218 (the premium; face value left out), previous close 300:
+    # TERP = (758 x 300 + 119 x 218) / 877 = 288.873..., factor 0.962911.
+    rights = CorporateActionRecord(
+        "X",
+        D3,
+        CorporateActionType.RIGHTS,
+        Decimal(119),
+        Decimal(758),
+        raw_text="RGHTS 119:758 PRM RS 218",
+    )
+    assert price_factor(rights, Decimal(300)) == Decimal("0.962911")
+    premium = CorporateActionRecord(
+        "X",
+        D3,
+        CorporateActionType.RIGHTS,
+        Decimal(1),
+        Decimal(6),
+        raw_text="Rights 1:6 @ Premium Rs 1,201/-",
+    )
+    assert rights_issue_price(premium) == Decimal(1201)
+    assert price_factor(premium, Decimal(1500)) == Decimal("0.971524")
+    assert rights_issue_price(
+        CorporateActionRecord("X", D3, CorporateActionType.RIGHTS, raw_text="RIGHTS 1:5 @ RS 50")
+    ) == Decimal(50)
+    # Priced at or above the market: nobody takes it up, nothing to adjust.
+    assert price_factor(rights, Decimal(200)) is None
+    # No ratio.
+    loose = CorporateActionRecord("X", D3, CorporateActionType.RIGHTS, raw_text="RIGHTS PRM RS 5")
+    assert price_factor(loose, Decimal(100)) is None
+
+
+def test_demerger_uses_the_ex_date_open():
+    demerger = CorporateActionRecord("X", D3, CorporateActionType.OTHER, raw_text="DEMERGER")
+    assert price_factor(demerger, Decimal(1000), ex_open=Decimal(640)) == Decimal("0.64")
+    assert price_factor(demerger, Decimal(1000)) is None  # no ex-date bar
+    assert price_factor(demerger, Decimal(1000), ex_open=Decimal(990)) is None  # under 2%
+    assert price_factor(demerger, Decimal(1000), ex_open=Decimal(1100)) is None  # a rise
+    assert price_factor(demerger, Decimal(1000), ex_open=Decimal(50)) is None  # bad data
+    scheme = CorporateActionRecord(
+        "X", D3, CorporateActionType.OTHER, raw_text="SCHEME OF ARRANGEMENT"
+    )
+    assert price_factor(scheme, Decimal(1000), ex_open=Decimal(640)) is None
+
+
+def test_demerger_adjusts_the_series_from_the_bars():
+    bars = [
+        bar("ITC", D1, 470, 475, 465, 472, 1000),
+        bar("ITC", D2, 472, 474, 466, 470, 1000),
+        bar("ITC", D3, 423, 430, 420, 428, 1000),  # hotels demerged: special pre-open 423
+    ]
+    demerger = CorporateActionRecord("ITC", D3, CorporateActionType.OTHER, raw_text="DEMERGER")
+    (adj,) = build_adjustments(bars, [demerger])
+    assert adj.factor == Decimal("0.9")  # 423 / 470
+    adjusted = adjust_bars(bars, [adj])
+    assert adjusted[1].close == Decimal("423.0000")  # no gap into the ex-date
 
 
 def test_adjusted_series_has_no_gap_and_raw_is_untouched():

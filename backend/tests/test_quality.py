@@ -77,13 +77,42 @@ def test_big_move_without_action_warns_but_bonus_is_explained():
 
 
 def test_move_on_unadjusted_scheme_is_listed_separately():
-    demerger = CorporateActionRecord("H", DAY, CorporateActionType.OTHER, raw_text="DEMERGER")
+    scheme = CorporateActionRecord(
+        "H", DAY, CorporateActionType.OTHER, raw_text="SCHEME OF ARRANGEMENT"
+    )
     report = build_report(
-        clean_day(bars=[bar("H", DAY, 60, 62, 58, 60, prev_close=100)], actions_today=[demerger])
+        clean_day(bars=[bar("H", DAY, 60, 62, 58, 60, prev_close=100)], actions_today=[scheme])
     )
     big = checks(report)["big_moves"]
     assert "rights issue or scheme" in big.message
-    assert big.items[0]["actions"] == "DEMERGER"
+    assert big.items[0]["actions"] == "SCHEME OF ARRANGEMENT"
+
+
+def test_priced_demerger_and_rights_issue_explain_the_gap():
+    """Decision 0017: a demerger is priced by the ex-date open, a rights issue by its
+    theoretical ex-rights price, so neither gap is a big move or a held drop."""
+    demerger = CorporateActionRecord("H", DAY, CorporateActionType.OTHER, raw_text="DEMERGER")
+    rights = CorporateActionRecord(
+        "R",
+        DAY,
+        CorporateActionType.RIGHTS,
+        Decimal(1),
+        Decimal(1),
+        raw_text="RIGHTS 1:1 @ PREMIUM RS 20",
+    )
+    report = build_report(
+        clean_day(
+            bars=[
+                bar("H", DAY, 60, 62, 58, 61, prev_close=100),
+                # TERP (100 + 20) / 2 = 60.
+                bar("R", DAY, 60, 61, 58, 59, prev_close=100),
+            ],
+            recent_closes={"H": [Decimal(100)], "R": [Decimal(100)]},
+            actions_today=[demerger, rights],
+        )
+    )
+    assert checks(report)["big_moves"].status == QualityStatus.PASS
+    assert checks(report)["unexplained_drops"].status == QualityStatus.PASS
 
 
 def test_stale_prices_warn():
@@ -156,7 +185,9 @@ def test_first_trade_moves_are_labelled_as_listings():
 
 
 def test_unexplained_drop_over_15pct_holds_the_stock():
-    demerger = CorporateActionRecord("H", DAY, CorporateActionType.OTHER, raw_text="DEMERGER")
+    scheme = CorporateActionRecord(
+        "H", DAY, CorporateActionType.OTHER, raw_text="CAPITAL REDUCTION"
+    )
     split = CorporateActionRecord(
         "S", DAY, CorporateActionType.SPLIT, Decimal(2), Decimal(1), raw_text="SPLIT"
     )
@@ -164,7 +195,7 @@ def test_unexplained_drop_over_15pct_holds_the_stock():
     report = build_report(
         clean_day(
             bars=[
-                bar("H", DAY, 70, 72, 68, 70, prev_close=100),  # demerger: held, named
+                bar("H", DAY, 70, 72, 68, 70, prev_close=100),  # unpriced scheme: held, named
                 bar("D", DAY, 84, 85, 83, 84, prev_close=100),  # -16%: held
                 bar("S", DAY, 50, 51, 49, 50, prev_close=100),  # split 2:1: explained
                 bar("L", DAY, 80, 80, 80, 80, prev_close=100),  # locked lower circuit: real
@@ -172,11 +203,11 @@ def test_unexplained_drop_over_15pct_holds_the_stock():
                 bar("N", DAY, 50, 52, 49, 50, prev_close=100),  # first trade: listing
             ],
             recent_closes=recent,
-            actions_today=[demerger, split],
+            actions_today=[scheme, split],
         )
     )
     drops = checks(report)["unexplained_drops"]
     assert drops.status == QualityStatus.WARN
     assert [i["symbol"] for i in drops.items] == ["H", "D"]
-    assert drops.items[0]["actions"] == "DEMERGER"
+    assert drops.items[0]["actions"] == "CAPITAL REDUCTION"
     assert checks(build_report(clean_day()))["unexplained_drops"].status == QualityStatus.PASS

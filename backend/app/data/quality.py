@@ -163,6 +163,23 @@ def _check_zero_volume(day: DayData) -> Check:
     return Check("zero_volume", QualityStatus.WARN, f"{len(items)} stocks show zero volume", items)
 
 
+def _apply_factors(
+    base: Decimal, ex_open: Decimal, actions: Sequence[CorporateActionRecord]
+) -> tuple[Decimal, list[CorporateActionRecord]]:
+    """The previous close on the ex-date's basis (splits, bonuses, and the rights issues
+    and demergers `app.data.adjust` can price), and the rights issues and schemes it
+    could not adjust for."""
+    prev = base
+    unapplied = []
+    for action in actions:
+        factor = price_factor(action, prev, ex_open=ex_open)
+        if factor is not None:
+            base *= factor
+        elif action.action_type in (CorporateActionType.RIGHTS, CorporateActionType.OTHER):
+            unapplied.append(action)
+    return base, unapplied
+
+
 def _check_big_moves(day: DayData) -> Check:
     by_symbol: dict[str, list[CorporateActionRecord]] = {}
     for action in day.actions_today:
@@ -175,10 +192,7 @@ def _check_big_moves(day: DayData) -> Check:
         if not base:
             continue
         actions = by_symbol.get(bar.symbol, [])
-        for action in actions:
-            factor = price_factor(action)
-            if factor is not None:
-                base *= factor
+        base, unapplied_actions = _apply_factors(base, bar.open, actions)
         move = (bar.close / base - 1) * 100
         if abs(move) <= BIG_MOVE_PCT:
             continue
@@ -188,11 +202,7 @@ def _check_big_moves(day: DayData) -> Check:
             "close": str(bar.close),
             "move_pct": str(move.quantize(Decimal("0.01"))),
         }
-        unapplied = [
-            a.raw_text
-            for a in actions
-            if a.action_type in (CorporateActionType.RIGHTS, CorporateActionType.OTHER)
-        ]
+        unapplied = [a.raw_text for a in unapplied_actions]
         if unapplied:
             item["actions"] = ", ".join(t or "" for t in unapplied)
             unadjusted.append(item)
@@ -212,7 +222,7 @@ def _check_big_moves(day: DayData) -> Check:
     if unadjusted:
         parts.append(
             f"{len(unadjusted)} moved more than {BIG_MOVE_PCT}% on a rights issue or scheme "
-            "that Jeron does not adjust for"
+            "that Jeron could not price"
         )
     if first_trades:
         parts.append(
@@ -225,10 +235,11 @@ def _check_big_moves(day: DayData) -> Check:
 
 
 def _check_drops(day: DayData) -> Check:
-    """Stocks that fell more than DROP_HOLD_PCT from the previous close with no split or
-    bonus to explain it. Jeron doesn't adjust demergers and rights issues, so such a
-    fall can be an unadjusted corporate action that would trip stops and distort
-    indicators; the stock's signals and exit actions are held until checked by hand.
+    """Stocks that fell more than DROP_HOLD_PCT from the previous close with no split,
+    bonus, or priced rights issue or demerger (`app.data.adjust`) to explain it. Such a
+    fall can be a corporate action Jeron couldn't price (a scheme, a rights issue
+    without a price) that would trip stops and distort indicators; the stock's signals
+    and exit actions are held until checked by hand.
     A day locked at the lower circuit (one price all day) and a first trade in recent
     sessions are real moves and are left out."""
     by_symbol: dict[str, list[CorporateActionRecord]] = {}
@@ -244,10 +255,7 @@ def _check_drops(day: DayData) -> Check:
         if not base or bar.high == bar.low:
             continue
         actions = by_symbol.get(bar.symbol, [])
-        for action in actions:
-            factor = price_factor(action)
-            if factor is not None:
-                base *= factor
+        base, unapplied_actions = _apply_factors(base, bar.open, actions)
         move = (bar.close / base - 1) * 100
         if move >= -DROP_HOLD_PCT:
             continue
@@ -257,11 +265,7 @@ def _check_drops(day: DayData) -> Check:
             "close": str(bar.close),
             "move_pct": str(move.quantize(Decimal("0.01"))),
         }
-        unapplied = [
-            a.raw_text or ""
-            for a in actions
-            if a.action_type in (CorporateActionType.RIGHTS, CorporateActionType.OTHER)
-        ]
+        unapplied = [a.raw_text or "" for a in unapplied_actions]
         if unapplied:
             item["actions"] = ", ".join(unapplied)
         items.append(item)

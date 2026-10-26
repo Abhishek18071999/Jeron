@@ -135,3 +135,94 @@ def test_unexplained_drop_goes_to_check_by_hand(empty_session):
     assert "The rules alone say: sell all, time stop" in flat.problem
     text = preopen_message(p)
     assert "CHECK BY HAND" in text and "SELL ALL" not in text
+
+
+def _signal(s, account_id: int, ticker: str, day: date, valid: date, stop: str = "92"):
+    from uuid import uuid4
+
+    from app.models import SignalRecord
+
+    payload = {
+        "ticker": ticker,
+        "tier": "swing",
+        "conviction": 3,
+        "shares": 100,
+        "entry_zone": {"low": 100, "high": 101, "valid_until": valid.isoformat()},
+        "stop": {"price": float(stop), "type": "ATR", "reason": "test"},
+    }
+    s.add(
+        SignalRecord(
+            signal_id=uuid4(),
+            account_id=account_id,
+            ticker=ticker,
+            signal_date=day,
+            research_only=False,
+            payload=payload,
+            created_at=datetime(2025, 8, 1, 19, 0, tzinfo=IST),
+        )
+    )
+
+
+def test_entries_are_rechecked_before_the_open(empty_session):
+    from app import halt
+    from app.models import BacktestRun, PaperAccount
+
+    s = empty_session
+    _setup(s, DAYS[44])
+    for name in ("BUYA", "BUYB", "SPLITX"):
+        store.save_bars(s, store.NSE_BARS, [_bar(name, d, 100) for d in DAYS[:45]])
+    run = BacktestRun(
+        strategy_key="rs-pullback",
+        strategy_version="rs-pullback-v1",
+        strategy_name="t",
+        tier="swing",
+        data_start=DAYS[0],
+        data_end=DAYS[44],
+        oos_start=DAYS[0],
+        holdout_start=DAYS[0],
+        fingerprint="x",
+    )
+    s.add(run)
+    s.flush()
+    account = PaperAccount(
+        strategy_key="rs-pullback",
+        strategy_version="rs-pullback-v1",
+        params_label="t",
+        backtest_run_id=run.id,
+        live_eligible=True,
+        start_date=DAYS[0],
+        capital=Decimal("1000000"),
+    )
+    s.add(account)
+    s.flush()
+    day = DAYS[45]
+    from tests.test_paper_db import _scans
+
+    _scans(s, [DAYS[44]])  # the plan reads the latest scan's day
+    for name in ("BUYA", "BUYB", "SPLITX"):
+        _signal(s, account.id, name, DAYS[44], day)
+    _signal(s, account.id, "OLD", DAYS[40], DAYS[41])  # expired: not shown
+    store.save_actions(
+        s,
+        store.NSE_ACTIONS,
+        [CorporateActionRecord("SPLITX", day, CorporateActionType.SPLIT, Decimal(2), Decimal(1))],
+    )
+    s.commit()
+    channel = FakeChannel()
+    now = datetime(2025, 8, 4, 8, 30, tzinfo=IST)
+    p, _ = run_preopen(s, day, settings=Settings(web_url=""), channels=[channel], now=now)
+    by = {e.ticker: e for e in p.entries}
+    assert set(by) == {"BUYA", "BUYB", "SPLITX"}
+    assert not by["BUYA"].skip and by["BUYA"].shares > 0
+    assert any("planned after the buys above" in n for n in by["BUYB"].notes) or by["BUYB"].skip
+    assert by["SPLITX"].skip and "ex-date today" in by["SPLITX"].skip[0]
+    text = channel.sent[0][1]
+    assert "BUYS AT THE OPEN" in text and "LIMIT ₹101.00, only if" in text
+    assert "SPLITX (rs-pullback, signal" in text and "SKIP" in text
+
+    # The kill switch: no buys, and the message says so first.
+    halt.stop_all(s, "data looks wrong")
+    p, _ = run_preopen(s, day, settings=Settings(web_url=""), send=False, now=now)
+    assert p.entries == []
+    text = preopen_message(p, halted=halt.halt_state(s).headline())
+    assert text.split("\n")[2].startswith("JERON IS STOPPED")

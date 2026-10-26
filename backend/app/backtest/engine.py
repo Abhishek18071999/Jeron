@@ -42,7 +42,7 @@ import numpy as np
 
 from app.backtest.costs import CostModel
 from app.backtest.features import Array
-from app.backtest.market import Market, Regime
+from app.backtest.market import Market, Regime, crash_guard_days
 from app.backtest.strategies import TIERS, ExitSignal, Params, Tier
 
 # A full-day circuit lock with no published band: the smallest band is 2%.
@@ -92,6 +92,17 @@ class PortfolioRules:
     # (F&O stocks) and an unknown band pass. Paper accounts opened before engine-v3 have
     # it off.
     min_band_pct: float | None = 10.0
+    # Research options from the 2026-10 trading review (docs/plans/review-v1.md). All
+    # off by default, so no strategy version, paper account or signal changes; only
+    # `python -m app.cli research` turns them on.
+    # Before a results meeting: "sell" sells the whole position, "half" sells half, at
+    # the open of the meeting session (the session on or after the meeting date).
+    results_exit: str | None = None
+    # No new entries while the index rebounds hard off a bear market
+    # (`app.backtest.market.crash_guard_days`).
+    crash_guard: bool = False
+    # False: no time stop (the review's "warn, don't sell").
+    time_stop: bool = True
 
 
 @dataclass(frozen=True)
@@ -157,6 +168,8 @@ class Trade:
     open_at_end: bool = False
     book: str = ""
     exit_rule: ExitSignal | None = None
+    # results_exit "half": sell half at the next open (once per results meeting).
+    pending_half: bool = False
 
     @property
     def risk(self) -> float:
@@ -212,6 +225,9 @@ class Skip:
     s: int
     day: int
     reason: str
+    # The order's stop, for an order skipped at the open (its missed outcome is
+    # measured, `app.backtest.missed`).
+    stop: float = math.nan
 
 
 @dataclass
@@ -362,6 +378,12 @@ def simulate(
         for k in np.flatnonzero(idx >= 0):
             last_close[k] = before[k, idx[k]]
     books = _books(schedule)
+    guard = crash_guard_days(m.nifty500) if rules.crash_guard else None
+    results_next = None
+    if rules.results_exit is not None and m.results_session is not None:
+        # Sell at the open of the meeting session: decided at the close before it.
+        results_next = np.zeros_like(m.results_session)
+        results_next[:, :-1] = m.results_session[:, 1:]
 
     def sell(trade: Trade, day: int, price: float, shares: float, reason: str) -> None:
         nonlocal cash
@@ -399,7 +421,7 @@ def simulate(
             elif rules.zone_touch_fill and lo <= order.zone_high:
                 price = order.zone_high
             else:
-                skipped.append(Skip(s, t, "opened above the entry zone"))
+                skipped.append(Skip(s, t, "opened above the entry zone", order.stop))
                 continue
             fill = price * (1 + order.slippage_pct / 100)
             factor = m.factor[s, t]
@@ -466,6 +488,11 @@ def simulate(
                 dividends.append((t, amount))
             o, h, lo, c = m.open[s, t], m.high[s, t], m.low[s, t], m.close[s, t]
             locked_down = _locked(m, s, t, last_close[s], down=True)
+            if trade.pending_half and trade.entry_day < t and not locked_down:
+                trade.pending_half = False
+                half_raw = math.floor(trade.remaining * m.factor[s, t] / 2)
+                if half_raw >= 1:
+                    sell(trade, t, o, half_raw / m.factor[s, t], "before results, half")
             if trade.pending_exit and trade.entry_day < t:
                 if locked_down:
                     still_open.append(trade)
@@ -524,8 +551,14 @@ def simulate(
                 and trade.exit_rule.when[s, t]
             ):
                 trade.pending_exit = trade.exit_rule.reason
+            if trade.pending_exit is None and results_next is not None and results_next[s, t]:
+                if rules.results_exit == "half":
+                    trade.pending_half = True
+                else:
+                    trade.pending_exit = "before results"
             if (
                 trade.pending_exit is None
+                and rules.time_stop
                 and not trade.reached_1r
                 and trade.sessions >= tier_rules.time_stop_sessions
             ):
@@ -556,6 +589,13 @@ def simulate(
 
         # 4. New signals at today's close, filled tomorrow.
         if (t == end and not orders_on_last_day) or m.quality_fail[t] or t < paused_until:
+            continue
+        if guard is not None and guard[t]:
+            for book in books:
+                variant = book.variant_for(t)
+                if variant is not None:
+                    for k in np.flatnonzero(variant.entries[:, t]):
+                        skipped.append(Skip(int(k), t, "momentum-crash guard"))
             continue
         held = {tr.s for tr in open_trades}
         queue: list[tuple[int, int, Book, Variant, list[int]]] = []
