@@ -11,10 +11,14 @@ has no artificial gap. Volumes are divided by the same factor.
   bonus-adjusted prices without dividend adjustment, so that is the default.
 - Rights issues (decision 0017) use the theoretical ex-rights price: with `n` new
   shares for every `h` held at issue price `S` and a previous close `P`, the factor is
-  (h x P + n x S) / ((h + n) x P). The issue price is the premium in NSE's purpose
-  text ("RGHTS 119:758 PRM RS 218"); the face value (₹1-10) is left out, which moves
-  the factor by well under 1%. A rights issue priced at or above the previous close
-  (nobody takes it up) and one without a ratio or a price are not applied.
+  (h x P + n x S) / ((h + n) x P). NSE's purpose text usually gives only the premium
+  ("RGHTS 119:758 PRM RS 218"); the issue price is the premium plus the face value,
+  which isn't stored. Equity face values run from ₹1 to ₹10, so the factor is worked
+  out at both ends and the midpoint used, only when the two are within 0.5% of each
+  other. On a low-priced stock the face value matters ("RIGHTS 87:38 @PRM RS 2.50",
+  FV 10, an issue price of ₹12.50) and such an issue is not applied. A rights issue
+  priced at or above the previous close (nobody takes it up) and one without a ratio
+  or a price are not applied either.
 - Demergers (decision 0017) use the price NSE's special pre-open session found on the
   ex-date: factor = ex-date open / previous close, as index providers do, because the
   demerged business has no price until it lists weeks later. A gap under 2% is left
@@ -46,18 +50,27 @@ _RIGHTS_PRICE = re.compile(
 DEMERGER_MIN_GAP = Decimal("0.02")
 # A price-implied factor below this is a data problem, not a demerger.
 DEMERGER_MIN_FACTOR = Decimal("0.1")
+# The range of equity face values, for a rights issue whose text gives only the premium.
+FACE_VALUE_RANGE = (Decimal(1), Decimal(10))
+# The most the face value may move a premium-only rights factor before it is not applied.
+RIGHTS_MAX_SPREAD = Decimal("0.005")
 
 
-def rights_issue_price(action: CorporateActionRecord) -> Decimal | None:
-    """The rights issue's price per share: the stored amount, or the premium (or price)
-    in the purpose text."""
+def rights_issue_price(action: CorporateActionRecord) -> tuple[Decimal, Decimal] | None:
+    """The rights issue's price per share as (lowest, highest): the stored amount or an
+    "@ RS" price exactly, or the premium plus a face value somewhere in
+    `FACE_VALUE_RANGE`."""
     if action.amount and action.amount > 0:
-        return action.amount
+        return action.amount, action.amount
     match = _RIGHTS_PRICE.search((action.raw_text or "").upper())
     if match is None:
         return None
-    value = Decimal((match.group(1) or match.group(2)).replace(",", ""))
-    return value if value > 0 else None
+    if match.group(1):
+        premium = Decimal(match.group(1).replace(",", ""))
+        low, high = FACE_VALUE_RANGE
+        return premium + low, premium + high
+    price = Decimal(match.group(2).replace(",", ""))
+    return (price, price) if price > 0 else None
 
 
 def is_demerger(action: CorporateActionRecord) -> bool:
@@ -66,16 +79,25 @@ def is_demerger(action: CorporateActionRecord) -> bool:
     ).upper().replace(" ", "")
 
 
+def _terp_factor(held: Decimal, new: Decimal, price: Decimal, prev_close: Decimal) -> Decimal:
+    return (held * prev_close + new * price) / ((held + new) * prev_close)
+
+
 def rights_factor(action: CorporateActionRecord, prev_close: Decimal | None) -> Decimal | None:
-    """Theoretical ex-rights price / previous close; None when it can't be worked out
-    or the issue is priced at or above the market."""
-    held, new, price = action.ratio_old, action.ratio_new, rights_issue_price(action)
-    if not (held and new and price and prev_close) or held <= 0 or new <= 0 or prev_close <= 0:
+    """Theoretical ex-rights price / previous close; None when it can't be worked out,
+    the issue is priced at or above the market, or the unknown face value moves the
+    factor by more than `RIGHTS_MAX_SPREAD`."""
+    held, new, prices = action.ratio_old, action.ratio_new, rights_issue_price(action)
+    if not (held and new and prices and prev_close) or held <= 0 or new <= 0 or prev_close <= 0:
         return None
-    if price >= prev_close:
+    low, high = prices
+    if high >= prev_close:
         return None
-    factor = (held * prev_close + new * price) / ((held + new) * prev_close)
-    return factor.quantize(FACTOR_PLACES)
+    lowest = _terp_factor(held, new, low, prev_close)
+    highest = _terp_factor(held, new, high, prev_close)
+    if highest - lowest > RIGHTS_MAX_SPREAD:
+        return None
+    return ((lowest + highest) / 2).quantize(FACTOR_PLACES)
 
 
 def demerger_factor(prev_close: Decimal | None, ex_open: Decimal | None) -> Decimal | None:

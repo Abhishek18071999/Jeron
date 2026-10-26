@@ -98,7 +98,7 @@ def test_priced_demerger_and_rights_issue_explain_the_gap():
         CorporateActionType.RIGHTS,
         Decimal(1),
         Decimal(1),
-        raw_text="RIGHTS 1:1 @ PREMIUM RS 20",
+        raw_text="RIGHTS 1:1 @ RS 20",
     )
     report = build_report(
         clean_day(

@@ -36,8 +36,9 @@ def test_price_factors():
 
 
 def test_rights_issue_uses_the_theoretical_ex_rights_price():
-    # 119 new for 758 held at ₹218 (the premium; face value left out), previous close 300:
-    # TERP = (758 x 300 + 119 x 218) / 877 = 288.873..., factor 0.962911.
+    # 119 new for 758 held at a premium of ₹218, previous close 300. With a face value of
+    # ₹1 the issue price is 219, factor 0.963379; with ₹10 it is 228, factor 0.967420;
+    # 0.4% apart, so the midpoint, 0.965399.
     rights = CorporateActionRecord(
         "X",
         D3,
@@ -46,7 +47,7 @@ def test_rights_issue_uses_the_theoretical_ex_rights_price():
         Decimal(758),
         raw_text="RGHTS 119:758 PRM RS 218",
     )
-    assert price_factor(rights, Decimal(300)) == Decimal("0.962911")
+    assert price_factor(rights, Decimal(300)) == Decimal("0.965399")
     premium = CorporateActionRecord(
         "X",
         D3,
@@ -55,11 +56,22 @@ def test_rights_issue_uses_the_theoretical_ex_rights_price():
         Decimal(6),
         raw_text="Rights 1:6 @ Premium Rs 1,201/-",
     )
-    assert rights_issue_price(premium) == Decimal(1201)
-    assert price_factor(premium, Decimal(1500)) == Decimal("0.971524")
+    assert rights_issue_price(premium) == (Decimal(1202), Decimal(1211))
+    assert price_factor(premium, Decimal(1500)) == Decimal("0.972048")
     assert rights_issue_price(
         CorporateActionRecord("X", D3, CorporateActionType.RIGHTS, raw_text="RIGHTS 1:5 @ RS 50")
-    ) == Decimal(50)
+    ) == (Decimal(50), Decimal(50))
+    # A low-priced stock: the face value is most of the issue price (Vodafone Idea, 2019:
+    # premium ₹2.50 on a ₹10 face value). ₹3.50 or ₹12.50 is too wide to guess.
+    idea = CorporateActionRecord(
+        "IDEA",
+        D3,
+        CorporateActionType.RIGHTS,
+        Decimal(87),
+        Decimal(38),
+        raw_text="RIGHTS 87:38 @PRM RS 2.50",
+    )
+    assert price_factor(idea, Decimal(18)) is None
     # Priced at or above the market: nobody takes it up, nothing to adjust.
     assert price_factor(rights, Decimal(200)) is None
     # No ratio.

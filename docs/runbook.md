@@ -56,7 +56,8 @@ scheduler is down; only the outside heartbeat can tell you that. See "Heartbeat"
 3. A demerger or rights issue: since decision 0017 Jeron adjusts both (rights by the
    theoretical ex-rights price, demergers by the ex-date's special pre-open price). The
    adjustment log shows the factor used. One it could not price (no issue price in
-   NSE's text, a scheme of arrangement) stays flagged by quality check #9: signals
+   NSE's text, a premium too small to price without the face value, a scheme of
+   arrangement) stays flagged by quality check #9: signals
    HELD, exits under CHECK BY HAND. Decide by hand: the broker's adjusted chart is the
    reference.
 4. A bad close from NSE (the second source disagrees by more than 0.5% and nothing
