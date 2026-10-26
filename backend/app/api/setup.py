@@ -16,6 +16,7 @@ from app.backups import BackupStatus, configured_status
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.db import get_session
+from app.halt import halt_state
 from app.models import (
     Announcement,
     BacktestRun,
@@ -323,6 +324,35 @@ def setup_view(session: SessionDep) -> SetupView:
                 "in .env.",
                 "Run `docker compose up -d` again.",
             ],
+        )
+    )
+    halt = halt_state(session)
+    if halt is not None:
+        # The kill switch first: nothing else matters until it is off.
+        steps.insert(
+            0,
+            Step(
+                key="halt",
+                title="Jeron is stopped",
+                state="you",
+                detail=halt.headline(),
+                todo=[
+                    "When it is sorted (docs/runbook.md), run `docker compose exec backend "
+                    "python -m app.cli resume`."
+                ],
+            ),
+        )
+    steps.append(
+        Step(
+            key="heartbeat",
+            title="Told when Jeron is off",
+            state="done" if settings.heartbeat_url else "waiting",
+            detail="Each daily run pings your outside monitor, which alerts you when the "
+            "ping doesn't come."
+            if settings.heartbeat_url
+            else "Optional. A missed run is alerted at 19:45 while the computer is on; when "
+            "it is off or asleep, only an outside monitor can tell you. docs/runbook.md, "
+            '"Heartbeat", sets one up (JERON_HEARTBEAT_URL).',
         )
     )
     return SetupView(

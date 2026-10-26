@@ -187,3 +187,18 @@ def test_setup_page_shows_backups(session, tmp_path, monkeypatch):
     monkeypatch.setenv("JERON_BACKUPS_MOUNT", "")
     get_settings.cache_clear()
     assert "backups" not in {s["key"] for s in client.get("/setup").json()["steps"]}
+
+
+def test_setup_shows_the_kill_switch_and_the_heartbeat(session):
+    from app import halt
+
+    client = TestClient(app)
+    steps = client.get("/setup").json()["steps"]
+    keys = [s["key"] for s in steps]
+    assert "halt" not in keys
+    assert {s["key"]: s for s in steps}["heartbeat"]["state"] == "waiting"
+    halt.stop_all(session, "checking prices")
+    steps = client.get("/setup").json()["steps"]
+    assert steps[0]["key"] == "halt" and "checking prices" in steps[0]["detail"]
+    halt.resume(session)
+    assert client.get("/setup").json()["steps"][0]["key"] != "halt"
