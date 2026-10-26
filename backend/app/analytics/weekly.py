@@ -10,6 +10,11 @@ Summary, after the last session of each week:
 Early warnings (`app.analytics.compare.early_warning`): an active account whose last 20
 paper trades average below the backtest's 5th percentile is listed, with no change made.
 
+Strategy health (`app.analytics.health`): an active account whose paper record sits
+below the backtest's 20th percentile for that many trades, or that trades unusually
+often or seldom, is listed, saying whether it reads as ordinary variance or as
+deterioration. Nothing changes automatically.
+
 Revalidation: a strategy whose rolling 50-trade expectancy (paper, or my real trades)
 falls below 0, or whose paper drawdown exceeds 1.5 x its backtest maximum, is retired:
 its paper account stops issuing signals, and the summary says so. Retired accounts are
@@ -28,6 +33,7 @@ from app.alerts.channels import Channel, channels_from
 from app.alerts.format import inr
 from app.alerts.job import NOT_SET_UP, AlertOutcome, _send
 from app.analytics.compare import EARLY_TRADES, early_warning
+from app.analytics.strategies import account_health, record_retirement
 from app.config import Settings, get_settings
 from app.journal.calc import MIN_SAMPLE
 from app.journal.service import EntryView, entry_views
@@ -89,6 +95,7 @@ class Weekly:
     retired: list[Retirement] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     early_warnings: list[str] = field(default_factory=list)
+    health: list[str] = field(default_factory=list)
 
 
 def week_start(day: date) -> date:
@@ -164,6 +171,7 @@ def revalidate(session: Session, day: date, retire: bool = True) -> list[Retirem
                 account.status = "retired"
                 account.retired_reason = reason[:300]
                 account.retired_on = day
+                record_retirement(session, account.strategy_version, reason, day)
     session.commit()
     return out
 
@@ -188,6 +196,22 @@ def early_warnings(session: Session) -> list[str]:
         warning = early_warning([float(r) for r in reversed(newest)], [float(r) for r in backtest])
         if warning:
             out.append(f"{account.strategy_version}: {warning}")
+    return out
+
+
+def health_lines(session: Session) -> list[str]:
+    """Active accounts whose paper record has left the backtest's usual range or shows a
+    flag (`app.analytics.health`): ordinary variance is said as such, so it isn't read
+    as a broken edge."""
+    out = []
+    for account in session.scalars(
+        select(PaperAccount).where(PaperAccount.status == "active").order_by(PaperAccount.id)
+    ):
+        h = account_health(session, account)
+        if h.verdict in ("too early", "on track") and not h.flags:
+            continue
+        out.append(f"{account.strategy_version}: {h.verdict}. {h.detail}")
+        out += [f"  {f.text}" for f in h.flags]
     return out
 
 
@@ -287,6 +311,7 @@ def build_weekly(session: Session, day: date, retire: bool = True) -> Weekly:
             what = "skipped" if mine is not None else "not acted on"
             w.mistakes.append(f"{paper.ticker}: {what}; paper made {r:+.2f}R")
     w.early_warnings = early_warnings(session)
+    w.health = health_lines(session)
     w.retired = revalidate(session, day, retire)
     return w
 
@@ -313,6 +338,9 @@ def weekly_message(w: Weekly, web_url: str = "") -> str:
     if w.early_warnings:
         lines += ["", "EARLY WARNINGS"]
         lines += [f"- {e}" for e in w.early_warnings]
+    if w.health:
+        lines += ["", "STRATEGY HEALTH (paper against the backtest)"]
+        lines += [f"- {h}" for h in w.health]
     if w.retired:
         lines += ["", "RETIRED BY THE WEEKLY REVALIDATION"]
         lines += [f"- {r.strategy_version}: {r.reason}" for r in w.retired]

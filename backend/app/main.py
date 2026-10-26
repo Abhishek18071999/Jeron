@@ -21,6 +21,7 @@ from app.api import (
     settings,
     setup,
     stocks,
+    strategies,
     watchlist,
 )
 from app.api.security import ApiGuard
@@ -56,3 +57,4 @@ app.include_router(settings.router)
 app.include_router(sections.router)
 app.include_router(news.router)
 app.include_router(setup.router)
+app.include_router(strategies.router)
