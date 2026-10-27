@@ -6,6 +6,7 @@ import { BriefingList } from "@/components/briefing";
 import { HeatMeter, SectorBars } from "@/components/portfolio";
 import { StateBadge } from "@/components/sections";
 import { StatusBadge } from "@/components/status-badge";
+import { EvidenceBadge, HealthText, StrategyStatusBadge } from "@/components/strategy-status";
 import {
   Badge,
   Card,
@@ -31,6 +32,7 @@ import {
   type SectionSummary,
   type SetupView,
   type SignalBrief,
+  type StrategyRow,
   type Watchlist,
   fetchHealth,
   getJson,
@@ -98,7 +100,7 @@ function MorningBriefing({ d, p }: { d: Dashboard; p: Portfolio | null }) {
   );
 }
 
-function SignalItem({ s, resultsOn }: { s: SignalBrief; resultsOn?: string }) {
+function SignalItem({ s, resultsOn, strategy }: { s: SignalBrief; resultsOn?: string; strategy?: StrategyRow }) {
   const notChecked = s.event_risk?.startsWith("Results calendar");
   return (
     <li className="border-t border-line py-2.5 first:border-t-0 first:pt-0">
@@ -107,6 +109,12 @@ function SignalItem({ s, resultsOn }: { s: SignalBrief; resultsOn?: string }) {
           {s.ticker}
         </Link>
         <ResearchBadge research={s.research_only} />
+        {strategy && !s.research_only && (
+          <>
+            <StrategyStatusBadge status={strategy.status.status} title={strategy.status.reason} />
+            <EvidenceBadge rating={strategy.evidence?.rating} title={strategy.evidence?.summary} />
+          </>
+        )}
         {resultsOn && (
           <Badge tone="warn" title="A results board meeting is due: expect a gap; no entry from 3 sessions before it">
             Results {shortDate(resultsOn)}
@@ -131,7 +139,8 @@ function SignalItem({ s, resultsOn }: { s: SignalBrief; resultsOn?: string }) {
   );
 }
 
-function NewSignals({ d }: { d: Dashboard }) {
+function NewSignals({ d, strategies }: { d: Dashboard; strategies: StrategyRow[] }) {
+  const byKey = new Map(strategies.map((s) => [s.key, s]));
   const live = d.signals.filter((s) => !s.research_only);
   const research = d.signals.filter((s) => s.research_only);
   const ahead = d.results_ahead ?? {};
@@ -154,7 +163,7 @@ function NewSignals({ d }: { d: Dashboard }) {
           {live.length > 0 ? (
             <ul>
               {live.map((s) => (
-                <SignalItem key={s.signal_id} s={s} resultsOn={ahead[s.ticker]} />
+                <SignalItem key={s.signal_id} s={s} resultsOn={ahead[s.ticker]} strategy={byKey.get(s.strategy_key)} />
               ))}
             </ul>
           ) : (
@@ -312,10 +321,109 @@ function WatchHits({ w }: { w: Watchlist | null }) {
   );
 }
 
+// Strategy health: each paper-traded strategy's status, how strong its backtest
+// evidence is, and whether paper still looks like the backtest (decision 0018).
+function StrategyHealthCard({ strategies }: { strategies: StrategyRow[] | null }) {
+  if (!strategies) return null;
+  const shown = strategies.filter((s) => s.account_id !== null || s.status.status !== "research");
+  return (
+    <Card
+      title="Strategy health"
+      subtitle="Paper results against what the backtest says to expect for that many trades"
+      action={
+        <Link href="/research" className="text-muted hover:text-fg hover:underline">
+          Research
+        </Link>
+      }
+    >
+      {shown.length === 0 ? (
+        <EmptyState command={cli("paper")}>No strategy is paper trading yet.</EmptyState>
+      ) : (
+        <ul className="space-y-3 text-sm">
+          {shown.map((s) => (
+            <li key={s.version} className="border-t border-line pt-3 first:border-t-0 first:pt-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {s.run_id ? (
+                  <Link href={`/backtests/${s.run_id}`} className="font-semibold hover:underline">
+                    {s.version}
+                  </Link>
+                ) : (
+                  <span className="font-semibold">{s.version}</span>
+                )}
+                <StrategyStatusBadge status={s.status.status} title={s.status.reason} />
+                <EvidenceBadge rating={s.evidence?.rating} title={s.evidence?.summary} />
+                <span className="ml-auto text-xs">
+                  Paper: <HealthText health={s.health} />
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted">
+                {s.status.reason}
+                {s.status.since && <> Since {shortDate(s.status.since)}.</>}
+              </p>
+              {s.health && s.health.verdict !== "too early" && <p className="mt-0.5 text-xs">{s.health.detail}</p>}
+              {s.health?.flags.map((f) => (
+                <p key={f.key} className="mt-0.5 text-xs text-warn">
+                  {f.text}
+                </p>
+              ))}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-xs text-muted">
+        Passing the backtest gates never puts a strategy on real money: only you can move it to small capital, with{" "}
+        <code>strategy-status</code>, once paper and the evidence allow it.
+      </p>
+    </Card>
+  );
+}
+
+// The four answers before anything else: market, risk, candidates, data.
+function DecisionStrip({
+  d,
+  p,
+  mood,
+  live,
+}: {
+  d: Dashboard;
+  p: Portfolio | null;
+  mood: MarketMood | null;
+  live: number;
+}) {
+  const quality = d.quality?.status;
+  const stale = !!p?.stale && !!quality; // behind the expected session (nothing loaded yet: no status)
+  const dataTone = stale || quality === "fail" ? "bad" : quality === "warn" ? "warn" : quality ? "good" : "neutral";
+  const heat = p ? Number(p.totals.heat_pct) : null;
+  return (
+    <section aria-label="Today at a glance" className="grid grid-cols-2 gap-3 rounded-xl border border-line bg-surface px-4 py-3 sm:grid-cols-4 sm:px-5">
+      <Stat
+        label="Market regime"
+        value={mood ? mood.mode : "-"}
+        tone={mood?.mode === "defend" ? "bad" : mood?.mode === "attack" ? "good" : "neutral"}
+        sub={mood ? `risk x${mood.risk_multiplier}` : "not loaded"}
+      />
+      <Stat
+        label="Portfolio heat"
+        value={heat === null ? "-" : pctText(heat, 1)}
+        tone={p && heat !== null && heat > Number(p.totals.heat_warn_pct) ? "warn" : "neutral"}
+        sub={p ? `limit ${pctText(p.totals.heat_block_pct, 0)}` : "not loaded"}
+        help="Open risk (entry to stop on every position) as a share of capital."
+      />
+      <Stat label="New candidates" value={live} sub={d.as_of ? `scan of ${shortDate(d.as_of)}` : "no scan yet"} />
+      <Stat
+        label="Data status"
+        value={stale ? "stale" : quality === "fail" ? "failed" : quality === "warn" ? "warnings" : quality ? "verified" : "-"}
+        tone={dataTone}
+        sub={d.quality ? `checked ${shortDate(d.quality.trade_date)}` : "no report yet"}
+      />
+    </section>
+  );
+}
+
 function BehindTheScenes({ d }: { d: Dashboard }) {
   const alertsOn = d.alerts.telegram || d.alerts.email;
   return (
-    <Card title="Behind the scenes">
+    <Card title="System health">
       <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <dt className="text-xs text-muted">Data quality</dt>
@@ -406,8 +514,17 @@ function SetupBanner({ setup }: { setup: SetupView | null }) {
 export default async function Home({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
   const { day } = await searchParams;
   const dayParam = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `?day=${day}` : "";
-  const [result, health, moodResult, portfolioResult, watchResult, sectionsResult, newsResult, setupResult] =
-    await Promise.all([
+  const [
+    result,
+    health,
+    moodResult,
+    portfolioResult,
+    watchResult,
+    sectionsResult,
+    newsResult,
+    setupResult,
+    strategiesResult,
+  ] = await Promise.all([
     getJson<Dashboard>("/dashboard"),
     fetchHealth(),
     getJson<MarketMood>("/market/mood"),
@@ -416,6 +533,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
     getJson<SectionSummary[]>("/sections"),
     getJson<NewsView>("/news/latest"),
     getJson<SetupView>("/setup"),
+    getJson<StrategyRow[]>("/strategies"),
   ]);
   const db = health?.database === "ok";
   if (!result.ok) {
@@ -430,6 +548,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
   const d = result.data;
   const mood = moodResult.ok ? moodResult.data : null;
   const p = portfolioResult.ok ? portfolioResult.data : null;
+  const strategies = strategiesResult.ok ? strategiesResult.data : null;
   const actions =
     (p && !p.stale
       ? p.holdings.filter(
@@ -462,13 +581,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
         }
       />
       <SetupBanner setup={setupResult.ok ? setupResult.data : null} />
+      <DecisionStrip d={d} p={p} mood={mood} live={live} />
       <MoodBanner mood={mood} />
       <SectionsStrip sections={sectionsResult.ok ? sectionsResult.data : null} />
       <div className="grid items-start gap-4 lg:grid-cols-3">
         <MorningBriefing d={d} p={p} />
-        <NewSignals d={d} />
+        <NewSignals d={d} strategies={strategies ?? []} />
         <YourRisk p={p} />
       </div>
+      <StrategyHealthCard strategies={strategies} />
       <WatchHits w={watchResult.ok ? watchResult.data : null} />
       <NewsCard
         title="Latest company news"

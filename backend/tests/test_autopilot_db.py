@@ -189,6 +189,28 @@ def test_setup_page_shows_backups(session, tmp_path, monkeypatch):
     assert "backups" not in {s["key"] for s in client.get("/setup").json()["steps"]}
 
 
+def test_paper_traded_versions_without_an_evidence_rating_are_backtested_once(session):
+    from tests.journal_helpers import make_account
+
+    store.save_bars(session, store.NSE_BARS, [_bar("AAA", date(2025, 3, 3), 100)])
+    session.add(ScanRun(trade_date=date(2025, 3, 3), score_version=SCORE_VERSION, status="ok"))
+    for key, s in STRATEGIES.items():
+        _save_run(session, s.version, key)
+    for key, c in COMBINED.items():
+        _save_run(session, c.version, key)
+    rs = STRATEGIES["rs-pullback"]
+    account = make_account(session, key=rs.key)
+    account.strategy_version = rs.version
+    session.get_one(BacktestRun, account.backtest_run_id).strategy_version = rs.version
+    session.commit()
+    assert autopilot.unrated(session) == ["rs-pullback"]
+    ran: list[list[str]] = []
+    assert _run(session, ran) == "backtest"
+    assert ran[-1] == ["backtest", "--strategy", "rs-pullback"]
+    assert _run(session, ran) == "paper"
+    assert _run(session, ran) is None  # rated once per confidence version, not every tick
+
+
 def test_setup_shows_the_kill_switch_and_the_heartbeat(session):
     from app import halt
 

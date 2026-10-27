@@ -29,6 +29,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.analytics.strategies import may_resume
 from app.backtest.costs import CostModel
 from app.backtest.engine import Order, PortfolioRules, SimResult, Skip, Trade, Variant, simulate
 from app.backtest.job import load_inputs
@@ -678,10 +679,13 @@ def run_paper(
             work.append((account, session.get_one(BacktestRun, account.backtest_run_id)))
             continue
         retired = retired_account(session, strategy)
-        if retired is not None and not restart:
+        # A retired version paper-trades again only after a documented revalidation
+        # (`strategy-status VERSION paper --reason ...`, decision 0018), --restart or not.
+        if retired is not None and not may_resume(session, strategy.version):
             message = (
                 f"Retired on {retired.retired_on} ({retired.retired_reason}); a new strategy "
-                "version is needed to paper-trade it again."
+                "version, or a revalidation recorded with strategy-status, is needed to "
+                "paper-trade it again."
             )
             log(f"{key}: {message}")
             outcome.accounts.append(AccountOutcome(key, retired.id, "retired", notes=[message]))

@@ -7,7 +7,8 @@ Two lanes, so a long import never holds up the daily run:
   price history when there is none (`backfill`), the first `daily`, announcements for
   days whose PR bundle is stored but whose `an` file was never read (`events`, from the
   cache), the news labeller's last 30 days once a day when its key is set, a backtest of
-  every strategy version that has none (and of quality-trend after new results), then
+  every strategy version that has none (and of quality-trend after new results, and once
+  more of a paper-traded version whose newest run has no evidence rating), then
   `paper`;
 - the imports lane: each file in the imports folder (the `imports` folder next to
   docker-compose.yml, or uploaded on the Setup page) is recognised by its columns and
@@ -37,12 +38,13 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.backtest.confidence import CONFIDENCE_VERSION
 from app.backtest.strategies import COMBINED, STRATEGIES
 from app.config import get_settings
 from app.data import store
 from app.data.deals import is_insider_file
 from app.data.pipeline import ANNOUNCEMENTS_SOURCE
-from app.models import BacktestRun, DailyBar, ScanRun, SourceFile
+from app.models import BacktestRun, DailyBar, PaperAccount, ScanRun, SourceFile
 from app.signals.build import IST
 
 log = logging.getLogger("jeron.autopilot")
@@ -322,6 +324,33 @@ def untested(session: Session) -> list[str]:
     return [k for k, version in every.items() if version not in done]
 
 
+def unrated(session: Session) -> list[str]:
+    """Strategy keys with an active paper account whose newest run has no evidence
+    rating (made before the confidence engine, decision 0018): backtested once more so
+    their status shows how strong the evidence is."""
+    active = set(
+        session.scalars(
+            select(PaperAccount.strategy_version).where(PaperAccount.status == "active")
+        )
+    )
+    newest = dict(
+        session.execute(
+            select(BacktestRun.strategy_version, func.max(BacktestRun.id)).group_by(
+                BacktestRun.strategy_version
+            )
+        ).all()
+    )
+    out = []
+    for key, strategy in STRATEGIES.items():
+        run_id = newest.get(strategy.version)
+        if strategy.version not in active or run_id is None:
+            continue
+        run = session.get(BacktestRun, run_id)
+        if run is not None and "confidence" not in run.summary:
+            out.append(key)
+    return out
+
+
 def _inputs_signature(session: Session) -> str:
     from app.fundamentals.job import results_loaded
 
@@ -353,6 +382,8 @@ def next_step(session: Session, today: date, news_on: bool) -> Step | None:
     tried = state.get("backtests_tried", {})
     signature = _inputs_signature(session)
     keys = [k for k in untested(session) if tried.get(k) != signature]
+    rated = state.get("rated", {})
+    keys += [k for k in unrated(session) if rated.get(k) != CONFIDENCE_VERSION and k not in keys]
     if state.get("results_changed") and "quality-trend" not in keys:
         keys.append("quality-trend")
     if state.get("importing") or pending(imports_dir()):
@@ -379,7 +410,9 @@ def _finish(step: Step, session: Session, code: int, today: date) -> None:
         tried = load_state().get("backtests_tried", {})
         signature = _inputs_signature(session)
         tried.update({k: signature for k in keys})
-        _update(backtests_tried=tried, results_changed=None, paper_due=True)
+        rated = load_state().get("rated", {})
+        rated.update({k: CONFIDENCE_VERSION for k in keys})
+        _update(backtests_tried=tried, rated=rated, results_changed=None, paper_due=True)
     elif step.name == "paper":
         _update(paper_due=None)
 

@@ -48,7 +48,13 @@ are part of done, never commit secrets.
     options, `PortfolioRules` fields off by default, run only by `research`, never saved
     as runs; `docs/plans/review-v1.md`), `stats.py` (also the Nifty 500 cash-sweep
     line reported beside the gates, M8 part 2, and `risk_profile`: Sortino, streaks, time
-    under water, exposure, turnover; reporting only), `job.py` (database). A strategy may set
+    under water, exposure, turnover; reporting only), `confidence.py` (the evidence-strength
+    layer beside the gates, decision 0018: bootstrap intervals, block-bootstrap drawdown,
+    trade-order Monte Carlo, concentration, the rating; pure; the walk-forward's
+    `robustness` re-runs slippage x2, charges x1.5 and one-session-late entries and reads
+    every grid point alone; stored as `summary.confidence`, with `pnl_breakdown` and
+    `provenance`: code hash, settings hash, data fingerprint, `app/provenance.py`),
+    `job.py` (database). A strategy may set
     `single_regime` (Gate 5 judged in its own regimes) only if registered from 2026-10-18.
     Changing a strategy's rules means a new strategy version; runs are never
     overwritten. The engine is also the risk manager (spec section 5); the sector cap,
@@ -100,7 +106,14 @@ are part of done, never commit secrets.
     AT THE OPEN"; the tax timing notes).
   - `app/analytics/` `compare.py` (backtest vs paper vs real: gates, expected ranges,
     stages, causes of divergence, the 20-trade early warning; pure), `service.py` (database) and `weekly.py` (weekly
-    summary and revalidation, which retires failing strategies' paper accounts).
+    summary and revalidation, which retires failing strategies' paper accounts);
+    `health.py` (the degradation monitor: paper as a percentile of the backtest for that
+    many trades, ordinary variance vs deteriorating, frequency/loss/sector flags, the
+    50-trade rule's false-retirement rate; pure), `status.py` (Research / Paper / Small
+    capital / Approved / Retired and what each promotion needs; pure) and `strategies.py`
+    (database: `/strategies`, `/strategies/registry`, `set_status`, `may_resume`; table
+    `strategy_status_changes`, append-only; decision 0018, `docs/plans/confidence-v1.md`).
+    A retired version paper-trades again only after `may_resume`.
   - `app/sections/` the four sections (swing, intraday, positional, long-term;
     `docs/plans/sections-v1.md`, decision 0014): `calc.py` (what each holds, its state,
     a signal as what/when/how much/why; pure) and `service.py`. Served at `/sections`.
@@ -178,6 +191,7 @@ are part of done, never commit secrets.
     `fundamentals-import FILE...` (quarterly results from
     Financial Results CSVs saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
+    `strategy-status [VERSION STATUS --reason]` (list, or set a status; decision 0018),
     `paper-review` (strategy proposals from paper trades, forward checks),
     `proposal-validate [ID]` (their backtest check),
     `tradebook FILE`, `auth-setup` (the web login's secrets).
@@ -210,8 +224,10 @@ are part of done, never commit secrets.
   plan form recalculates through the read-only `/api/plan` route handler.
   Login (password + TOTP, decision 0012): `src/proxy.ts` guards every route,
   `src/lib/auth.ts`, `src/app/login/`; `/settings` changes risk and alert settings.
-  Today opens with the morning briefing (`src/lib/briefing.ts`, ticks in
-  `src/components/briefing.tsx`); `src/components/trade-picture.tsx` is the R ruler;
+  Today opens with the decision strip (regime, heat, candidates, data status), then the
+  morning briefing (`src/lib/briefing.ts`, ticks in `src/components/briefing.tsx`), and has
+  the Strategy health card (`src/components/strategy-status.tsx`: status, evidence and
+  health labels; `/research/strategies` lists every version and the registry); `src/components/trade-picture.tsx` is the R ruler;
   `src/components/explain.tsx` the tap-to-explain sheet and the copyable command (hidden
   on phones). `Table stack` turns rows into cards on phones (`docs/plans/ui-v2.md`).
   Colours are tokens in `src/app/globals.css` (`text-muted`, `border-line`, `text-good`,

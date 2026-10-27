@@ -1,9 +1,12 @@
 import Link from "next/link";
 
+import { EvidenceBadge } from "@/components/strategy-status";
 import {
   getJson,
+  type BacktestSummary,
   type BacktestTrade,
   type BacktestView,
+  type Interval,
   type CurveStats,
   type EquityPoint,
   type RiskProfile,
@@ -257,6 +260,116 @@ function TradesTable({ trades }: { trades: BacktestTrade[] }) {
   );
 }
 
+const range = (iv: Interval | undefined, digits = 3, unit = "") =>
+  iv ? `${num(iv.low, digits)}${unit} to ${num(iv.high, digits)}${unit}` : "-";
+
+// The confidence engine's evidence card (decision 0018): how sure the numbers are,
+// separate from the gates.
+function EvidenceSection({ summary }: { summary: BacktestSummary }) {
+  const c = summary.confidence;
+  if (!c) {
+    return (
+      <section className="mt-4 rounded-lg border border-line px-4 py-3 text-sm">
+        <p className="flex items-center gap-2 font-semibold">
+          Evidence strength <EvidenceBadge rating={null} />
+        </p>
+        <p className="mt-1 text-muted">
+          This run was made before the confidence engine. Backtest the strategy again to see its intervals, cost and
+          timing checks, and evidence rating.
+        </p>
+      </section>
+    );
+  }
+  const o = c.out_of_sample;
+  const k = c.concentration;
+  const b = summary.pnl_breakdown?.out_of_sample;
+  return (
+    <section className="mt-4 rounded-lg border border-line px-4 py-3 text-sm">
+      <p className="flex flex-wrap items-center gap-2 font-semibold">
+        Evidence strength <EvidenceBadge rating={c.evidence.rating} />
+      </p>
+      <p className="mt-1">{c.evidence.summary}</p>
+      <ul className="mt-2">
+        {c.evidence.checks.map((ch) => (
+          <li key={ch.key}>
+            <span className={ch.passed ? "text-good" : ch.passed === false ? "text-bad" : "text-muted"}>
+              {ch.passed ? "✓" : ch.passed === false ? "✗" : "-"}
+            </span>{" "}
+            {ch.label}: <span className="font-medium">{ch.value}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 grid gap-x-6 gap-y-1 text-xs text-muted sm:grid-cols-2">
+        {o && (
+          <p>
+            95% ranges ({c.resamples.toLocaleString("en-IN")} resamples of {o.trades} trades): expectancy{" "}
+            {range(o.expectancy_r, 3, "R")}, profit factor {range(o.profit_factor, 2)}, win rate{" "}
+            {o.win_rate.low !== null && o.win_rate.high !== null
+              ? `${pct(o.win_rate.low, 0)} to ${pct(o.win_rate.high, 0)}`
+              : "-"}
+            . {pct(o.positive_share, 0)} of resamples come out positive.
+          </p>
+        )}
+        {c.curve && (
+          <p>
+            Max drawdown {range(c.curve.max_drawdown_pct, 1, "%")} (a bad-luck path reaches{" "}
+            {num(c.curve.drawdown_95_pct, 1)}%); CAGR{" "}
+            {c.curve.cagr.low !== null && c.curve.cagr.high !== null
+              ? `${pct(c.curve.cagr.low)} to ${pct(c.curve.cagr.high)}`
+              : "-"}
+            , from {c.curve.block_sessions}-session blocks of the daily returns.
+          </p>
+        )}
+        {c.order && (
+          <p>
+            In another order, the same trades give a longest losing streak of {c.order.losing_streak_median} (1 time in
+            20: {c.order.losing_streak_95}) and a drawdown of {num(c.order.drawdown_r_median, 1)}R (1 in 20:{" "}
+            {num(c.order.drawdown_r_95, 1)}R). Expect these before judging a strategy broken.
+          </p>
+        )}
+        {k && (
+          <p>
+            {k.top_share === null
+              ? `The ${k.trades} trades lose ${num(-k.total_r, 1)}R in total`
+              : `The best 5 trades are ${pct(k.top_share, 0)} of the total R`}
+            {k.best_year && <>; the best year is {k.best_year}</>}
+            {k.best_sector && (
+              <>
+                ; the best sector, {k.best_sector}, is {pct(k.best_sector_share, 0)} of the gains by sector
+              </>
+            )}
+            .
+          </p>
+        )}
+        {c.grid.length > 1 && (
+          <p>
+            Each parameter set on its own over the test period:{" "}
+            {c.grid.map((g) => `${g.label} ${num(g.expectancy_r, 2)}R (${g.trades})`).join("; ")}.
+          </p>
+        )}
+        {b && (
+          <p>
+            Gross to net (test period): {rupees(b.before_slippage)} before slippage, slippage {rupees(b.slippage)},
+            charges {rupees(b.charges)}, dividends {rupees(b.dividends)}, net {rupees(b.net_pnl)}; tax is estimated below.
+          </p>
+        )}
+      </div>
+      {c.evidence.notes.map((n) => (
+        <p key={n} className="mt-2 text-xs text-muted">
+          {n}
+        </p>
+      ))}
+      {summary.provenance && (
+        <p className="mt-2 text-xs text-muted">
+          Reproduce: code {summary.provenance.code}
+          {summary.provenance.git && <> (git {summary.provenance.git.slice(0, 10)})</>}, data{" "}
+          {summary.provenance.data} to {summary.provenance.data_end}, settings {summary.provenance.settings}.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default async function BacktestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [view, trades] = await Promise.all([
@@ -296,7 +409,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
       >
         <p className={`font-semibold ${run.live_eligible ? "text-good" : "text-bad"}`}>
           {run.live_eligible
-            ? "Live-eligible: passes every check, out of sample and after costs."
+            ? "Live-eligible: passes every check, out of sample and after costs. That earns paper trading, not real money: see the evidence below."
             : "Not live-eligible: it fails at least one check below. Jeron will not issue signals from it."}
         </p>
         <ul className="mt-2 text-sm">
@@ -314,6 +427,8 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
           means the result is unlikely to be luck from trying several settings).
         </p>
       </section>
+
+      <EvidenceSection summary={summary} />
 
       <h2 className="mt-8 text-lg font-semibold">Results</h2>
       <StatsTable

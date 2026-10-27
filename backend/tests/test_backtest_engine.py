@@ -14,7 +14,14 @@ import pytest
 from app.backtest.costs import CostModel
 from app.backtest.engine import PortfolioRules, simulate
 from app.backtest.strategies import Tier
-from tests.backtest_helpers import NO_COSTS, one_stock_market, signal_on, weekdays
+from tests.backtest_helpers import (
+    NO_COSTS,
+    market_of,
+    one_stock_market,
+    signal_on,
+    signals_on,
+    weekdays,
+)
 
 SIGNAL = (100.0, 100.5, 99.5, 100.0)
 FLAT = (101.0, 101.5, 99.5, 101.0)
@@ -254,3 +261,38 @@ def test_paper_options_keep_positions_open_and_order_on_the_last_day():
     )
     assert [(o.signal_day, o.raw_shares) for o in fresh.pending] == [(3, 1980)]
     assert paper.heat_pct[1] == pytest.approx(4 * 1980 / paper.equity[1] * 100)
+
+
+def _three_signals(scores):
+    """Three stocks signalling on day 0 with these scores, filling on day 1."""
+    m = market_of({s: [SIGNAL, (100.0, 101.0, 99.0, 100.0), FLAT] for s in ("A", "B", "C")})
+    for k, score in enumerate(scores):
+        m.score[k, :] = score
+    return m
+
+
+def test_simultaneous_signals_compete_for_the_free_slots():
+    """Two free slots, three signals: the two highest scores are ordered, the third is
+    skipped (the review's "competing orders")."""
+    m = _three_signals([80.0, 95.0, 90.0])
+    rules = replace(NO_INTEREST, max_positions=2)
+    result = simulate(m, Tier.SWING, [(0, signals_on(m, 0))], 0, 2, rules, NO_COSTS)
+    assert [m.symbols[o.s] for o in result.orders] == ["B", "C"]
+    assert [(m.symbols[s.s], s.reason) for s in result.skipped] == [("A", "no free position slot")]
+    assert sorted(t.symbol for t in result.trades) == ["B", "C"]
+
+
+def test_orders_beyond_the_cash_fill_partly():
+    """Each order is sized on equity (60% cap: 594 shares at the ₹101 zone top), but
+    the cash is spent in order of score: the first fills in full at ₹100, the second
+    gets what is left, floor(40,600 / (100 x 1.002)) = 405 shares, and nothing is left
+    for the third."""
+    m = _three_signals([95.0, 90.0, 85.0])
+    rules = replace(
+        NO_INTEREST, capital=100_000, risk_pct=50.0, max_position_pct=60.0, heat_block_pct=500.0
+    )
+    result = simulate(m, Tier.SWING, [(0, signals_on(m, 0))], 0, 2, rules, NO_COSTS)
+    assert [o.raw_shares for o in result.orders] == [594, 594, 594]
+    by_symbol = {t.symbol: t.raw_shares for t in result.trades}
+    assert by_symbol == {"A": 594, "B": 405}
+    assert [(m.symbols[s.s], s.reason) for s in result.skipped] == [("C", "not enough cash")]

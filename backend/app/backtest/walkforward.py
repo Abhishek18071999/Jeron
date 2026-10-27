@@ -25,6 +25,7 @@ from typing import Any
 
 import numpy as np
 
+from app.backtest import confidence
 from app.backtest.costs import CostModel, Realised, TaxRules, estimate_tax
 from app.backtest.engine import Book, PortfolioRules, SimResult, Trade, Variant, simulate
 from app.backtest.market import Market
@@ -46,6 +47,7 @@ from app.backtest.stats import (
     yearly_returns,
 )
 from app.backtest.strategies import Combined, Params, Strategy, params_label
+from app.provenance import provenance
 
 ENGINE_VERSION = "engine-v3"
 WARMUP_SESSIONS = 252
@@ -137,11 +139,31 @@ def market_fingerprint(m: Market) -> str:
     h = hashlib.sha256()
     h.update("|".join(str(d) for d in m.days).encode())
     h.update("|".join(m.symbols).encode())
-    for arr in (m.open, m.high, m.low, m.close, m.universe, m.score):
+    for arr in (
+        m.open,
+        m.high,
+        m.low,
+        m.close,
+        m.universe,
+        m.score,
+        # Corporate actions, liquidity and price bands change fills and sizes.
+        m.factor,
+        m.dividend,
+        m.avg_volume20,
+        m.median_turnover,
+        m.band_pct,
+    ):
         h.update(np.ascontiguousarray(np.nan_to_num(arr, nan=-1.0)).tobytes())
-    for extra in (m.results_blackout, m.news_score):  # M6 inputs, when loaded
+    for extra in (
+        m.results_blackout,  # M6 inputs, when loaded
+        m.news_score,
+        m.fund_score,  # and the later brains
+        m.results_reaction,
+        m.sector_rank,
+        m.mom_rank,
+    ):
         if extra is not None:
-            h.update(np.ascontiguousarray(extra).tobytes())
+            h.update(np.ascontiguousarray(np.nan_to_num(extra, nan=-1.0)).tobytes())
     return h.hexdigest()[:16]
 
 
@@ -267,6 +289,106 @@ def _rules_for(strategy: Strategy, rules: PortfolioRules | None) -> PortfolioRul
     return replace(rules, results_blackout=True) if strategy.results_blackout else rules
 
 
+# --- Robustness (the confidence engine's re-runs, app/backtest/confidence.py) -----------
+
+SLIPPAGE_MULTIPLE = 2.0
+CHARGES_MULTIPLE = 1.5
+LATE_SESSIONS = 1
+
+
+def scaled_costs(costs: CostModel, slippage: float = 1.0, charges: float = 1.0) -> CostModel:
+    """`costs` with slippage and every charge (GST is a rate on charges, so it follows)
+    multiplied."""
+    return replace(
+        costs,
+        name=f"{costs.name} (slippage x{slippage:g}, charges x{charges:g})",
+        brokerage_pct=costs.brokerage_pct * charges,
+        brokerage_max=costs.brokerage_max * charges,
+        brokerage_min=costs.brokerage_min * charges,
+        stt_pct=costs.stt_pct * charges,
+        exchange_pct=costs.exchange_pct * charges,
+        sebi_per_crore=costs.sebi_per_crore * charges,
+        stamp_buy_pct=costs.stamp_buy_pct * charges,
+        dp_per_sale=costs.dp_per_sale * charges,
+        slippage_buckets=tuple((floor, pct * slippage) for floor, pct in costs.slippage_buckets),
+    )
+
+
+def late(variant: Variant, sessions: int = LATE_SESSIONS) -> Variant:
+    """The variant with every entry signal `sessions` later: the order is placed at a
+    later close (with that day's ATR and zone), as if acted on late."""
+    entries = np.zeros_like(variant.entries)
+    entries[:, sessions:] = variant.entries[:, :-sessions]
+    return replace(variant, entries=entries)
+
+
+def _late_schedule(
+    schedule: Sequence[tuple[int, Variant]] | Sequence[Book],
+) -> list[tuple[int, Variant]] | list[Book]:
+    if all(isinstance(b, Book) for b in schedule):
+        return [
+            Book(b.name, [(s, late(v)) for s, v in b.schedule])
+            for b in schedule
+            if isinstance(b, Book)
+        ]
+    return [(s, late(v)) for s, v in schedule if not isinstance(s, Book)]  # type: ignore[misc]
+
+
+@dataclass(frozen=True)
+class Robustness:
+    scenarios: list[confidence.Scenario]
+    grid: list[confidence.GridPoint]
+
+
+def robustness(
+    market: Market,
+    tier: Any,
+    traded: Sequence[tuple[int, Variant]] | Sequence[Book],
+    folds: Folds,
+    rules: PortfolioRules,
+    costs: CostModel,
+    training: dict[str, SimResult],
+    chosen: set[str],
+) -> Robustness:
+    """Re-run the out-of-sample period with the same grid points under harder
+    conditions, and read every grid point's own out-of-sample trades from its training
+    simulation (which runs to the holdout with that point fixed)."""
+    oos_start = folds.test_starts[0]
+    last = folds.holdout_start - 1
+    runs = [
+        (
+            "slippage",
+            f"slippage x{SLIPPAGE_MULTIPLE:g}",
+            traded,
+            scaled_costs(costs, slippage=SLIPPAGE_MULTIPLE),
+        ),
+        (
+            "charges",
+            f"charges x{CHARGES_MULTIPLE:g}",
+            traded,
+            scaled_costs(costs, charges=CHARGES_MULTIPLE),
+        ),
+        (
+            "late",
+            f"entries {LATE_SESSIONS} session late",
+            _late_schedule(traded),
+            costs,
+        ),
+    ]
+    scenarios = []
+    for key, label, schedule, model in runs:
+        sim = simulate(market, tier, schedule, oos_start, last, rules, model)
+        stats = trade_stats(sim.trades)
+        scenarios.append(
+            confidence.Scenario(key, label, stats.trades, stats.expectancy_r, stats.profit_factor)
+        )
+    grid = []
+    for label, sim in training.items():
+        stats = trade_stats([t for t in sim.trades if oos_start <= t.signal_day <= last])
+        grid.append(confidence.GridPoint(label, stats.trades, stats.expectancy_r, label in chosen))
+    return Robustness(scenarios, grid)
+
+
 def evaluate(
     market: Market,
     strategy: Strategy,
@@ -274,13 +396,30 @@ def evaluate(
     costs: CostModel | None = None,
     gate_rules: GateRules | None = None,
     tax_rules: TaxRules | None = None,
+    *,
+    robust: bool = True,
 ) -> Evaluation:
+    """`robust`: also run the confidence engine's re-runs (three more simulations)."""
     rules = _rules_for(strategy, rules)
     costs = costs or CostModel()
     folds = make_folds(market.days)
     sel = select(market, strategy, folds, rules, costs)
     oos_start = folds.test_starts[0]
     sim = simulate(market, strategy.tier, sel.traded(), oos_start, folds.end, rules, costs)
+    checks = (
+        robustness(
+            market,
+            strategy.tier,
+            sel.traded(),
+            folds,
+            rules,
+            costs,
+            sel.training,
+            {sel.schedule[-1][1]},
+        )
+        if robust
+        else None
+    )
     trial_sharpes = [
         per_period_sharpe(s.equity, rules.cash_rate_pct) for s in sel.training.values()
     ]
@@ -303,6 +442,7 @@ def evaluate(
         ],
         variant_logs=sel.logs,
         extra={},
+        robust=checks,
     )
 
 
@@ -314,6 +454,8 @@ def evaluate_combined(
     gate_rules: GateRules | None = None,
     tax_rules: TaxRules | None = None,
     all_trial_sharpes: Sequence[float] | None = None,
+    *,
+    robust: bool = True,
 ) -> Evaluation:
     """Walk-forward test of a combined book (docs/plans/combined-book-v1.md). Each
     member picks its grid points exactly as its own `evaluate` does; nothing new is
@@ -339,6 +481,24 @@ def evaluate_combined(
         )
     oos_start = folds.test_starts[0]
     sim = simulate(m, book.tier, books, oos_start, folds.end, rules, costs)
+    checks = (
+        robustness(
+            m,
+            book.tier,
+            books,
+            folds,
+            rules,
+            costs,
+            {
+                f"{sel.strategy.version}: {label}": s
+                for sel in selections
+                for label, s in sel.training.items()
+            },
+            {f"{sel.strategy.version}: {sel.schedule[-1][1]}" for sel in selections},
+        )
+        if robust
+        else None
+    )
     own = [
         per_period_sharpe(t.equity, rules.cash_rate_pct)
         for sel in selections
@@ -417,6 +577,7 @@ def evaluate_combined(
         variant_logs=logs,
         extra={"combined": extra},
         first_notes=notes,
+        robust=checks,
     )
 
 
@@ -448,6 +609,30 @@ def all_trial_sharpes(
     return out
 
 
+def pnl_breakdown(m: Market, costs: CostModel, trades: Sequence[Trade]) -> dict[str, float]:
+    """Gross to net: what the prices gave before slippage, the slippage (the engine's
+    per-side rate by the stock's turnover, on the day of each fill), the charges and
+    the dividends. Tax is estimated separately (`tax`)."""
+    slippage = 0.0
+    for t in trades:
+        pct = costs.slippage_pct(float(np.nan_to_num(m.median_turnover[t.s, t.signal_day])))
+        slippage += t.entry * t.shares * (1 - 1 / (1 + pct / 100))
+        for f in t.exits:
+            pct = costs.slippage_pct(float(np.nan_to_num(m.median_turnover[t.s, f.day])))
+            slippage += f.price * f.shares * (1 / (1 - pct / 100) - 1)
+    gross = sum(t.gross_pnl for t in trades)
+    charges = sum(t.charges for t in trades)
+    dividends = sum(t.dividends for t in trades)
+    return {
+        "before_slippage": round(gross + slippage, 2),
+        "slippage": round(slippage, 2),
+        "gross_pnl": round(gross, 2),
+        "charges": round(charges, 2),
+        "dividends": round(dividends, 2),
+        "net_pnl": round(gross - charges + dividends, 2),
+    }
+
+
 def _report(
     m: Market,
     strategy: Strategy | Combined,
@@ -466,6 +651,7 @@ def _report(
     variant_logs: list[VariantLog],
     extra: dict[str, Any],
     first_notes: Sequence[str] = (),
+    robust: Robustness | None = None,
 ) -> Evaluation:
     days = m.days
     oos_start = folds.test_starts[0]
@@ -594,6 +780,23 @@ def _report(
             "benchmark": bench(folds.holdout_start - 1, folds.end).to_dict(),
         },
         "gates": [g.to_dict() for g in gate_list],
+        # The evidence-strength layer, separate from the gates (app/backtest/confidence.py).
+        "confidence": confidence.report(
+            [t.r_multiple for t in oos_trades],
+            [t.net_pnl for t in oos_trades],
+            [str(days[t.entry_day].year) for t in oos_trades],
+            [m.sectors[t.s] for t in oos_trades],
+            oos_curve,
+            [t.r_multiple for t in holdout_trades],
+            [t.net_pnl for t in holdout_trades],
+            dsr,
+            robust.scenarios if robust else (),
+            robust.grid if robust else (),
+        ),
+        "pnl_breakdown": {
+            "out_of_sample": pnl_breakdown(m, costs, oos_trades),
+            "holdout": pnl_breakdown(m, costs, holdout_trades),
+        },
         "cash_sweep": {
             "out_of_sample": curve_stats(sweep[:split], rules.cash_rate_pct).to_dict(),
             "holdout": curve_stats(sweep[split - 1 :], rules.cash_rate_pct).to_dict(),
@@ -629,6 +832,18 @@ def _report(
     }
     live = all(g.passed for g in gate_list)
     summary["live_eligible"] = live
+    fingerprint = market_fingerprint(m)
+    summary["provenance"] = provenance(
+        fingerprint,
+        str(days[-1]),
+        {
+            "settings": summary["settings"],
+            "gates": (gate_rules or GateRules()).__dict__,
+            "engine": ENGINE_VERSION,
+            "strategy": strategy.version,
+            "schedule": schedule_json,
+        },
+    )
     dd = drawdown_series(sim.equity)
     bench_curve = m.nifty500[oos_start : folds.end + 1]
     base = bench_curve[0] if len(bench_curve) and bench_curve[0] else 1.0
@@ -656,6 +871,6 @@ def _report(
         summary=summary,
         equity=equity,
         live_eligible=live,
-        fingerprint=market_fingerprint(m),
+        fingerprint=fingerprint,
         notes=notes,
     )

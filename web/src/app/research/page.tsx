@@ -19,6 +19,11 @@ const PAGES = [
     text: "Out-of-sample, after-cost report cards per strategy, and whether each passed the bar.",
   },
   {
+    href: "/research/strategies",
+    title: "Strategies and evidence",
+    text: "Every strategy version ever tried, its status, how strong its evidence is, and its paper health.",
+  },
+  {
     href: "/paper",
     title: "Paper trading",
     text: "One account per strategy version, replayed daily; where signals come from.",

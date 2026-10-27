@@ -250,6 +250,90 @@ export type BacktestSummary = {
   rules: string[];
   notes: string[];
   live_eligible: boolean;
+  // The confidence engine (decision 0018); missing on runs made before 2026-10-26.
+  confidence?: Confidence;
+  pnl_breakdown?: { out_of_sample: PnlBreakdown; holdout: PnlBreakdown };
+  provenance?: { code: string; git: string | null; data: string; data_end: string; settings: string };
+};
+
+export type Interval = { estimate: number | null; low: number | null; high: number | null };
+
+export type EvidenceRating = "strong" | "moderate" | "weak" | "insufficient";
+
+export type EvidenceCheck = { key: string; label: string; value: string; passed: boolean | null };
+
+export type Evidence = { rating: EvidenceRating; summary: string; checks: EvidenceCheck[]; notes: string[] };
+
+export type Confidence = {
+  version: string;
+  level: number;
+  resamples: number;
+  out_of_sample: {
+    trades: number;
+    expectancy_r: Interval;
+    profit_factor: Interval;
+    win_rate: Interval;
+    positive_share: number;
+  } | null;
+  holdout: Confidence["out_of_sample"];
+  curve: { max_drawdown_pct: Interval; cagr: Interval; drawdown_95_pct: number; block_sessions: number } | null;
+  order: { losing_streak_median: number; losing_streak_95: number; drawdown_r_median: number; drawdown_r_95: number } | null;
+  concentration: {
+    trades: number;
+    total_r: number;
+    top_share: number | null;
+    without_top_r: number | null;
+    best_year: string | null;
+    without_best_year_r: number | null;
+    best_sector: string | null;
+    best_sector_share: number | null;
+    without_best_sector_r: number | null;
+    sectors_known: number;
+  } | null;
+  scenarios: { key: string; label: string; trades: number; expectancy_r: number; profit_factor: number | string }[];
+  grid: { label: string; trades: number; expectancy_r: number; chosen: boolean }[];
+  evidence: Evidence;
+};
+
+export type PnlBreakdown = {
+  before_slippage: number;
+  slippage: number;
+  gross_pnl: number;
+  charges: number;
+  dividends: number;
+  net_pnl: number;
+};
+
+export type StrategyStatus = "research" | "paper" | "small capital" | "approved" | "retired";
+
+export type StrategyHealth = {
+  verdict: "too early" | "on track" | "ordinary variance" | "watch" | "deteriorating";
+  detail: string;
+  trades: number;
+  expectancy_r: number | null;
+  percentile: number | null;
+  backtest_expectancy_r: number | null;
+  flags: { key: string; text: string }[];
+  false_retirement: number | null;
+};
+
+export type StrategyRow = {
+  key: string;
+  version: string;
+  name: string;
+  tier: string;
+  status: { status: StrategyStatus; since: string | null; reason: string; set_by: "jeron" | "owner" };
+  run_id: number | null;
+  run_date: string | null;
+  live_eligible: boolean;
+  failed_gates: string[];
+  evidence: Evidence | null;
+  account_id: number | null;
+  stage: string | null;
+  paper_gate: { name: string; status: string; detail: string } | null;
+  real_gate: { name: string; status: string; detail: string } | null;
+  health: StrategyHealth | null;
+  history: { status: StrategyStatus; reason: string; set_by: string; at: string }[];
 };
 
 export type EquityPoint = {

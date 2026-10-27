@@ -19,6 +19,8 @@ python -m app.cli backtest                      # walk-forward test of every str
 python -m app.cli backtest --strategy combined-book  # rs-pullback + results drift in one account
 python -m app.cli research --out report.md      # the trading review's options on rs-pullback
 python -m app.cli paper                         # signals and paper trades for the newest scan
+python -m app.cli strategy-status               # every strategy's status, evidence, health
+python -m app.cli strategy-status rs-pullback-v1 "small capital" --reason "..."
 python -m app.cli alerts                        # send the newest day's signals and summary
 python -m app.cli telegram --setup              # find your chat id after messaging the bot
 python -m app.cli daily                         # update, scan, paper-trade, send alerts
@@ -48,6 +50,7 @@ from app.alerts.channels import AlertError, TelegramChannel, channels_from
 from app.alerts.job import NOT_SET_UP, AlertOutcome, _send, run_alerts, send_test
 from app.alerts.late import data_late
 from app.alerts.watchdog import check_tonight, ping_heartbeat
+from app.analytics.strategies import set_status, strategy_views
 from app.analytics.weekly import run_weekly
 from app.backtest import research
 from app.backtest.job import load_inputs, run_backtests
@@ -226,6 +229,14 @@ def main(argv: list[str] | None = None) -> int:
         help="close the active accounts and open new ones from this day",
     )
 
+    p = sub.add_parser(
+        "strategy-status",
+        help="show every strategy's status, or set one (research, paper, small capital, "
+        "approved, retired) with a reason",
+    )
+    p.add_argument("version", nargs="?", help="strategy version, e.g. rs-pullback-v1")
+    p.add_argument("status", nargs="?", help="the new status")
+    p.add_argument("--reason", default="", help="why: kept with the status")
     sub.add_parser(
         "paper-review",
         help="record strategy proposals from the paper trades and refresh their forward checks",
@@ -527,6 +538,27 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "preopen":
             _, check = run_preopen(session, args.date, send=not args.no_send, log=_log)
             return 0 if check.status in ("ok", "not_configured") and not check.failed else 1
+
+        if args.command == "strategy-status":
+            if args.version is None:
+                for v in strategy_views(session):
+                    rating = (v.evidence or {}).get("rating", "not rated")
+                    health = v.health.verdict if v.health else "no paper account"
+                    _log(
+                        f"{v.version}: {v.status.status.upper()} since {v.status.since or '-'}"
+                        f" ({v.status.reason}); evidence {rating}; paper {health}"
+                    )
+                return 0
+            if args.status is None:
+                _log("Give the new status too, with --reason.")
+                return 2
+            try:
+                view = set_status(session, args.version, args.status, args.reason)
+            except ValueError as exc:
+                _log(f"Not changed: {exc}")
+                return 1
+            _log(f"{args.version}: now {view.status} ({view.reason}).")
+            return 0
 
         if args.command == "weekly":
             _, sent = run_weekly(session, args.date, send=not args.no_send, log=_log)

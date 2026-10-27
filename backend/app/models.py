@@ -501,6 +501,25 @@ class PaperAccount(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class StrategyStatusChange(Base):
+    """A strategy version's status (Research, Paper, Small capital, Approved, Retired),
+    set by me or recorded by Jeron, with the reason and the evidence at the time
+    (decision 0018). Append-only: the newest row wins, the old ones are the history.
+    Jeron never promotes a strategy to real money; only I can, and only past the
+    checks in `app.analytics.status.refusal`."""
+
+    __tablename__ = "strategy_status_changes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    strategy_version: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(String(500))
+    set_by: Mapped[str] = mapped_column(String(16))  # "owner" or "jeron"
+    # Run, gates, evidence rating and paper/real gates when the change was made.
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SignalRecord(Base):
     """A signal as issued (spec section 4). Never changed once stored; a change would
     be a new version."""
