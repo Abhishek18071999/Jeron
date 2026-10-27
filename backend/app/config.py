@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     schedule_daily: str = "19:00"
     # The daily run again, only if the day's data had not arrived at the first try.
     schedule_daily_retry: str = "21:30"
+    # The dead-man's switch (app/alerts/watchdog.py): by this time the daily summary
+    # must have gone out, or one alert says it didn't.
+    schedule_watchdog: str = "19:45"
+    # Called when the daily run finishes, for an outside monitor that alerts when the
+    # ping doesn't come (e.g. a healthchecks.io check URL). Empty: off.
+    heartbeat_url: str = ""
 
     @property
     def telegram_ready(self) -> bool:

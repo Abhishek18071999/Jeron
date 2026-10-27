@@ -69,6 +69,15 @@ def test_explain_and_compare(empty_session):
     both = client.get("/stocks/compare", params={"symbols": "UP, splitco,UP"}).json()
     assert [x["symbol"] for x in both["briefs"]] == ["UP", "SPLITCO"]
     assert both["not_found"] == []
+    perf = {p["symbol"]: p for p in both["performance"]}
+    assert list(perf) == ["UP", "SPLITCO", "Nifty 500"]
+    # Adjusted for the split: SPLITCO's raw price halved but its returns match UP's.
+    for k, v in perf["UP"]["returns"].items():
+        assert abs(perf["SPLITCO"]["returns"][k] - v) < 0.02  # prices are stored to the paisa
+    assert perf["UP"]["returns"]["1M"] == round((1.002**21 - 1) * 100, 2)
+    assert perf["UP"]["max_drawdown"] == 0.0 and perf["UP"]["sector"] == "IT"
+    starts = {p["series"][0]["time"] for p in perf.values()}
+    assert len(starts) == 1 and all(p["series"][0]["value"] == 100.0 for p in perf.values())
     assert client.get("/stocks/compare", params={"symbols": "A,B,C,D"}).status_code == 422
     # One that matches nothing is listed, the others are still compared.
     some = client.get("/stocks/compare", params={"symbols": "UP,NOPE"}).json()

@@ -3,7 +3,7 @@ few side by side (docs/plans/explain-v1.md, decision 0016). Read-only except for
 stored narration: nothing here places, sizes or changes an order."""
 
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -12,10 +12,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.data import store
+from app.data.nse_lists import NIFTY_500
 from app.db import get_session
 from app.explain.facts import Brief, Fact
 from app.explain.narrate import MAX_QUESTION_CHARS, PROMPT_VERSION
-from app.explain.service import NarrationRefusedError, explain, latest_narration, narrate
+from app.explain.performance import performance, window_start
+from app.explain.service import (
+    NarrationRefusedError,
+    adjusted_closes,
+    explain,
+    latest_narration,
+    narrate,
+    sector_industry,
+)
 from app.explain.writers import make_writer
 from app.models import Explanation
 from app.news.job import budget
@@ -90,8 +99,25 @@ class BriefOut(BaseModel):
     research_only: bool | None
 
 
+class PointOut(BaseModel):
+    time: date
+    value: float
+
+
+class PerformanceOut(BaseModel):
+    symbol: str  # a stock, or "NIFTY 500"
+    sector: str | None
+    industry: str | None
+    returns: dict[str, float | None]  # % over 1M, 3M, 6M, 1Y
+    volatility: float | None  # % a year
+    max_drawdown: float | None  # % worst fall from a high in the last year
+    series: list[PointOut]  # closes rebased to 100 on the chart's first day
+
+
 class CompareOut(BaseModel):
     briefs: list[BriefOut]
+    # Past price performance, in the briefs' order, then Nifty 500 when it is loaded.
+    performance: list[PerformanceOut]
     # What was asked for and matched no stock with prices.
     not_found: list[str]
 
@@ -203,7 +229,45 @@ def compare(
             not_found.append(asked)
         else:
             briefs.setdefault(found[1].symbol, found[1])
-    return CompareOut(briefs=[brief_out(b) for b in briefs.values()], not_found=not_found)
+    return CompareOut(
+        briefs=[brief_out(b) for b in briefs.values()],
+        performance=_performance(session, list(briefs)),
+        not_found=not_found,
+    )
+
+
+def _performance(session: Session, symbols: list[str]) -> list[PerformanceOut]:
+    closes = {s: adjusted_closes(session, s) for s in symbols}
+    index: list[tuple[date, float]] = []
+    ends = [c[-1][0] for c in closes.values() if c]
+    if ends:
+        end = max(ends)
+        index = [
+            (d, float(c))
+            for d, c in sorted(
+                store.index_closes(session, NIFTY_500, end - timedelta(days=400), end).items()
+            )
+        ]
+    start = window_start([c for c in closes.values() if c])
+
+    def out(
+        symbol: str, series: list[tuple[date, float]], where: tuple[str | None, str | None]
+    ) -> PerformanceOut:
+        p = performance(series, start)
+        return PerformanceOut(
+            symbol=symbol,
+            sector=where[0],
+            industry=where[1],
+            returns=p.returns,
+            volatility=p.volatility,
+            max_drawdown=p.max_drawdown,
+            series=[PointOut(time=d, value=v) for d, v in p.series],
+        )
+
+    rows = [out(s, c, sector_industry(session, s)) for s, c in closes.items()]
+    if index:
+        rows.append(out(NIFTY_500, index, (None, None)))
+    return rows
 
 
 @router.get("/stocks/{symbol}/explain")

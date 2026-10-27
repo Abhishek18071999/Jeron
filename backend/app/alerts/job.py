@@ -29,6 +29,7 @@ from app.backtest.market import market_state
 from app.config import Settings
 from app.data import store
 from app.data.nse_lists import INDIA_VIX, NIFTY_50, NIFTY_500
+from app.halt import halt_state
 from app.journal.service import entry_views, pending_signals
 from app.models import (
     Alert,
@@ -204,7 +205,10 @@ def run_alerts(
         return AlertOutcome(day, "not_configured")
     outcome = AlertOutcome(day, "ok")
     held = store.held_drops(session, day)
-    for record, key in day_signals(session, day):
+    halt = halt_state(session)
+    if halt is not None:
+        log(f"Kill switch on: no signal or watchlist alerts. {halt.headline()}")
+    for record, key in [] if halt else day_signals(session, day):
         if record.late or (record.research_only and not settings.alert_research_signals):
             continue
         text = signal_message(
@@ -232,7 +236,7 @@ def run_alerts(
             record.signal_id,
             signal_keyboard(str(record.signal_id), record.ticker, settings.web_url),
         )
-    for hit in watchlist_hits(session, day):
+    for hit in [] if halt else watchlist_hits(session, day):
         _send(
             session,
             channels,
@@ -254,7 +258,9 @@ def run_alerts(
             now,
             day,
         )
-    digest = digest_message(build_digest(session, day, settings.web_url))
+    summary = build_digest(session, day, settings.web_url)
+    summary.halted = halt.headline() if halt else None
+    digest = digest_message(summary)
     _send(
         session,
         channels,

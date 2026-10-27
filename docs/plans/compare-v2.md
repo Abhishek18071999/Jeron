@@ -30,12 +30,31 @@ strategies should say how to use them.
   ("How to use this signal") and linked from every signal row's strategy key.
 - The strategy record fact no longer nests brackets.
 
+Second pass (asked again 26 October: "still so many issues", search and comparison):
+
+- Price performance: each stock's adjusted closes and Nifty 500's rebased to 100 on the
+  first day all have prices (`app/explain/performance.py`, pure), with returns over 1M,
+  3M, 6M and 1Y, the year's volatility and its worst fall from a high, Nifty 500 beside
+  them for reference (never marked as a lead).
+- One colour per stock across its chip, card, column headers and chart line.
+- Search hides stocks already added; adding or removing shows "Building the
+  comparison…" and the route has a loading skeleton, since each stock's history is
+  adjusted on read.
+- Fixed in the shared search box (also the header's): Enter right after typing could
+  pick a suggestion left over from the previous text (typing "tata consultancy" after
+  "reliance" added RPOWER). Suggestions now show only for the text they were found for.
+- Cards show the sector and industry; failed checks are listed one per line; on phones
+  the cards sit in one row that swipes. A "Latest announcement" row under Events.
+- Tested on real NSE prices (about 15 months loaded with `backfill`), not only the
+  made-up test market.
+
 Nothing here is a verdict: marks say which number is higher or lower and why that
 direction matters to Jeron's rules, not which stock to buy.
 
 ## Tests
 
 `tests/test_explain_db.py` (misses listed, names matched, duplicates merged, `number`,
-`strategy`); `web/src/lib/compare.test.ts`; `web/src/lib/strategy-guide.test.ts` (every
+`strategy`); `tests/test_explain_performance.py` (returns, volatility, drawdown, rebasing by hand);
+`web/src/lib/compare.test.ts`; `web/src/lib/strategy-guide.test.ts` (every
 strategy key in `strategies.py` has a guide, every linked lesson exists, steps follow the
 section's rules).

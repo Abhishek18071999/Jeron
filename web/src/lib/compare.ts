@@ -3,7 +3,7 @@
 // meaningful, and where the stocks disagree. Pure, so `npm test` checks it. Nothing here
 // is a verdict: a row's lead says which number is highest or lowest, and why that
 // direction matters, not which stock to buy.
-import type { BriefFact, StockBrief } from "./api";
+import type { BriefFact, Performance, StockBrief } from "./api";
 
 export const MAX_COMPARE = 3; // the backend's limit too (app/api/explain.py)
 
@@ -15,6 +15,7 @@ export type Row = {
   lead?: "higher" | "lower"; // the direction Jeron's own rules treat as stronger
   leadText?: string; // the mark on the leading value; default "highest" or "lowest"
   small?: boolean; // long text: shown smaller
+  asHeadline?: boolean; // show the fact's label and date (an announcement), not its value
 };
 
 export type Group = { title: string; rows: Row[] };
@@ -58,6 +59,7 @@ export const GROUPS: Group[] = [
     rows: [
       { label: "Results", topic: "events", match: "Results", help: "The next results date from NSE's board meetings. Within the blackout (3 sessions before), Jeron's -events strategies take no new entries." },
       { label: "Corporate action ahead", topic: "events", match: "Corporate action ahead", help: "An ex-date coming up: dividend, split or bonus." },
+      { label: "Latest announcement", topic: "news", match: "", asHeadline: true, help: "The newest company announcement to NSE in the last 90 days that Jeron counts as material. Green or red only when the news labeller has read it; open the stock for the list." },
     ],
   },
   {
@@ -135,4 +137,60 @@ export function parseSymbols(text: string, max = MAX_COMPARE): string[] {
     if (s) seen.add(s);
   }
   return [...seen].slice(0, max);
+}
+
+// One colour per stock, the same on its card, chip and chart line.
+export const STOCK_COLORS = ["#2563eb", "#ea580c", "#9333ea"];
+export const INDEX_COLOR = "#737373";
+
+export type PerfRow = {
+  label: string;
+  help: string;
+  lead: "higher" | "lower";
+  leadText: string;
+  pick: (p: Performance) => number | null;
+  signed?: boolean;
+};
+
+export const PERF_ROWS: PerfRow[] = [
+  ...(
+    [
+      ["1M", "1 month", "about 21 sessions"],
+      ["3M", "3 months", "about 63 sessions"],
+      ["6M", "6 months", "about 126 sessions"],
+      ["1Y", "1 year", "252 sessions"],
+    ] as const
+  ).map(
+    ([k, label, sessions]): PerfRow => ({
+      label: `Return, ${label}`,
+      help: `The price change over the last ${label} (${sessions}), adjusted for splits and bonuses. Dividends are not added. Past returns, not a forecast.`,
+      lead: "higher",
+      leadText: "highest",
+      pick: (p) => p.returns[k],
+      signed: true,
+    }),
+  ),
+  {
+    label: "Volatility, 1 year",
+    help: "How much the price swings: the standard deviation of daily returns over the last year, as a % a year. Lower is calmer; higher needs a wider stop and fewer shares.",
+    lead: "lower",
+    leadText: "calmest",
+    pick: (p) => p.volatility,
+  },
+  {
+    label: "Worst fall, 1 year",
+    help: "The biggest drop from a high to a later low within the last year (maximum drawdown). It shows how much pain holding it has involved.",
+    lead: "higher",
+    leadText: "smallest fall",
+    pick: (p) => p.max_drawdown,
+    signed: true,
+  },
+];
+
+// Each row's values for the stocks, then the index (never a lead), and which stock leads.
+export function performanceRows(stocks: Performance[], index: Performance | undefined) {
+  return PERF_ROWS.map((row) => {
+    const values = stocks.map(row.pick);
+    return { row, values, index: index ? row.pick(index) : null, leads: leaders(values, row.lead) };
+  });
 }

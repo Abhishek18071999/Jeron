@@ -236,6 +236,29 @@ def stock_inputs(
     )
 
 
+def adjusted_closes(session: Session, symbol: str) -> list[tuple[date, float]]:
+    """Split/bonus-adjusted closes, oldest first (for Compare's performance)."""
+    bars = store.symbol_bars(session, symbol.strip().upper(), store.NSE_BARS)
+    if not bars:
+        return []
+    actions = [
+        a.record for a in store.symbol_actions(session, symbol) if a.source == store.NSE_ACTIONS
+    ]
+    return [
+        (a.raw.trade_date, float(a.close))
+        for a in adjust_bars(bars, build_adjustments(bars, actions))
+    ]
+
+
+def sector_industry(session: Session, symbol: str) -> tuple[str | None, str | None]:
+    row = session.execute(
+        select(Instrument.sector, Instrument.industry).where(
+            Instrument.symbol == symbol.strip().upper()
+        )
+    ).first()
+    return (None, None) if row is None else (row[0], row[1])
+
+
 # --- The optional LLM wording ---------------------------------------------------------
 
 DAILY_LIMIT = 50  # narrations a day, whatever the cap

@@ -1462,7 +1462,17 @@ export type StockBrief = {
   research_only: boolean | null;
 };
 
-export type CompareView = { briefs: StockBrief[]; not_found: string[] };
+export type Performance = {
+  symbol: string; // a stock, or "Nifty 500"
+  sector: string | null;
+  industry: string | null;
+  returns: Record<"1M" | "3M" | "6M" | "1Y", number | null>; // %
+  volatility: number | null; // % a year
+  max_drawdown: number | null; // % worst fall from a high in the last year
+  series: { time: string; value: number }[]; // rebased to 100 on the first day
+};
+
+export type CompareView = { briefs: StockBrief[]; performance: Performance[]; not_found: string[] };
 
 export type Narration = {
   id: number;

@@ -38,6 +38,7 @@ from app.backtest.strategies import STRATEGIES, Strategy, Tier, params_label
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
 from app.config import Settings
 from app.data import store
+from app.halt import halt_state
 from app.models import (
     BacktestRun,
     PaperAccount,
@@ -514,6 +515,9 @@ def update_account(
     notes_for = order_notes(m, sim, sim.pending, rules)
     notes: list[str] = []
     new = 0
+    # The kill switch (app/halt.py): signals recorded while stopped are research only.
+    halt = halt_state(session)
+    stopped = [f"Recorded while Jeron was stopped ({halt.reason}): research only."] if halt else []
     for order in sim.orders:
         key = (m.days[order.signal_day], m.symbols[order.s])
         if key in recorded:
@@ -526,10 +530,12 @@ def update_account(
             rules=rules,
             costs=costs,
             backtest=stats,
-            research_only=not account.live_eligible,
+            research_only=not account.live_eligible or halt is not None,
             created_at=now,
             next_session=valid_until,
-            notes=notes_for.get(id(order), []) + ([calendar_note] if calendar_note else []),
+            notes=notes_for.get(id(order), [])
+            + ([calendar_note] if calendar_note else [])
+            + stopped,
         )
         try:
             signal = build_signal(m, order, ctx)

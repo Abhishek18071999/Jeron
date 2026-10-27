@@ -168,6 +168,8 @@ class Digest:
     pending: int = 0
     web_url: str = ""
     sections: list[DigestSection] = field(default_factory=list)
+    # The kill switch's headline (app/halt.py) when Jeron is stopped.
+    halted: str | None = None
 
 
 def _signal_line(s: DigestSignal) -> str:
@@ -179,6 +181,8 @@ def _signal_line(s: DigestSignal) -> str:
 
 def digest_message(d: Digest) -> str:
     lines = [f"Jeron daily summary · {_day(d.day)}", ""]
+    if d.halted:
+        lines += [d.halted, ""]
     if d.quality is None:
         lines.append("Data quality: no report for the day")
     else:

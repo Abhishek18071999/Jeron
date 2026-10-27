@@ -1,13 +1,22 @@
 """The pre-open check (spec section 5, 08:30 IST): every open position in my journal
 against the exit rules, upcoming results and corporate actions, sent as one message.
 
+It also re-checks the entries: every live signal valid for today with no journal
+entry yet is planned on the real account as the Trade page would (heat, positions,
+guardrails, results blackout, the kill switch), skipped if it was held by the quality
+check or has an ex-date today, and turned into the order to place: a limit at the top
+of the entry zone, not bought above it or at the stop. Jeron has only end-of-day
+prices, so the open itself (gaps, circuits, news after the evening run) is checked by
+me at 09:08. The positions' tax timing notes (`app.portfolio.calc.tax_notes`) are
+added as information only.
+
 Paper positions need nothing from me (the paper job exits them), so they are only
 counted. If the latest prices are missing, the check says so and gives no actions.
 """
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
@@ -26,8 +35,9 @@ from app.data.adjust import AdjustedBar, adjust_bars, build_adjustments
 from app.data.events import next_results
 from app.enums import CorporateActionType
 from app.exits.rules import Action, ExitBar, ExitPlan, exit_plan
+from app.halt import halt_state
 from app.indicators import atr
-from app.journal.service import EntryView, entry_views
+from app.journal.service import EntryView, entry_views, pending_signals
 from app.models import DailyBar, JournalEntry, PaperTrade
 from app.settings_store import effective_settings
 from app.signals.build import IST
@@ -63,6 +73,22 @@ class PositionCheck:
 
 
 @dataclass
+class EntryCheck:
+    """A live signal waiting for today's open, re-checked at the pre-open: the real
+    account's trade plan (heat, positions, guardrails, results blackout, kill switch)
+    and what changed overnight that Jeron can know without live prices."""
+
+    ticker: str
+    strategy_key: str
+    signal_date: date
+    zone_high: Decimal
+    stop: Decimal
+    shares: int
+    skip: list[str] = field(default_factory=list)  # why not to buy; empty: buy
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class PreOpen:
     day: date  # the session the check is for
     data_as_of: date | None
@@ -70,6 +96,7 @@ class PreOpen:
     positions: list[PositionCheck]
     paper_open: int
     paper_accounts: int
+    entries: list[EntryCheck] = field(default_factory=list)
 
     @property
     def stale(self) -> bool:
@@ -255,6 +282,93 @@ def build_preopen(session: Session, day: date, calendar: TradingCalendar | None 
     return PreOpen(day, data_as_of, expected, checks, paper[0], paper[1])
 
 
+def entry_checks(session: Session, p: PreOpen, settings: Settings) -> list[EntryCheck]:
+    """Re-check every live signal valid for `p.day` that has no journal entry yet. Each
+    is planned on the real account as the Trade page would plan it, one after another,
+    so two buys together can't pass the heat or position limits that each passes alone.
+    Nothing when the prices are stale (the check says so instead)."""
+    from app.plan.service import context, plan_for, tier_of  # they build on this module
+
+    if p.stale or p.data_as_of is None:
+        return []
+    signals = [
+        s
+        for s in pending_signals(session, since=p.data_as_of, include_research=False)
+        if str(s.payload.get("entry_zone", {}).get("valid_until", "")) >= p.day.isoformat()
+    ]
+    if not signals:
+        return []
+    held = store.held_drops(session, p.data_as_of)
+    today = store.actions_between(
+        session, store.NSE_ACTIONS, p.day, p.day, [s.ticker for s in signals]
+    )
+    added_risk, added_by_tier = Decimal(0), dict[str, int]()
+    out = []
+    for s in sorted(signals, key=lambda x: (-int(x.payload.get("conviction", 0)), x.ticker)):
+        zone = s.payload["entry_zone"]
+        check = EntryCheck(
+            s.ticker,
+            s.strategy_key,
+            s.signal_date,
+            Decimal(str(zone["high"])),
+            Decimal(str(s.payload["stop"]["price"])),
+            0,
+        )
+        tier = tier_of(s.payload.get("tier"))
+        ctx = context(session, s.ticker, signal_id=s.signal_id, settings=settings)
+        if ctx is None:
+            check.skip.append("no prices stored for the stock")
+        else:
+            account = ctx.account
+            if account is not None and added_by_tier:
+                by_tier = dict(account.open_by_tier)
+                for k, n in added_by_tier.items():
+                    by_tier[k] = by_tier.get(k, 0) + n
+                account = replace(
+                    account,
+                    open_by_tier=by_tier,
+                    entries_week=account.entries_week + sum(added_by_tier.values()),
+                )
+            ctx = replace(ctx, open_risk=ctx.open_risk + added_risk, account=account)
+            plan = plan_for(ctx, check.zone_high, check.stop, tier)
+            check.shares = plan.shares
+            check.skip += plan.blockers
+            if added_risk and not plan.blockers:
+                check.notes.append("planned after the buys above (their risk counted)")
+        if s.ticker in held:
+            check.skip.append(f"{held[s.ticker]}: check by hand")
+        for a in today:
+            if a.symbol != s.ticker:
+                continue
+            if a.action_type == CorporateActionType.DIVIDEND:
+                amount = f" {inr(a.amount)}" if a.amount else ""
+                check.notes.append(
+                    f"ex-dividend{amount} today: expect the open that much lower; zone and "
+                    "stop unchanged"
+                )
+            else:
+                check.skip.append(
+                    f"{a.action_type.value} ex-date today ({a.raw_text or a.action_type.value}): "
+                    "the price resets at the open, so the zone and stop no longer apply"
+                )
+        if not check.skip:
+            added_risk += (check.zone_high - check.stop) * check.shares
+            added_by_tier[tier.value] = added_by_tier.get(tier.value, 0) + 1
+        out.append(check)
+    return out
+
+
+def _entry_line(e: EntryCheck) -> str:
+    head = f"- {e.ticker} ({e.strategy_key}, signal {e.signal_date:%a %-d %b})"
+    if e.skip:
+        return "\n".join([f"{head}: SKIP", *(f"  {r}" for r in e.skip)])
+    lines = [
+        f"{head}: buy {e.shares} sh, LIMIT {inr(e.zone_high)}, only if the pre-open price "
+        f"is above the stop {inr(e.stop)}; then a GTT stop at {inr(e.stop)}."
+    ]
+    return "\n".join([*lines, *(f"  {n}" for n in e.notes)])
+
+
 def broker_stop(c: PositionCheck) -> tuple[int, float] | None:
     """The stop order to keep at the broker (a Zerodha GTT sell) after the next open:
     shares and trigger. A position the plan sells in full needs none; after booking half
@@ -314,8 +428,12 @@ def preopen_message(
     cash_action: str | None = None,
     calendar_note: str | None = None,
     backup_note: str | None = None,
+    tax_notes: Sequence[str] = (),
+    halted: str | None = None,
 ) -> str:
     lines = [f"Jeron pre-open check, {p.day:%a %-d %b %Y}"]
+    if halted:
+        lines += ["", halted]
     if p.stale:
         when = "never"
         if p.data_as_of:
@@ -347,6 +465,17 @@ def preopen_message(
         if problems:
             lines += ["", "CHECK BY HAND"]
             lines += [f"- {c.ticker} {c.shares} sh: {c.problem or 'no plan'}" for c in problems]
+    if p.entries:
+        lines += [
+            "",
+            "BUYS AT THE OPEN (live signals, re-checked against your account now)",
+            "Jeron has no live prices: at 09:08 look at the pre-open price. Above the limit, "
+            "don't chase; at or below the stop, or locked at the upper circuit, no trade.",
+            *(_entry_line(e) for e in p.entries),
+        ]
+    if tax_notes and not p.stale:
+        lines += ["", "TAX (information only; the exit plan comes first)"]
+        lines += [f"- {n}" for n in tax_notes]
     events = [(c.ticker, e) for c in p.positions for e in c.events]
     if events:
         lines += ["", f"EVENTS (next {EVENT_SESSIONS} sessions)"]
@@ -385,9 +514,18 @@ def run_preopen(
     p = build_preopen(session, day, calendar)
     from app.portfolio.service import portfolio  # it builds on this module
 
-    cash = portfolio(session, settings=settings, pre=p).totals.cash_action
+    totals = portfolio(session, settings=settings, pre=p).totals
+    halt = halt_state(session)
+    if halt is None:
+        p.entries = entry_checks(session, p, settings)
     text = preopen_message(
-        p, settings.web_url, cash, calendar.coverage_warning(day), backup_note(session, settings)
+        p,
+        settings.web_url,
+        totals.cash_action,
+        calendar.coverage_warning(day),
+        backup_note(session, settings),
+        totals.tax_notes,
+        halt.headline() if halt else None,
     )
     log(text)
     outcome = AlertOutcome(day, "ok")

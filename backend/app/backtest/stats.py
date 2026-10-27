@@ -254,11 +254,12 @@ def yearly_returns(days: Sequence[date], curve: Array) -> dict[str, float]:
 # --- Deflated Sharpe ratio (Bailey and Lopez de Prado, 2014) ---------------------------
 
 
-def expected_max_sharpe(trial_sharpes: Sequence[float]) -> float:
+def expected_max_sharpe(trial_sharpes: Sequence[float], n_trials: float | None = None) -> float:
     """Expected maximum of N per-period Sharpe ratios under the null of no skill,
-    given the variance of the trials' Sharpe ratios."""
-    n = len(trial_sharpes)
-    if n < 2:
+    given the variance of the trials' Sharpe ratios. `n_trials` overrides N (the
+    effective number of independent trials, `effective_trials`)."""
+    n = len(trial_sharpes) if n_trials is None else n_trials
+    if n < 2 or len(trial_sharpes) < 2:
         return 0.0
     var = float(np.var(trial_sharpes, ddof=1))
     norm = NormalDist()
@@ -268,7 +269,9 @@ def expected_max_sharpe(trial_sharpes: Sequence[float]) -> float:
     )
 
 
-def deflated_sharpe(returns: Array, trial_sharpes: Sequence[float]) -> float:
+def deflated_sharpe(
+    returns: Array, trial_sharpes: Sequence[float], n_trials: float | None = None
+) -> float:
     """Probability that the true (per-period) Sharpe ratio of `returns` is above the
     best one would expect by luck from that many trials. 0.95 or more is the usual
     bar. `trial_sharpes` are per-period Sharpe ratios of every variant tried."""
@@ -283,11 +286,23 @@ def deflated_sharpe(returns: Array, trial_sharpes: Sequence[float]) -> float:
     z = (r - np.mean(r)) / np.std(r)
     skew = float(np.mean(z**3))
     kurt = float(np.mean(z**4))
-    sr0 = expected_max_sharpe(trial_sharpes)
+    sr0 = expected_max_sharpe(trial_sharpes, n_trials)
     denom = 1 - skew * sr + (kurt - 1) / 4 * sr**2
     if denom <= 0:
         return 0.0
     return NormalDist().cdf((sr - sr0) * math.sqrt(t - 1) / math.sqrt(denom))
+
+
+def effective_trials(returns: Array) -> float:
+    """How many independent trials a set of correlated ones is worth: the participation
+    ratio of the eigenvalues of their returns' correlation matrix, (sum l)^2 / sum l^2.
+    N uncorrelated trials give N; N identical ones give 1. `returns` is (trials, days)."""
+    r = np.asarray(returns, dtype=float)
+    r = r[np.std(r, axis=1) > 0]
+    if len(r) < 2:
+        return float(len(r))
+    eig = np.clip(np.linalg.eigvalsh(np.corrcoef(r)), 0.0, None)
+    return float(eig.sum() ** 2 / (eig**2).sum())
 
 
 def per_period_sharpe(curve: Array, risk_free_pct: float = 0.0) -> float:

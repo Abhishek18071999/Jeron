@@ -180,6 +180,9 @@ class Market:
     # score's percentile (0-1) among the universe that day. NaN outside the universe.
     mom_return: Array | None = None
     mom_rank: Array | None = None
+    # bool (stocks, days): the first session on or after a results board meeting (the
+    # session results can move). None = the results calendar isn't loaded.
+    results_session: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -450,6 +453,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         results_volume_ratio=None if reactions is None else reactions[1],
         mom_return=mom_return,
         mom_rank=mom_rank,
+        results_session=results_sessions(days, symbols, inputs.results),
         fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
     )
 
@@ -625,6 +629,57 @@ def news_scores(
             ages = ordinals[first:last] - day
             total[k, first:last] += label.sentiment * weight * np.power(0.5, ages / half_life)
     return np.clip(50.0 + SCORE_SCALE * total, 0.0, 100.0)
+
+
+def results_sessions(
+    days: Sequence[date],
+    symbols: Sequence[str],
+    results: Mapping[str, Sequence[ResultsDate]] | None,
+) -> Array | None:
+    """bool (stocks, days): the first session on or after each results meeting."""
+    if results is None:
+        return None
+    out = np.zeros((len(symbols), len(days)), dtype=bool)
+    ordinals = np.array([d.toordinal() for d in days])
+    for k, symbol in enumerate(symbols):
+        for meeting in results.get(symbol, ()):
+            m = int(np.searchsorted(ordinals, meeting.meeting_date.toordinal()))
+            if m < len(days):
+                out[k, m] = True
+    return out
+
+
+# The momentum-crash guard (docs/plans/review-v1.md), fixed before any run: Nifty 500
+# up at least 8% over 20 sessions while it was below its 200-day EMA at some point in
+# the last 60 sessions, i.e. a violent rebound off a bear market, when beaten-down
+# stocks snap back and leaders lag (Daniel and Moskowitz, "Momentum crashes", 2016).
+CRASH_GUARD_RETURN = 0.08
+CRASH_GUARD_RETURN_SESSIONS = 20
+CRASH_GUARD_BELOW_SESSIONS = 60
+
+
+def crash_guard_days(nifty500: Array) -> Array:
+    """bool per day: the momentum-crash guard is on (no new entries)."""
+    closes = _ffill(nifty500)
+    n = len(closes)
+    out = np.zeros(n, dtype=bool)
+    defined = np.flatnonzero(~np.isnan(closes))
+    if len(defined) == 0:
+        return out
+    first = int(defined[0])
+    ema = np.full(n, NAN)
+    if n - first >= 200:
+        ema[first:] = [NAN if v is None else v for v in ind.ema(list(closes[first:]), 200)]
+    below = closes < ema  # False where the EMA isn't defined yet
+    for t in range(CRASH_GUARD_RETURN_SESSIONS, n):
+        before = closes[t - CRASH_GUARD_RETURN_SESSIONS]
+        if np.isnan(before) or np.isnan(closes[t]) or before <= 0:
+            continue
+        if closes[t] / before - 1 < CRASH_GUARD_RETURN:
+            continue
+        if below[max(0, t - CRASH_GUARD_BELOW_SESSIONS) : t + 1].any():
+            out[t] = True
+    return out
 
 
 def results_blackout(

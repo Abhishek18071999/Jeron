@@ -1,11 +1,22 @@
 import Link from "next/link";
 
 import { SignalHowTo, StrategiesAtAGlance } from "@/components/strategy-guide";
-import { Badge, Card, EmptyState, Help, LinkButton, Notice, Page, PageHeader, type Tone, shortDate } from "@/components/ui";
-import { type CompareView, type Ranked, type StockBrief, type Watchlist, getJson } from "@/lib/api";
-import { MAX_COMPARE, type ShownRow, checksPassed, compareRows, differences, parseSymbols } from "@/lib/compare";
+import { Badge, Card, EmptyState, Help, LinkButton, Notice, Page, PageHeader, type Tone, pctText, shortDate } from "@/components/ui";
+import { type CompareView, type Performance, type Ranked, type StockBrief, type Watchlist, getJson } from "@/lib/api";
+import {
+  INDEX_COLOR,
+  MAX_COMPARE,
+  STOCK_COLORS,
+  type ShownRow,
+  checksPassed,
+  compareRows,
+  differences,
+  parseSymbols,
+  performanceRows,
+} from "@/lib/compare";
 import { SECTION_RULES, strategyGuide } from "@/lib/strategy-guide";
 
+import { type Line, PerformanceChart } from "./performance-chart";
 import { ComparePicker } from "./picker";
 
 export const dynamic = "force-dynamic";
@@ -24,17 +35,23 @@ const compareHref = (symbols: string[]) => `/stocks/compare?symbols=${encodeURIC
 // Phones: the label on its own line, then one column per stock. Wider: label first.
 const gridCols = "grid-cols-[repeat(var(--n),minmax(0,1fr))] sm:grid-cols-[11rem_repeat(var(--n),minmax(0,1fr))]";
 
-function StockCard({ b }: { b: StockBrief }) {
+function StockCard({ b, color, perf }: { b: StockBrief; color: string; perf?: Performance }) {
   const close = b.facts.find((f) => f.label === "Last close");
   const found = strategyGuide(b.strategy);
   const checks = checksPassed(b);
   return (
-    <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-line bg-surface p-4">
+    <section
+      className="flex w-[85%] min-w-0 shrink-0 snap-start flex-col gap-2 rounded-xl border border-line border-t-4 bg-surface p-4 only:w-full sm:w-auto"
+      style={{ borderTopColor: color }}
+    >
       <div className="min-w-0">
         <Link href={`/stocks/${b.symbol}`} className="text-lg font-semibold hover:underline">
           {b.symbol}
         </Link>
         {b.name && <p className="truncate text-xs text-muted">{b.name}</p>}
+        {(perf?.industry || perf?.sector) && (
+          <p className="truncate text-xs text-muted">{[perf.sector, perf.industry].filter(Boolean).join(" · ")}</p>
+        )}
       </div>
       <p className="text-sm">
         <span className="text-xl font-semibold tracking-tight">{close?.value ?? "no price"}</span>
@@ -94,16 +111,70 @@ function Cell({ row, i }: { row: ShownRow; i: number }) {
   const lead = row.leads.includes(i);
   return (
     <span className={`${stanceClass[f.stance]} ${row.small ? "text-xs" : ""}`}>
-      {f.value}
-      {lead && (
-        <span
-          className="ml-1 whitespace-nowrap rounded bg-accent-bg px-1 text-[0.65rem] font-semibold uppercase tracking-wide text-accent"
-          title={`${row.lead === "higher" ? "Highest" : "Lowest"} of these: the direction Jeron's rules treat as stronger on this row`}
-        >
-          {row.lead === "higher" ? "▲" : "▼"} {row.leadText ?? (row.lead === "higher" ? "highest" : "lowest")}
-        </span>
-      )}
+      {row.asHeadline ? `${f.label}${f.as_of ? `, ${shortDate(f.as_of)}` : ""}` : f.value}
+      {lead && <LeadMark text={`${row.lead === "higher" ? "▲" : "▼"} ${row.leadText ?? (row.lead === "higher" ? "highest" : "lowest")}`} />}
     </span>
+  );
+}
+
+function LeadMark({ text }: { text: string }) {
+  return (
+    <span className="ml-1 whitespace-nowrap rounded bg-accent-bg px-1 text-[0.65rem] font-semibold uppercase tracking-wide text-accent">
+      {text}
+    </span>
+  );
+}
+
+function PerformanceCard({ briefs, perf }: { briefs: StockBrief[]; perf: Performance[] }) {
+  const stocks = briefs.map((b) => perf.find((p) => p.symbol === b.symbol)).filter((p): p is Performance => !!p);
+  const index = perf.find((p) => !briefs.some((b) => b.symbol === p.symbol));
+  const lines: Line[] = [
+    ...stocks.map((p, i) => ({ p, color: STOCK_COLORS[i % STOCK_COLORS.length] })),
+    ...(index ? [{ p: index, color: INDEX_COLOR, dashed: true }] : []),
+  ].filter((l) => l.p.series.length > 1);
+  const first = lines[0]?.p.series[0]?.time;
+  const n = stocks.length + (index ? 1 : 0);
+  return (
+    <Card
+      title="Price performance"
+      subtitle={`Adjusted closes rebased to 100${first ? ` on ${shortDate(first)}` : ""}, the first day all have prices: 130 means up 30% since then. Past returns, not a forecast.`}
+    >
+      {lines.length > 0 && <PerformanceChart lines={lines} />}
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        {lines.map((l) => (
+          <span key={l.p.symbol} className="inline-flex items-center gap-1.5">
+            <span className={`inline-block h-0.5 w-4 ${l.dashed ? "border-t border-dashed" : ""}`} style={l.dashed ? { borderColor: l.color } : { background: l.color }} />
+            {l.p.symbol}
+          </span>
+        ))}
+      </div>
+      <div style={{ "--n": n } as React.CSSProperties} className="mt-4 text-sm">
+        <div className={`grid ${gridCols} items-end gap-x-3 border-b border-line-strong pb-1.5`}>
+          <span className="col-span-full font-semibold sm:col-span-1">Returns and risk</span>
+          {stocks.map((p, i) => (
+            <span key={p.symbol} className="truncate text-xs font-semibold" style={{ color: STOCK_COLORS[i % STOCK_COLORS.length] }}>
+              {p.symbol}
+            </span>
+          ))}
+          {index && <span className="truncate text-xs font-semibold text-muted">{index.symbol}</span>}
+        </div>
+        {performanceRows(stocks, index).map(({ row, values, index: iv, leads }) => (
+          <div key={row.label} className={`grid ${gridCols} gap-x-3 gap-y-0.5 border-b border-line py-2`}>
+            <span className="col-span-full text-muted sm:col-span-1">
+              {row.label}
+              <Help title={row.label} text={row.help} />
+            </span>
+            {values.map((v, i) => (
+              <span key={stocks[i].symbol} className={row.signed && v !== null ? (v > 0 ? "text-good" : v < 0 ? "text-bad" : "") : ""}>
+                {v === null ? <span className="text-muted">—</span> : pctText(v, 1, row.signed)}
+                {leads.includes(i) && <LeadMark text={`${row.lead === "higher" ? "▲" : "▼"} ${row.leadText}`} />}
+              </span>
+            ))}
+            {index && <span className="text-muted">{iv === null ? "—" : pctText(iv, 1, row.signed)}</span>}
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -115,8 +186,8 @@ function CompareGrid({ briefs }: { briefs: StockBrief[] }) {
         <div key={g.title} className="mt-4 first:mt-0">
           <div className={`grid ${gridCols} items-end gap-x-3 border-b border-line-strong pb-1.5`}>
             <h3 className="col-span-full font-semibold sm:col-span-1">{g.title}</h3>
-            {briefs.map((b) => (
-              <span key={b.symbol} className="truncate text-xs font-semibold text-muted">
+            {briefs.map((b, i) => (
+              <span key={b.symbol} className="truncate text-xs font-semibold" style={{ color: STOCK_COLORS[i % STOCK_COLORS.length] }}>
                 {b.symbol}
               </span>
             ))}
@@ -150,6 +221,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   ]);
   const briefs = result?.ok ? result.data.briefs : [];
   const notFound = result?.ok ? result.data.not_found : [];
+  const perf = result?.ok ? (result.data.performance ?? []) : [];
   const names = Object.fromEntries(briefs.map((b) => [b.symbol, b.name]));
   const top = rankedResult?.ok ? rankedResult.data.items.map((s) => s.symbol).slice(0, MAX_COMPARE) : [];
   const watched = watchResult?.ok ? watchResult.data.items.map((w) => w.ticker).slice(0, MAX_COMPARE) : [];
@@ -216,11 +288,16 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
               Some prices are older than the latest session: read each column as of its own date.
             </Notice>
           )}
-          <div className={`grid gap-3 ${briefs.length === 2 ? "sm:grid-cols-2" : briefs.length === 3 ? "sm:grid-cols-2 lg:grid-cols-3" : ""}`}>
-            {briefs.map((b) => (
-              <StockCard key={b.symbol} b={b} />
+          {/* Phones: the cards side by side in a row that swipes; wider: a grid. */}
+          <div
+            className={`-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:overflow-visible sm:px-0 sm:pb-0 ${briefs.length === 2 ? "sm:grid-cols-2" : briefs.length === 3 ? "sm:grid-cols-2 lg:grid-cols-3" : ""}`}
+          >
+            {briefs.map((b, i) => (
+              <StockCard key={b.symbol} b={b} color={STOCK_COLORS[i % STOCK_COLORS.length]} perf={perf.find((p) => p.symbol === b.symbol)} />
             ))}
           </div>
+
+          {perf.some((p) => p.series.length > 1) && <PerformanceCard briefs={briefs} perf={perf} />}
 
           {diffs.length > 0 && (
             <Card title="Where they differ" subtitle="Rows where Jeron's rules count one stock for a long trade and another against.">
@@ -281,7 +358,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
             </Link>
           }
         >
-          <details open={!wanted.length}>
+          <details open={!wanted.length || (briefs.length > 0 && signalled.length === 0)}>
             <summary className="mb-2 cursor-pointer text-sm font-medium">Show all strategies</summary>
             <StrategiesAtAGlance />
             <p className="mt-3 text-sm">
