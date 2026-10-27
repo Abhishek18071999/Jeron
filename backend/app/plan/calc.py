@@ -21,6 +21,7 @@ the inputs from the database.
   Settings, hard unless JERON_RISK_LIMITS_BLOCK is off: today's realised loss below
   JERON_DAILY_LOSS_LIMIT_PCT of capital, this week's below JERON_WEEKLY_LOSS_LIMIT_PCT,
   and fewer than JERON_MAX_ENTRIES_WEEK positions first bought this week.
+- The kill switch (`app.halt`, docs/runbook.md): while Jeron is stopped no plan is saved.
 - Warnings (shown, not blocking): heat at the 5% warning level, defend mode, a results
   calendar that isn't loaded, ex-dates ahead, and a trade so small that fixed charges
   (the DP charge per day with a sale) cost more than 0.1R (`costs.small_trade_warning`).
@@ -99,6 +100,8 @@ class PlanInputs:
     # The real account and its limits; without them the guardrails aren't checked.
     account: AccountState | None = None
     limits: Limits | None = None
+    # The kill switch's reason (app/halt.py) when Jeron is stopped: no buy is saved.
+    halted: str | None = None
 
 
 @dataclass(frozen=True)
@@ -357,6 +360,16 @@ def build_plan(p: PlanInputs) -> Plan:
             Check("mood", "Market mood", "pass", f"{p.mood}: full risk per trade", hard=False)
         )
     checks += guardrails(p, rules, braked)
+    if p.halted:
+        checks.append(
+            Check(
+                "halted",
+                "Kill switch off",
+                "fail",
+                f"Jeron is stopped: {p.halted}. Run `python -m app.cli resume` when it is "
+                "sorted (docs/runbook.md).",
+            )
+        )
     return Plan(
         inputs=p,
         shares=shares,

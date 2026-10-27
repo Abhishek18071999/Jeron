@@ -2,16 +2,19 @@
 
 - 08:30 IST on trading days: `preopen` (pre-open check of open positions);
 - 19:00 IST on weekdays: `daily` (data, quality, scan, news, paper, alerts), then
-  `weekly` (summary and revalidation) after the last session of the week;
+  `weekly` (summary and revalidation) after the last session of the week, with the
+  paper review's proposals and their checks (`end_of_week`);
 - 21:30 IST on weekdays: `daily` again, only if the day's data had not arrived at 19:00
   (NSE publishes late some days; the first run told me so, `app/alerts/late.py`);
+- 19:45 IST on trading days: the dead-man's switch (`app/alerts/watchdog.py`), one alert
+  if the daily summary hasn't gone out;
 - every few minutes: the autopilot (app/autopilot.py), which sets up a new install and
   imports files dropped in the imports folder;
 - every minute, when Telegram is set up: the buttons pressed under signal alerts.
 
 Every job is safe to re-run, so a missed or repeated run does no harm. Times come from
-`JERON_SCHEDULE_PREOPEN`, `JERON_SCHEDULE_DAILY` and `JERON_SCHEDULE_DAILY_RETRY`
-(HH:MM, IST).
+`JERON_SCHEDULE_PREOPEN`, `JERON_SCHEDULE_DAILY`, `JERON_SCHEDULE_DAILY_RETRY` and
+`JERON_SCHEDULE_WATCHDOG` (HH:MM, IST).
 
 Jeron runs on my own computer, which can be asleep or off at those times. A job missed
 while the computer slept runs when it wakes (until 15:30 for the pre-open check, until
@@ -46,7 +49,12 @@ log = logging.getLogger("jeron.scheduler")
 Runner = Callable[[list[str]], int]
 # How late a job missed while the computer slept may still run: the pre-open check until
 # about 15:30, the daily run until the next morning.
-GRACE_SECONDS = {"preopen": 7 * 3600, "daily": 12 * 3600, "daily-retry": 10 * 3600}
+GRACE_SECONDS = {
+    "preopen": 7 * 3600,
+    "daily": 12 * 3600,
+    "daily-retry": 10 * 3600,
+    "watchdog": 4 * 3600,
+}
 MARKET_CLOSE = time(15, 30)
 AUTOPILOT_MINUTES = 1
 TELEGRAM_MINUTES = 1
@@ -73,6 +81,14 @@ def preopen_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> i
     return run(["preopen", "--date", day.isoformat()])
 
 
+def end_of_week(run: Runner, day: date) -> None:
+    """The weekly summary, then the paper review: new proposals, their forward checks,
+    and backtests of a few waiting ones (docs/plans/paper-review-v1.md)."""
+    run(["weekly", "--date", day.isoformat()])
+    run(["paper-review"])
+    run(["proposal-validate", "--limit", "2"])
+
+
 def daily_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> int | None:
     day = today()
     calendar = TradingCalendar.default()
@@ -81,8 +97,25 @@ def daily_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> int
         return None
     code = run(["daily"])
     if last_session_of_week(calendar, day):
-        run(["weekly", "--date", day.isoformat()])
+        end_of_week(run, day)
     return code
+
+
+def _market_job_running() -> bool:
+    return autopilot.market_lock.locked()
+
+
+def watchdog_job(
+    run: Runner = cli.main,
+    today: Callable[[], date] = _today,
+    running: Callable[[], bool] = _market_job_running,
+) -> int | None:
+    """The dead-man's switch on trading days: `watchdog` alerts once if the daily
+    summary hasn't gone out, saying whether a run is still going."""
+    day = today()
+    if not is_session(TradingCalendar.default(), day):
+        return None
+    return run(["watchdog", *(["--running"] if running() else [])])
 
 
 def _latest_scan() -> date | None:
@@ -123,7 +156,7 @@ def catch_up(
         run(["daily"])
         ran.append("daily")
         if last_session_of_week(calendar, last):
-            run(["weekly", "--date", last.isoformat()])
+            end_of_week(run, last)
             ran.append("weekly")
     if is_session(calendar, today) and preopen_at <= clock < MARKET_CLOSE:
         run(["preopen", "--date", today.isoformat()])  # sent once a day, so re-runs are quiet
@@ -169,10 +202,12 @@ def build(scheduler: BaseScheduler) -> BaseScheduler:
         ("preopen", preopen_job, settings.schedule_preopen),
         ("daily", daily_job, settings.schedule_daily),
         ("daily-retry", retry_job, settings.schedule_daily_retry),
+        ("watchdog", watchdog_job, settings.schedule_watchdog),
     ):
         hour, minute = _hm(at)
         scheduler.add_job(
-            _safe(job, name),
+            # The watchdog must run while the daily job holds the lock.
+            _safe(job, name, lock=name != "watchdog"),
             CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone=IST),
             id=name,
             name=name,

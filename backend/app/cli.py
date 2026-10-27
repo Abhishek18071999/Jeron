@@ -17,12 +17,16 @@ python -m app.cli news-testset                  # write headlines for you to lab
 python -m app.cli news-eval testset.csv         # the model's accuracy on your labels
 python -m app.cli backtest                      # walk-forward test of every strategy
 python -m app.cli backtest --strategy combined-book  # rs-pullback + results drift in one account
+python -m app.cli research --out report.md      # the trading review's options on rs-pullback
 python -m app.cli paper                         # signals and paper trades for the newest scan
 python -m app.cli strategy-status               # every strategy's status, evidence, health
 python -m app.cli strategy-status rs-pullback-v1 "small capital" --reason "..."
 python -m app.cli alerts                        # send the newest day's signals and summary
 python -m app.cli telegram --setup              # find your chat id after messaging the bot
 python -m app.cli daily                         # update, scan, paper-trade, send alerts
+python -m app.cli watchdog                      # alert if tonight's summary hasn't gone out
+python -m app.cli stop-all --reason "..."       # kill switch: no new buys, says why
+python -m app.cli resume                        # undo stop-all
 python -m app.cli holidays --year 2025          # holidays as NSE's files show them
 python -m app.cli auth-setup                    # password and TOTP for the web login
 python -m app.cli api-token                     # the token the web app sends the API
@@ -41,12 +45,16 @@ import anthropic
 from sqlalchemy.orm import Session
 
 from app import auth
-from app.alerts.channels import AlertError, TelegramChannel
-from app.alerts.job import NOT_SET_UP, run_alerts, send_test
+from app import halt as halt_mod
+from app.alerts.channels import AlertError, TelegramChannel, channels_from
+from app.alerts.job import NOT_SET_UP, AlertOutcome, _send, run_alerts, send_test
 from app.alerts.late import data_late
+from app.alerts.watchdog import check_tonight, ping_heartbeat
 from app.analytics.strategies import set_status, strategy_views
 from app.analytics.weekly import run_weekly
-from app.backtest.job import run_backtests
+from app.backtest import research
+from app.backtest.job import load_inputs, run_backtests
+from app.backtest.market import build_market
 from app.backtest.strategies import COMBINED, STRATEGIES
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
@@ -62,6 +70,7 @@ from app.enums import QualityStatus
 from app.exits.job import run_preopen
 from app.fundamentals.job import cached_fetch, import_results
 from app.journal.importer import import_tradebook
+from app.models import Alert, StrategyProposal
 from app.news.deepseek import LabellerError
 from app.news.job import (
     api_error_message,
@@ -74,8 +83,11 @@ from app.news.job import (
     spent,
 )
 from app.paper.job import run_paper
+from app.paper.optimize import record_proposals, refresh_forward, validate, validate_waiting
 from app.scan.job import ASM, run_scan
 from app.scan.surveillance import read_asm_csv
+from app.settings_store import effective_settings
+from app.signals.build import IST
 
 
 def _log(message: str) -> None:
@@ -135,6 +147,14 @@ def _api_token() -> int:
     return 0
 
 
+def _notify(session: Session, key: str, text: str, subject: str, now: datetime) -> Alert | None:
+    """One message by the alert channels; None when they aren't set up."""
+    channels = channels_from(effective_settings(session))
+    if not channels:
+        return None
+    return _send(session, channels, key, "halt", text, subject, AlertOutcome(None, "ok"), now)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m app.cli",
@@ -182,6 +202,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--end", type=_date, help="last price date to use (default: newest)")
 
     p = sub.add_parser(
+        "research",
+        help="the trading review's options (research only, not saved as runs) against "
+        "rs-pullback-v1; docs/plans/review-v1.md",
+    )
+    p.add_argument("--option", choices=sorted(research.BY_KEY), action="append")
+    p.add_argument("--out", type=Path, help="write the Markdown table here")
+    p.add_argument("--end", type=_date, help="last price date to use (default: newest)")
+    p.add_argument(
+        "--trials", action="store_true", help="also the deflated Sharpe with correlated trials"
+    )
+
+    p = sub.add_parser(
         "paper", help="paper-trade every strategy to the newest scanned day; record signals"
     )
     p.add_argument("--date", type=_date, help="day to update to (default: newest scan)")
@@ -205,6 +237,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("version", nargs="?", help="strategy version, e.g. rs-pullback-v1")
     p.add_argument("status", nargs="?", help="the new status")
     p.add_argument("--reason", default="", help="why: kept with the status")
+    sub.add_parser(
+        "paper-review",
+        help="record strategy proposals from the paper trades and refresh their forward checks",
+    )
+    p = sub.add_parser(
+        "proposal-validate",
+        help="backtest proposals on the history before their paper account (default: all waiting)",
+    )
+    p.add_argument("id", type=int, nargs="?", help="one proposal to (re)test")
+    p.add_argument("--limit", type=int, help="test at most this many waiting proposals")
 
     p = sub.add_parser("alerts", help="send due signal alerts and the daily summary")
     p.add_argument("--date", type=_date, help="day to send for (default: newest scan)")
@@ -237,6 +279,19 @@ def main(argv: list[str] | None = None) -> int:
         help="update everything since the last run, scan, paper-trade, send alerts "
         "(run after 7 pm IST)",
     )
+
+    p = sub.add_parser(
+        "stop-all",
+        help="kill switch: no signal alerts, new signals research only, no trade plans "
+        "(exits still checked); docs/runbook.md",
+    )
+    p.add_argument("--reason", required=True, help="why, in a few words (shown everywhere)")
+    sub.add_parser("resume", help="turn the kill switch off")
+
+    p = sub.add_parser(
+        "watchdog", help="alert once if the latest session's daily summary hasn't gone out"
+    )
+    p.add_argument("--running", action="store_true", help="a daily run is still going")
 
     p = sub.add_parser(
         "events", help="board meetings and announcements from NSE's daily files, for history"
@@ -458,6 +513,24 @@ def main(argv: list[str] | None = None) -> int:
             paper = run_paper(session, args.date, args.strategy, restart=args.restart, log=_log)
             return 0 if paper.status == "ok" else 1
 
+        if args.command == "paper-review":
+            new = record_proposals(session, log=_log)
+            refreshed = refresh_forward(session)
+            _log(f"{len(new)} new proposals; {refreshed} forward checks refreshed.")
+            return 0
+
+        if args.command == "proposal-validate":
+            if args.id is not None:
+                proposal = session.get(StrategyProposal, args.id)
+                if proposal is None:
+                    _log(f"No proposal {args.id}")
+                    return 1
+                validate(session, proposal, log=_log)
+            else:
+                done = validate_waiting(session, args.limit, log=_log)
+                _log(f"{len(done)} proposals tested.")
+            return 0
+
         if args.command == "alerts":
             sent = run_alerts(session, args.date, log=_log)
             return 0 if sent.status == "ok" and not sent.failed else 1
@@ -550,7 +623,55 @@ def main(argv: list[str] | None = None) -> int:
                 ok = run_paper(session, report.trade_date, log=_log).status == "ok"
             # The summary goes out even when the day was blocked, saying why.
             sent = run_alerts(session, report.trade_date, log=_log)
+            if not late:
+                ping_heartbeat(settings.heartbeat_url, log=_log)
             return 0 if ok and not late and not sent.failed else 1
+
+        if args.command in ("stop-all", "resume"):
+            if args.command == "stop-all":
+                halt = halt_mod.stop_all(session, args.reason)
+                text = (
+                    f"{halt.headline()}\nUntil then: no signal or watchlist alerts, new "
+                    "signals are research only, no trade plan can be saved. The pre-open "
+                    "check and the daily summary still come, with the exits."
+                )
+            else:
+                ended = halt_mod.resume(session)
+                if ended is None:
+                    _log("Jeron was not stopped.")
+                    return 0
+                text = (
+                    f"Jeron restarted. It was stopped from {ended.since:%a %-d %b %H:%M} "
+                    f"({ended.reason}). Signals made while stopped stay research only."
+                )
+            _log(text)
+            now = datetime.now(IST)
+            alert = _notify(session, f"halt:{now.isoformat()}", text, "Jeron kill switch", now)
+            if alert is None:
+                _log(NOT_SET_UP)
+            return 0
+
+        if args.command == "research":
+            started = datetime.now()
+            market = build_market(load_inputs(session, None, args.end, log=_log))
+            rows = research.run_research(market, args.option, log=_log)
+            note = (
+                f"Data {market.days[0]} to {market.days[-1]}, {len(market.symbols)} stocks; "
+                f"results calendar {'loaded' if market.results is not None else 'not loaded'}; "
+                f"fundamentals {'loaded' if market.fund_score is not None else 'not loaded'}. "
+                f"Took {(datetime.now() - started).seconds // 60} minutes."
+            )
+            base = rows[0].ev
+            trials = research.trial_view(market, base) if args.trials and base else None
+            text = research.report(rows, note, market, trials)
+            print(text)
+            if args.out:
+                args.out.write_text(text + "\n")
+            return 0
+
+        if args.command == "watchdog":
+            told = check_tonight(session, calendar, running=args.running, log=_log)
+            return 1 if told is not None else 0
 
         if args.command == "news-label":
             settings = get_settings()

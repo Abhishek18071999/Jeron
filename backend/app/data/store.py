@@ -989,6 +989,6 @@ def held_drops(session: Session, day: date) -> dict[str, str]:
     for item in items:
         reason = f"fell {item['move_pct']}% on {day:%-d %b} with no split or bonus"
         if item.get("actions"):
-            reason += f" ({item['actions']}, which Jeron does not adjust for)"
+            reason += f" ({item['actions']}, which Jeron could not price)"
         out[item["symbol"]] = reason
     return out

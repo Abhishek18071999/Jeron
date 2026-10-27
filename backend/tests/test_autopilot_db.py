@@ -209,3 +209,18 @@ def test_paper_traded_versions_without_an_evidence_rating_are_backtested_once(se
     assert ran[-1] == ["backtest", "--strategy", "rs-pullback"]
     assert _run(session, ran) == "paper"
     assert _run(session, ran) is None  # rated once per confidence version, not every tick
+
+
+def test_setup_shows_the_kill_switch_and_the_heartbeat(session):
+    from app import halt
+
+    client = TestClient(app)
+    steps = client.get("/setup").json()["steps"]
+    keys = [s["key"] for s in steps]
+    assert "halt" not in keys
+    assert {s["key"]: s for s in steps}["heartbeat"]["state"] == "waiting"
+    halt.stop_all(session, "checking prices")
+    steps = client.get("/setup").json()["steps"]
+    assert steps[0]["key"] == "halt" and "checking prices" in steps[0]["detail"]
+    halt.resume(session)
+    assert client.get("/setup").json()["steps"][0]["key"] != "halt"

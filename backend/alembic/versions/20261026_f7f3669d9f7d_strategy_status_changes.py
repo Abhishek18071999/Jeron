@@ -1,7 +1,7 @@
 """strategy status changes
 
 Revision ID: f7f3669d9f7d
-Revises: 895aca58bcbe
+Revises: de7003738791
 Create Date: 2026-10-26 20:22:02.110552
 
 """
@@ -15,7 +15,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "f7f3669d9f7d"
-down_revision: str | Sequence[str] | None = "895aca58bcbe"
+down_revision: str | Sequence[str] | None = "de7003738791"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

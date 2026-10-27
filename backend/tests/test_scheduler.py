@@ -21,7 +21,7 @@ from app.signals.build import IST
 def test_jobs_run_at_ist_times_on_weekdays():
     scheduler = build(BackgroundScheduler(timezone=IST))
     jobs = {j.id: j for j in scheduler.get_jobs()}
-    assert set(jobs) == {"preopen", "daily", "daily-retry", "autopilot"}
+    assert set(jobs) == {"preopen", "daily", "daily-retry", "watchdog", "autopilot"}
     start = datetime(2025, 3, 14, 12, 0, tzinfo=IST)  # a Friday
     fire = jobs["preopen"].trigger.get_next_fire_time(None, start)
     assert (fire.date(), fire.hour, fire.minute) == (date(2025, 3, 17), 8, 30)  # Monday
@@ -44,7 +44,12 @@ def test_holidays_skip_and_weekly_after_the_last_session():
     calendar = TradingCalendar.default()
     assert last_session_of_week(calendar, date(2025, 3, 13))  # Thursday before Holi
     assert daily_job(run, lambda: date(2025, 3, 13)) == 0
-    assert ran == [["daily"], ["weekly", "--date", "2025-03-13"]]
+    assert ran == [
+        ["daily"],
+        ["weekly", "--date", "2025-03-13"],
+        ["paper-review"],
+        ["proposal-validate", "--limit", "2"],
+    ]
     ran.clear()
     daily_job(run, lambda: date(2025, 3, 12))
     assert ran == [["daily"]]
@@ -78,7 +83,11 @@ def test_catch_up_after_the_computer_was_off():
         "daily",
         "weekly",
     ]
-    assert ran[-1] == ["weekly", "--date", "2026-10-23"]
+    assert ran[-3:] == [
+        ["weekly", "--date", "2026-10-23"],
+        ["paper-review"],
+        ["proposal-validate", "--limit", "2"],
+    ]
 
     # A new install with no scan yet waits for the backfill.
     assert catch_up(run, at(date(2026, 10, 24), 10), lambda: None) == []

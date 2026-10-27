@@ -19,6 +19,7 @@ from app.data.adjust import adjust_bars, build_adjustments
 from app.data.events import EVENT_LOOKAHEAD_DAYS, blackout_signal_days, event_risk, next_results
 from app.data.pipeline import BOARD_MEETINGS_SOURCE
 from app.enums import CorporateActionType, Exchange
+from app.halt import halt_state
 from app.journal.service import SignalInfo, signal_info
 from app.market.mood import Mood
 from app.market.service import latest_ok_scan, mood_on
@@ -81,6 +82,7 @@ class Context:
     signal: SignalInfo | None
     account: AccountState | None = None
     settings: Settings | None = None
+    halted: str | None = None  # the kill switch's reason (app/halt.py)
 
 
 def limits_for(settings: Settings, tier: Tier) -> Limits:
@@ -215,6 +217,7 @@ def context(
         signal=signal,
         account=p.account,
         settings=settings,
+        halted=None if (halt := halt_state(session)) is None else halt.reason,
     )
 
 
@@ -286,6 +289,7 @@ def plan_for(ctx: Context, entry: Decimal, stop: Decimal, tier: Tier) -> Plan:
             ex_dates=ctx.events.ex_dates,
             account=ctx.account,
             limits=None if ctx.settings is None else limits_for(ctx.settings, tier),
+            halted=ctx.halted,
         )
     )
 

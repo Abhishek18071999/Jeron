@@ -29,6 +29,11 @@ const PAGES = [
     text: "One account per strategy version, replayed daily; where signals come from.",
   },
   {
+    href: "/paper/performance",
+    title: "Paper performance",
+    text: "The 90+ score stocks and every strategy on paper: journal, returns, what failed and why, and proposals tested on unseen data.",
+  },
+  {
     href: "/compare",
     title: "Backtest vs paper vs real",
     text: "Does each strategy behave live as it did in the backtest? Gates, ranges and causes of drift.",

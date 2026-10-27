@@ -29,6 +29,7 @@ from app.backtest import confidence
 from app.backtest.costs import CostModel, Realised, TaxRules, estimate_tax
 from app.backtest.engine import Book, PortfolioRules, SimResult, Trade, Variant, simulate
 from app.backtest.market import Market
+from app.backtest.missed import missed_entries
 from app.backtest.stats import (
     CurveStats,
     GateRules,
@@ -807,6 +808,17 @@ def _report(
         },
         "schedule": schedule_json,
         "skipped_entries": dict(skip_counts.most_common()),
+        # Reporting only (app/backtest/missed.py): skipped gaps bought anyway.
+        "missed_entries": missed_entries(
+            m,
+            strategy.tier,
+            rules,
+            costs,
+            sim.skipped,
+            sim.trades,
+            oos_start,
+            folds.holdout_start - 1,
+        ).to_dict(),
         "exit_reasons": dict(exit_counts.most_common()),
         "brake_events": [{"date": str(days[t]), "event": e} for t, e in sim.brake_events],
         "rules": rules_text,

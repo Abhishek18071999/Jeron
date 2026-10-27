@@ -13,7 +13,9 @@ are part of done, never commit secrets.
   - `app/data/provider.py` the `DataProvider` protocol every data source implements.
   - `app/data/` market data: `nse.py` (bhavcopy + PR bundle), `nse_lists.py` (index
     closes, security list, Nifty 500 list, symbol changes), `yahoo.py` (second
-    source), `adjust.py` (corporate-action factors), `crosscheck.py`, `quality.py`
+    source), `adjust.py` (corporate-action factors;
+    rights issues by the theoretical ex-rights price, demergers by the ex-date open,
+    decision 0017), `crosscheck.py`, `quality.py`
     (check #9 holds a stock that fell over 15% with no split or bonus: its signals are
     sent HELD and its exits go to CHECK BY HAND),
     `search.py` (stock search: names, initials, old symbols, short names in
@@ -38,8 +40,13 @@ are part of done, never commit secrets.
     `COMBINED_BOOK` trades rs-pullback-v1 and results-drift-v1 in one account through
     the engine's `Book`s, run only by `backtest --strategy combined-book`, see
     `docs/plans/combined-book-v1.md`; `momentum-v1` (invest tier, monthly 12-1 momentum
-    leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`),
-    `walkforward.py` (folds, holdout, gates), `stats.py` (also the Nifty 500 cash-sweep
+    leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`);
+    `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
+    point, `docs/plans/paper-review-v1.md`),
+    `walkforward.py` (folds, holdout, gates), `missed.py` (orders skipped for opening
+    above the zone, bought anyway: reporting only), `research.py` (the 2026-10 review's
+    options, `PortfolioRules` fields off by default, run only by `research`, never saved
+    as runs; `docs/plans/review-v1.md`), `stats.py` (also the Nifty 500 cash-sweep
     line reported beside the gates, M8 part 2, and `risk_profile`: Sortino, streaks, time
     under water, exposure, turnover; reporting only), `confidence.py` (the evidence-strength
     layer beside the gates, decision 0018: bootstrap intervals, block-bootstrap drawdown,
@@ -67,10 +74,21 @@ are part of done, never commit secrets.
     required) and `build.py` (engine order -> signal).
   - `app/paper/job.py` paper trading: one account per strategy version, replayed by the
     engine each day; new orders become signals, stored once and never changed. Signals of
-    strategies that failed section 6 are research only. See `docs/decisions/0006`.
+    strategies that failed section 6 are research only. See `docs/decisions/0006`. Each
+    update also stores every trade's signal-day `context`, the missed-signal and
+    performance summaries, and new `paper_events` (the append-only audit trail).
+    The paper review (`docs/plans/paper-review-v1.md`, decision 0019): `proposals.py`
+    (signal context, groups and their market masks, the proposal rule, the validation
+    rule; pure), `review.py` (journal, performance, plan evaluation, root causes,
+    observations; pure) and `optimize.py` (database: the review, `strategy_proposals`
+    stored once, the forward split, the backtest check on the history before the
+    account opened). Proposals are never applied; a passing one becomes a new strategy
+    version by hand. Served at `/paper/accounts/{id}/review`, `/paper/accounts/{id}/audit`
+    and `/paper/proposals`.
   - `app/alerts/` alerts: `format.py` (signal message, daily summary; pure),
     `channels.py` (Telegram Bot API, SMTP email backup), `job.py` (what is due; every
-    alert stored once in `alerts`, so re-runs never send twice), `buttons.py` (the
+    alert stored once in `alerts`, so re-runs never send twice), `watchdog.py` (the
+    dead-man's switch: a 19:45 alert if the summary didn't go out, `JERON_HEARTBEAT_URL`), `buttons.py` (the
     signal alert's Telegram buttons; pure) and `bot.py` (reads the presses every minute:
     skip with a reason, "I bought it" and the fill typed back; each update stored once in
     `bot_updates`; `docs/plans/ui-v2.md`). Research-only signals
@@ -83,7 +101,9 @@ are part of done, never commit secrets.
   - `app/exits/` exits for my real positions: `rules.py` (the engine's section 5 exit
     rules on one position; pure, checked against the engine) and `job.py` (the pre-open
     check: action per open position, results and ex-dates ahead, stale-data guard;
-    `broker_stop`, the GTT stop to keep at the broker, flagged when the last close raised it).
+    `broker_stop`, the GTT stop to keep at the broker, flagged when the last close raised it;
+    `entry_checks`, the live signals valid today re-planned on the real account as "BUYS
+    AT THE OPEN"; the tax timing notes).
   - `app/analytics/` `compare.py` (backtest vs paper vs real: gates, expected ranges,
     stages, causes of divergence, the 20-trade early warning; pure), `service.py` (database) and `weekly.py` (weekly
     summary and revalidation, which retires failing strategies' paper accounts);
@@ -125,7 +145,7 @@ are part of done, never commit secrets.
     `reward_risk`, spec section 4 checks, heat and sector after the buy, the 5-item
     checklist, the small-trade warning when fixed charges pass 0.1R
     (`costs.small_trade_warning`, also on signal alerts and Trade cards); the real
-    account's guardrails (`guardrails`: spec section 5's drawdown brake and max positions
+    account's guardrails (the kill switch, `app/halt.py`, blocks every plan; `guardrails`: spec section 5's drawdown brake and max positions
     per tier, always hard; daily/weekly realised loss limits and a weekly entries cap from
     settings, hard unless `JERON_RISK_LIMITS_BLOCK` is off; decision 0015); pure) and
     `service.py` (database). `GET /plan/{symbol}`, `POST /plans`;
@@ -138,10 +158,10 @@ are part of done, never commit secrets.
     (`auth-setup`). The news labeller records spend in `llm_usage` and stops at the
     monthly cap (decision 0012).
   - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
-    days, `daily-retry` 21:30 IST (only when the session has no scan yet), `weekly` after
+    days, `watchdog` 19:45 IST, `daily-retry` 21:30 IST (only when the session has no scan yet), `weekly` after
     the last session of the week; `catch_up` on start runs what was
     missed while the computer was off; the autopilot every minute. Runs as the
-    `scheduler` service.
+    `scheduler` service. After `weekly`: `paper-review` and `proposal-validate --limit 2`.
   - `app/autopilot.py` sets an install up without commands (`docs/plans/autopilot-v1.md`):
     history, the first daily run, announcements from stored PR bundles, the news
     backlog, a backtest of every untested strategy version, then `paper` (the market
@@ -166,16 +186,21 @@ are part of done, never commit secrets.
     `events` (board-meeting and announcement history from the PR bundles),
     `events-import` (a board-meeting CSV saved from nseindia.com), `deals` (the day's bulk and
     block deals; `daily` runs it too), `deals-import FILE` (bulk/block deals or insider
-    trades saved from nseindia.com), `api-token` (the web app's token for the API),
+    trades saved from nseindia.com), `watchdog`, `stop-all --reason` / `resume` (the kill
+    switch, `app/halt.py`, `docs/runbook.md`), `research` (the review's options), `api-token` (the web app's token for the API),
     `fundamentals-import FILE...` (quarterly results from
     Financial Results CSVs saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
     `strategy-status [VERSION STATUS --reason]` (list, or set a status; decision 0018),
+    `paper-review` (strategy proposals from paper trades, forward checks),
+    `proposal-validate [ID]` (their backtest check),
     `tradebook FILE`, `auth-setup` (the web login's secrets).
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`. From
     November, a missing next year is warned on `/setup` and in the pre-open check, and
     `tests/test_calendar.py` fails from 1 January of a year not in the file.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
+- `docs/runbook.md` incidents, the kill switch, the heartbeat, the quarterly restore
+  drill, a week without Jeron.
 - `backup/backup.sh` the nightly `pg_dump` run by the `backup` service; a dump is kept only if
   `pg_restore` reads it, and once a week (`backup.sh verify`) the newest is restored into a
   scratch database, the result in `restore-check.txt`. `backend/app/backups.py` reads that
@@ -184,7 +209,8 @@ are part of done, never commit secrets.
   Trade (`/trade`, one tab per section: `/trade/swing`, `/trade/intraday`,
   `/trade/positional`, `/trade/invest`; `src/components/sections.tsx`), Stocks (sector
   heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
-  compare, data, spot check, setup), Learn (`/learn`, lessons in `src/lib/learn/`, one
+  compare, data, spot check, setup; `/paper/performance` is the paper review, one account
+  at a time, the 90+ score account first, helpers in `src/lib/paper-review.ts`), Learn (`/learn`, lessons in `src/lib/learn/`, one
   file per track, assembled in `src/lib/lessons.ts`; their Jeron numbers mirror the backend;
   `/learn/glossary`); `/stocks/compare` puts up to three stocks' briefs side by side (picked with the same
   search box, `src/app/stocks/compare/picker.tsx`; rows, leads and differences in
