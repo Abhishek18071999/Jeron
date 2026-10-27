@@ -2,7 +2,8 @@
 
 - 08:30 IST on trading days: `preopen` (pre-open check of open positions);
 - 19:00 IST on weekdays: `daily` (data, quality, scan, news, paper, alerts), then
-  `weekly` (summary and revalidation) after the last session of the week;
+  `weekly` (summary and revalidation) after the last session of the week, with the
+  paper review's proposals and their checks (`end_of_week`);
 - 21:30 IST on weekdays: `daily` again, only if the day's data had not arrived at 19:00
   (NSE publishes late some days; the first run told me so, `app/alerts/late.py`);
 - 19:45 IST on trading days: the dead-man's switch (`app/alerts/watchdog.py`), one alert
@@ -80,6 +81,14 @@ def preopen_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> i
     return run(["preopen", "--date", day.isoformat()])
 
 
+def end_of_week(run: Runner, day: date) -> None:
+    """The weekly summary, then the paper review: new proposals, their forward checks,
+    and backtests of a few waiting ones (docs/plans/paper-review-v1.md)."""
+    run(["weekly", "--date", day.isoformat()])
+    run(["paper-review"])
+    run(["proposal-validate", "--limit", "2"])
+
+
 def daily_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> int | None:
     day = today()
     calendar = TradingCalendar.default()
@@ -88,7 +97,7 @@ def daily_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> int
         return None
     code = run(["daily"])
     if last_session_of_week(calendar, day):
-        run(["weekly", "--date", day.isoformat()])
+        end_of_week(run, day)
     return code
 
 
@@ -147,7 +156,7 @@ def catch_up(
         run(["daily"])
         ran.append("daily")
         if last_session_of_week(calendar, last):
-            run(["weekly", "--date", last.isoformat()])
+            end_of_week(run, last)
             ran.append("weekly")
     if is_session(calendar, today) and preopen_at <= clock < MARKET_CLOSE:
         run(["preopen", "--date", today.isoformat()])  # sent once a day, so re-runs are quiet

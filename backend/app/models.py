@@ -554,6 +554,57 @@ class PaperTrade(Base):
     r_multiple: Mapped[Decimal] = mapped_column(Numeric(10, 4))
     sessions: Mapped[int] = mapped_column(Integer)
     exits: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # paper-review-v1: what was known at the signal close (score, regime, regime filter,
+    # sector, ATR %, RSI, volume ratio) and the signal's reasons, for the review.
+    context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+
+
+class PaperEvent(Base):
+    """The paper accounts' audit trail (paper-review-v1): each signal, entry, partial
+    exit, close and skip, stored the first time a replay shows it and never changed.
+    Paper trades are re-derived; these keep what Jeron saw and when."""
+
+    __tablename__ = "paper_events"
+    __table_args__ = (UniqueConstraint("account_id", "kind", "event_date", "ticker", "ref"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("paper_accounts.id", ondelete="CASCADE"), index=True
+    )
+    # "signal" / "entry" / "partial_exit" / "exit" / "skip"
+    kind: Mapped[str] = mapped_column(String(16))
+    event_date: Mapped[date] = mapped_column(Date)
+    ticker: Mapped[str] = mapped_column(String(32))
+    # Tells apart two events of a kind on one day and stock (the signal date of a trade).
+    ref: Mapped[str] = mapped_column(String(64), default="")
+    detail: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class StrategyProposal(Base):
+    """A change to a strategy proposed from its paper trades (paper-review-v1). The
+    proposal and its evidence are never changed; the checks fill their own columns.
+    Adopting one means registering a new strategy version by hand."""
+
+    __tablename__ = "strategy_proposals"
+    __table_args__ = (UniqueConstraint("strategy_version", "dimension", "group_value"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    strategy_version: Mapped[str] = mapped_column(String(64), index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("paper_accounts.id"))
+    # The filter: skip entries where `dimension` is `group_value` (app/paper/proposals.py).
+    dimension: Mapped[str] = mapped_column(String(32))
+    group_value: Mapped[str] = mapped_column(String(100))
+    text: Mapped[str] = mapped_column(String)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # "proposed" / "passed backtest" / "failed backtest" / "could not test"
+    status: Mapped[str] = mapped_column(String(32), default="proposed")
+    backtest: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The paper trades after created_at, split by the filter (reporting only).
+    forward: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    forward_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PaperDay(Base):

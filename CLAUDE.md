@@ -40,7 +40,9 @@ are part of done, never commit secrets.
     `COMBINED_BOOK` trades rs-pullback-v1 and results-drift-v1 in one account through
     the engine's `Book`s, run only by `backtest --strategy combined-book`, see
     `docs/plans/combined-book-v1.md`; `momentum-v1` (invest tier, monthly 12-1 momentum
-    leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`),
+    leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`);
+    `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
+    point, `docs/plans/paper-review-v1.md`),
     `walkforward.py` (folds, holdout, gates), `missed.py` (orders skipped for opening
     above the zone, bought anyway: reporting only), `research.py` (the 2026-10 review's
     options, `PortfolioRules` fields off by default, run only by `research`, never saved
@@ -66,7 +68,17 @@ are part of done, never commit secrets.
     required) and `build.py` (engine order -> signal).
   - `app/paper/job.py` paper trading: one account per strategy version, replayed by the
     engine each day; new orders become signals, stored once and never changed. Signals of
-    strategies that failed section 6 are research only. See `docs/decisions/0006`.
+    strategies that failed section 6 are research only. See `docs/decisions/0006`. Each
+    update also stores every trade's signal-day `context`, the missed-signal and
+    performance summaries, and new `paper_events` (the append-only audit trail).
+    The paper review (`docs/plans/paper-review-v1.md`, decision 0019): `proposals.py`
+    (signal context, groups and their market masks, the proposal rule, the validation
+    rule; pure), `review.py` (journal, performance, plan evaluation, root causes,
+    observations; pure) and `optimize.py` (database: the review, `strategy_proposals`
+    stored once, the forward split, the backtest check on the history before the
+    account opened). Proposals are never applied; a passing one becomes a new strategy
+    version by hand. Served at `/paper/accounts/{id}/review`, `/paper/accounts/{id}/audit`
+    and `/paper/proposals`.
   - `app/alerts/` alerts: `format.py` (signal message, daily summary; pure),
     `channels.py` (Telegram Bot API, SMTP email backup), `job.py` (what is due; every
     alert stored once in `alerts`, so re-runs never send twice), `watchdog.py` (the
@@ -136,7 +148,7 @@ are part of done, never commit secrets.
     days, `watchdog` 19:45 IST, `daily-retry` 21:30 IST (only when the session has no scan yet), `weekly` after
     the last session of the week; `catch_up` on start runs what was
     missed while the computer was off; the autopilot every minute. Runs as the
-    `scheduler` service.
+    `scheduler` service. After `weekly`: `paper-review` and `proposal-validate --limit 2`.
   - `app/autopilot.py` sets an install up without commands (`docs/plans/autopilot-v1.md`):
     history, the first daily run, announcements from stored PR bundles, the news
     backlog, a backtest of every untested strategy version, then `paper` (the market
@@ -166,6 +178,8 @@ are part of done, never commit secrets.
     `fundamentals-import FILE...` (quarterly results from
     Financial Results CSVs saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
+    `paper-review` (strategy proposals from paper trades, forward checks),
+    `proposal-validate [ID]` (their backtest check),
     `tradebook FILE`, `auth-setup` (the web login's secrets).
   - `app/calendar/` NSE trading calendar; holidays live in `nse_holidays.csv`. From
     November, a missing next year is warned on `/setup` and in the pre-open check, and
@@ -181,7 +195,8 @@ are part of done, never commit secrets.
   Trade (`/trade`, one tab per section: `/trade/swing`, `/trade/intraday`,
   `/trade/positional`, `/trade/invest`; `src/components/sections.tsx`), Stocks (sector
   heatmap and ranked list; `/watchlist` and `/plan/[symbol]` sit under it), Portfolio, Journal, Research (`/research` hub for scanner, backtests, paper,
-  compare, data, spot check, setup), Learn (`/learn`, lessons in `src/lib/learn/`, one
+  compare, data, spot check, setup; `/paper/performance` is the paper review, one account
+  at a time, the 90+ score account first, helpers in `src/lib/paper-review.ts`), Learn (`/learn`, lessons in `src/lib/learn/`, one
   file per track, assembled in `src/lib/lessons.ts`; their Jeron numbers mirror the backend;
   `/learn/glossary`); `/stocks/compare` puts up to three stocks' briefs side by side (picked with the same
   search box, `src/app/stocks/compare/picker.tsx`; rows, leads and differences in

@@ -439,6 +439,171 @@ export type PaperAccountView = {
   signals: SignalView[];
 };
 
+// --- Paper review (docs/plans/paper-review-v1.md): simulated results only ------------
+
+export type ReviewTrade = {
+  seq: number;
+  ticker: string;
+  signal_date: string;
+  entry_date: string;
+  entry_price: string;
+  initial_stop: string;
+  target_t1: string;
+  shares: number;
+  exit_date: string | null;
+  exit_price: string | null;
+  exit_reason: string | null;
+  charges: string;
+  net_pnl: string;
+  r: number;
+  sessions: number;
+  sector: string | null;
+  score: number | null;
+  why: string[];
+  current_stop?: string | null;
+  last_close?: string | null;
+  shares_held?: number;
+  value?: number;
+  pct_of_equity?: number | null;
+};
+
+export type ReviewGroup = {
+  dimension: string;
+  label: string;
+  value: string;
+  trades: number;
+  win_rate: number;
+  avg_r: number;
+  interval: [number, number] | null;
+  net_pnl: number;
+  loss_r: number;
+};
+
+export type MissedLine = { count: number; measured: number; avg_move_r: number | null; share_up: number | null };
+
+export type CurveNumbers = {
+  total_return: number;
+  cagr: number;
+  max_drawdown_pct: number;
+  sharpe: number;
+  volatility: number;
+  sessions: number;
+};
+
+export type Proposal = {
+  id: number;
+  strategy_version: string;
+  account_id: number;
+  dimension: string;
+  group_value: string;
+  text: string;
+  evidence: { review_version: string; group: ReviewGroup; rest: ReviewGroup };
+  created_at: string;
+  status: "proposed" | "passed backtest" | "failed backtest" | "could not test";
+  backtest: {
+    reason?: string;
+    data?: [string, string];
+    out_of_sample_from?: string;
+    holdout?: [string, string];
+    base?: Record<string, number>;
+    filtered?: Record<string, number>;
+    fails?: string[];
+  } | null;
+  validated_at: string | null;
+  forward: {
+    since: string;
+    trades: number;
+    skipped: { trades: number; avg_r: number | null; net_pnl: number };
+    kept: { trades: number; avg_r: number | null; net_pnl: number };
+  } | null;
+  forward_at: string | null;
+};
+
+export type PaperReview = {
+  journal: {
+    open: ReviewTrade[];
+    closed: ReviewTrade[];
+    allocation: {
+      equity: number;
+      invested: number;
+      cash: number;
+      cash_pct: number | null;
+      sectors: { sector: string; value: number; pct_of_equity: number | null }[];
+    };
+  };
+  performance: {
+    trades: {
+      trades: number;
+      wins: number;
+      win_rate: number | null;
+      avg_win_r: number | null;
+      avg_loss_r: number | null;
+      payoff_ratio: number | null;
+      expectancy_r: number | null;
+      expectancy_interval: [number, number] | null;
+      sample_note: string | null;
+      profit_factor: number | null;
+      net_pnl: number;
+      charges: number;
+      charges_pct_of_gains: number | null;
+      avg_sessions: number | null;
+    };
+    curve: CurveNumbers | null;
+    profile: {
+      sortino: number;
+      max_losing_streak: number;
+      max_winning_streak: number;
+      longest_underwater_sessions: number;
+      exposure_pct: number;
+      trades_per_year: number;
+    } | null;
+    benchmark: CurveNumbers | null;
+    excess_return: number | null;
+    cash_rate_pct: number | null;
+    backtest: {
+      trades: TradeStats | null;
+      max_drawdown_pct: number | null;
+      sharpe: number | null;
+      holdout: TradeStats | null;
+    } | null;
+  };
+  plan: {
+    exits: { exit: string; trades: number; avg_r: number; net_pnl: number }[];
+    best: ReviewTrade[];
+    worst: ReviewTrade[];
+    false_signals: { trades: number; share: number | null; rule: string; tickers: string[] };
+    gap_through: { trades: number; rule: string; rows: ReviewTrade[] };
+    missed: { forward_sessions: number; taken: MissedLine; skipped: Record<string, MissedLine> } | null;
+    deviations: { late_signals: number; replay_changes: string[]; rejected_signals: string[]; note: string };
+  };
+  root_causes: {
+    dimensions: {
+      dimension: string;
+      groups: ReviewGroup[];
+      loss_concentration: { value: string; share: number | null };
+    }[];
+    big_losses: { ticker: string; entry_date: string; r: number; exit_reason: string | null; context: Record<string, unknown> }[];
+    no_context: number;
+  };
+  observations: string[];
+  limitations: string[];
+  proposals: Proposal[];
+  proposals_tested_all: number;
+  audit_events: number;
+  review_version: string;
+};
+
+export type PaperReviewView = { account: PaperAccount; days: PaperDay[]; review: PaperReview };
+
+export type AuditEvent = {
+  kind: "signal" | "entry" | "partial_exit" | "exit" | "skip";
+  event_date: string;
+  ticker: string;
+  ref: string;
+  detail: Record<string, unknown>;
+  recorded_at: string;
+};
+
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export async function getJson<T>(path: string): Promise<ApiResult<T>> {
