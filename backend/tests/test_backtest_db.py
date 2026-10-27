@@ -187,3 +187,28 @@ def test_short_history_is_skipped_with_a_message(session):
     assert runs == []
     assert any("not enough history" in line for line in lines)
     assert session.scalar(select(func.count()).select_from(BacktestRun)) == 0
+
+
+def test_review_research_options_run_and_are_not_saved(session):
+    from sqlalchemy import func, select
+
+    from app.backtest import research
+    from app.backtest.job import load_inputs
+    from app.backtest.market import build_market
+    from app.models import BacktestRun
+
+    market = build_market(load_inputs(session))
+    rows = research.run_research(market, ["crash-guard", "no-time-stop", "quality"])
+    assert [r.label for r in rows][1:] == [
+        "Momentum-crash guard",
+        "No time stop (warn only)",
+        "Quality filter",
+    ]
+    assert rows[0].ev is not None and rows[1].ev is not None
+    assert rows[3].ev is None and "fundamentals" in (rows[3].error or "")
+    view = research.trial_view(market, rows[0].ev)
+    assert 40 <= view.trials <= 60 and 1 <= view.effective <= view.trials
+    text = research.report(rows, "test data", market, view)
+    assert "Deflated Sharpe (item 7)" in text
+    assert "rs-pullback-v1 as it is" in text and "Missed entries (item 10)" in text
+    assert session.scalar(select(func.count()).select_from(BacktestRun)) == 0

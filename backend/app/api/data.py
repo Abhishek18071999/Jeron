@@ -235,12 +235,13 @@ def spot_check(
             )
         )
 
-    applied = {(a.action.ex_date, a.action.raw_text) for a in adjustments}
+    applied = {(a.action.ex_date, a.action.raw_text): a.factor for a in adjustments}
     log = []
     for stored in all_actions:
         action = stored.record
         confirmed = None
-        factor = price_factor(action)
+        # Rights issues and demergers are priced from the bars (app/data/adjust.py).
+        factor = applied.get((action.ex_date, action.raw_text)) or price_factor(action)
         if stored.source == store.NSE_ACTIONS and action.action_type in (
             CorporateActionType.SPLIT,
             CorporateActionType.BONUS,
@@ -271,6 +272,7 @@ def spot_check(
         notes.append("The second source has no prices for these dates.")
     if any(
         a.action_type in (CorporateActionType.RIGHTS, CorporateActionType.OTHER)
+        and (a.ex_date, a.raw_text) not in applied
         for a in nse_actions
     ):
         notes.append("This stock has a rights issue or scheme that is logged but not adjusted.")

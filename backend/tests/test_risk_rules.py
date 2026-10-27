@@ -34,6 +34,7 @@ The same rules on my real account, in the trade plan before a real buy
 | daily and weekly realised loss limits | test_real_daily_and_weekly_loss_limits |
 | at most N new positions a week (overtrading) | test_real_weekly_entries_cap |
 | limits warn instead when JERON_RISK_LIMITS_BLOCK is off | test_real_limits_can_warn_instead |
+| kill switch: no buy while Jeron is stopped | test_kill_switch_blocks_every_plan |
 | equity, peak and drawdown from the journal | test_account_state_from_the_journal |
 
 Scenarios use the golden-test conventions: signal close 100, ATR 2, stop 96, entry
@@ -403,6 +404,16 @@ def test_real_limits_can_warn_instead():
     # The spec's rules still block.
     assert not _plan(_account("15"), warn).ok
     assert not _plan(_account(swing=5), warn).ok
+
+
+def test_kill_switch_blocks_every_plan():
+    assert _plan(_account()).ok
+    stopped = _plan(_account(), halted="NSE data looks wrong")
+    assert not stopped.ok
+    assert _check(stopped, "halted").status == "fail"
+    assert "NSE data looks wrong" in stopped.blockers[0]
+    # Even with the loss limits set to warn.
+    assert not _plan(_account(), Limits(5, block=False), halted="x").ok
 
 
 def _sale(day: date, gain: str) -> Sale:
