@@ -695,6 +695,9 @@ class JournalEntry(Base):
     reason: Mapped[str] = mapped_column(String, default="")
     # My stop, when it differs from the signal's (raw rupees); R is measured against it.
     stop: Mapped[Decimal | None] = mapped_column(Price)
+    # The day `stop` was last changed, so a split after it restates it
+    # (app/journal/basis.py). Null: set before this was kept; read as the first buy's day.
+    stop_set_on: Mapped[date | None] = mapped_column(Date)
     followed_plan: Mapped[bool | None] = mapped_column(Boolean)
     notes: Mapped[str] = mapped_column(String, default="")
     # The trade plan this entry was made from (UI phase 1b), if any.

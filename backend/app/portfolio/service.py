@@ -15,11 +15,13 @@ from app.backtest.engine import PortfolioRules
 from app.calendar.nse import TradingCalendar
 from app.config import Settings
 from app.data import store
+from app.data.adjust import adjust_bars, build_adjustments
 from app.data.nse_lists import NIFTY_500
 from app.enums import Exchange
 from app.exits.job import PositionCheck, PreOpen, broker_stop, build_preopen, check_day
+from app.journal.basis import ratio_between
 from app.journal.calc import Fill
-from app.journal.service import EntryView, entry_views
+from app.journal.service import EntryView, entry_views, restated, share_changes_for
 from app.models import Instrument, JournalEntry, JournalFill, SignalRecord
 from app.portfolio.calc import (
     AccountState,
@@ -31,6 +33,8 @@ from app.portfolio.calc import (
     totals,
 )
 from app.portfolio.equity import EquityCurve, equity_curve
+from app.portfolio.risk import VAR_SESSIONS, RiskReport, Series, risk_report
+from app.portfolio.risk import Position as RiskPosition
 from app.settings_store import effective_settings
 from app.signals.build import IST
 
@@ -125,35 +129,33 @@ def sales_this_year(session: Session, as_of: date) -> list[Sale]:
     ).all()
     if not ids:
         return []
-    fills: dict[tuple[int, str], list[Fill]] = {}
-    for f, ticker in session.execute(
-        select(JournalFill, JournalEntry.ticker)
-        .join(JournalEntry, JournalEntry.id == JournalFill.entry_id)
-        .where(JournalFill.entry_id.in_(set(ids)))
-    ):
-        fills.setdefault((f.entry_id, ticker), []).append(
-            Fill(f.trade_date, f.side, f.shares, f.price, f.charges)
-        )
     return [
         s
-        for (_, ticker), own in fills.items()
+        for ticker, own in journal_fills(session, set(ids), basis=as_of)
         for s in realised_sales(ticker, own)
         if s.sell_date >= start
     ]
 
 
-def journal_fills(session: Session) -> list[tuple[str, list[Fill]]]:
-    """Every journal entry's (ticker, fills)."""
-    fills: dict[tuple[int, str], list[Fill]] = {}
-    for f, ticker in session.execute(
-        select(JournalFill, JournalEntry.ticker).join(
-            JournalEntry, JournalEntry.id == JournalFill.entry_id
-        )
-    ):
-        fills.setdefault((f.entry_id, ticker), []).append(
-            Fill(f.trade_date, f.side, f.shares, f.price, f.charges)
-        )
-    return [(ticker, own) for (_, ticker), own in fills.items()]
+def journal_fills(
+    session: Session, entry_ids: Iterable[int] | None = None, basis: date | None = None
+) -> list[tuple[str, list[Fill]]]:
+    """Every journal entry's (ticker, fills), or those of `entry_ids`, restated to
+    `basis`'s share basis (default today; app/journal/basis.py), so lots bought before a
+    split match the shares sold after it."""
+    query = select(JournalFill, JournalEntry.ticker).join(
+        JournalEntry, JournalEntry.id == JournalFill.entry_id
+    )
+    if entry_ids is not None:
+        query = query.where(JournalFill.entry_id.in_(list(entry_ids)))
+    fills: dict[tuple[int, str], list[JournalFill]] = {}
+    for f, ticker in session.execute(query.order_by(JournalFill.trade_date, JournalFill.id)):
+        fills.setdefault((f.entry_id, ticker), []).append(f)
+    changes = share_changes_for(session, {ticker for _, ticker in fills})
+    day = basis or datetime.now(IST).date()
+    return [
+        (ticker, restated(own, changes.get(ticker, []), day)) for (_, ticker), own in fills.items()
+    ]
 
 
 def journal_history(session: Session) -> tuple[list[Sale], list[date]]:
@@ -172,8 +174,8 @@ def journal_history(session: Session) -> tuple[list[Sale], list[date]]:
 def equity_history(session: Session, capital: Decimal, until: date | None = None) -> EquityCurve:
     """The real account's equity each session from the first buy to `until` (default
     the newest session loaded), with the Nifty 500 beside it (`app.portfolio.equity`)."""
-    positions = journal_fills(session)
-    buys = [f.trade_date for _, own in positions for f in own if f.side == "buy"]
+    stored = journal_fills(session)
+    buys = [f.trade_date for _, own in stored for f in own if f.side == "buy"]
     if not buys:
         return equity_curve(capital, [], {}, [])
     start = min(buys)
@@ -181,11 +183,17 @@ def equity_history(session: Session, capital: Decimal, until: date | None = None
     if not days:
         return equity_curve(capital, [], {}, [])
     end = days[-1]
+    # Shares and closes on `end`'s share basis, so a split mid-holding is no fake loss.
+    positions = journal_fills(session, basis=end)
+    changes = share_changes_for(session, {t for t, _ in positions})
     closes: dict[str, dict[date, Decimal]] = {}
     for ticker in {t for t, _ in positions}:
         # The close before the first buy too, so a stock is marked from day one.
         bars = store.symbol_bars(session, ticker, store.NSE_BARS, start - timedelta(days=10), end)
-        closes[ticker] = {b.trade_date: b.close for b in bars}
+        own = changes.get(ticker, [])
+        closes[ticker] = {
+            b.trade_date: b.close / ratio_between(own, b.trade_date, end) for b in bars
+        }
     index = store.index_closes(session, NIFTY_500, start, end)
     return equity_curve(capital, positions, closes, days, index)
 
@@ -242,3 +250,46 @@ def portfolio(
         ),
         account=account_state(capital, sales, first_buys, holdings, today, curve.peak),
     )
+
+
+def _adjusted_series(session: Session, ticker: str, start: date, end: date) -> Series | None:
+    """A stock's split/bonus-adjusted prices (actions up to `end` only)."""
+    bars = store.symbol_bars(session, ticker, store.NSE_BARS, start, end)
+    if not bars:
+        return None
+    actions = [a.record for a in store.symbol_actions(session, ticker, store.NSE_ACTIONS)]
+    adjustments = [a for a in build_adjustments(bars, actions) if a.ex_date <= bars[-1].trade_date]
+    adjusted = adjust_bars(bars, adjustments)
+    return Series(
+        [a.raw.trade_date for a in adjusted],
+        [float(a.close) for a in adjusted],
+        [float(a.open) for a in adjusted],
+    )
+
+
+def portfolio_risk(session: Session, p: Portfolio | None = None) -> RiskReport:
+    """Stress and tail risk of the open positions (`app.portfolio.risk`) from about two
+    years of stored prices before the portfolio's data day."""
+    p = p or portfolio(session)
+    end = p.data_as_of or p.expected
+    # 500 sessions are about 2 years; a margin for holidays and the first return.
+    start = end - timedelta(days=round(VAR_SESSIONS * 1.5) + 30)
+    held = [h for h in p.holdings if h.last_close is not None and h.shares > 0]
+    positions = [
+        RiskPosition(
+            h.ticker,
+            h.shares,
+            float(h.last_close or 0),
+            None if h.stop is None else float(h.stop),
+        )
+        for h in held
+    ]
+    series = {}
+    for h in held:
+        s = _adjusted_series(session, h.ticker, start, end)
+        if s is not None:
+            series[h.ticker] = s
+    closes = store.index_closes(session, NIFTY_500, start, end)
+    index = Series(sorted(closes), [float(closes[d]) for d in sorted(closes)]) if closes else None
+    equity = float(p.account.equity) if p.account is not None else float(p.totals.capital)
+    return risk_report(positions, series, index, equity, p.data_as_of)

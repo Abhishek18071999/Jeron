@@ -98,8 +98,12 @@ are part of done, never commit secrets.
     `bot_updates`; `docs/plans/ui-v2.md`). Research-only signals
     are only in the summary unless `JERON_ALERT_RESEARCH_SIGNALS` is on.
   - `app/journal/` the journal: `calc.py` (positions from fills, stats with a 95% range
-    of the average R and a note under 30 closed trades; pure) and
-    `service.py` (database). Every signal without an entry is pending. `tradebook.py`
+    of the average R and a note under 30 closed trades; pure),
+    `basis.py` (fills and stops restated through splits and bonuses, cost unchanged; pure;
+    every reader of fills goes through `service.restated`/`entry_fills`, so a post-split
+    sale, the broker stop and the equity curve use today's share count;
+    `docs/plans/platform-review-v3.md`) and
+    `service.py` (database; the journal's own stop is dated by `stop_set_on`). Every signal without an entry is pending. `tradebook.py`
     reads Zerodha's tradebook CSV (pure); `importer.py` turns it into fills, stored with
     the broker's trade id so a re-import adds nothing.
   - `app/exits/` exits for my real positions: `rules.py` (the engine's section 5 exit
@@ -143,8 +147,11 @@ are part of done, never commit secrets.
     from journal sales matched first in, first out; `account_state`: equity, peak and
     drawdown, realised today and this week, entries this week; pure), `equity.py` (the
     account's daily equity from the journal against the Nifty 500; its peak is the
-    guardrails' peak; pure) and `service.py` (journal positions + the pre-open exit plan).
-    Served at `/portfolio` (with `account`, the Guardrails card) and `/portfolio/equity`.
+    guardrails' peak; pure), `risk.py` (the "Bad days" card: beta and Nifty 500 shocks,
+    historical one-day VaR and expected shortfall over 500 sessions, each stock's worst
+    gap against its stop, correlation; pure, history not a forecast) and `service.py`
+    (journal positions + the pre-open exit plan). Served at `/portfolio` (with `account`,
+    the Guardrails card), `/portfolio/equity` and `/portfolio/risk`.
   - `app/plan/` trade plans (decision 0010): `calc.py` (the engine's `position_size` and
     `reward_risk`, spec section 4 checks, heat and sector after the buy, the 5-item
     checklist, the small-trade warning when fixed charges pass 0.1R
@@ -241,7 +248,8 @@ are part of done, never commit secrets.
   Button, Table, EmptyState with the command that fills it). Server components call the
   backend at `JERON_API_URL`; journal writes go through server actions
   (`src/app/journal/actions.ts`), so the browser never calls the API. The stock chart
-  uses TradingView Lightweight Charts (client component). Installable PWA
+  uses TradingView Lightweight Charts (client component: ranges, volume, the line against
+  the Nifty 500, signal and fill markers; helpers in `src/lib/chart.ts`). Installable PWA
   (`src/app/manifest.ts`).
 
 ## Commands

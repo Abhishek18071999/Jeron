@@ -779,6 +779,8 @@ export type JournalEntry = {
   last_close: string | null;
   last_close_date: string | null;
   position: JournalPosition;
+  // Set when a split or bonus since the buy restated the shares and prices.
+  basis_note?: string | null;
 };
 
 export type JournalStats = {
@@ -886,6 +888,8 @@ export type Candle = {
   factor: string;
   ema50: number | null;
   ema200: number | null;
+  // The Nifty 500's close that day, for the line against the index; null if not loaded.
+  nifty500?: number | null;
 };
 
 export type StockSignal = {
@@ -1591,4 +1595,43 @@ export type EquityCurve = {
   return_pct: string | null;
   index_return_pct: string | null;
   note: string;
+};
+
+// `/portfolio/risk` (backend app/portfolio/risk.py): history-based stress on the open
+// positions. Not a forecast.
+export type StockRisk = {
+  ticker: string;
+  value: number;
+  weight_pct: number;
+  beta: number | null;
+  beta_sessions: number;
+  volatility_pct: number | null;
+  worst_gap_pct: number | null;
+  worst_gap_day: string | null;
+  planned_loss: number | null;
+  gap_loss: number | null;
+  beyond_stop: number | null;
+};
+
+export type PortfolioRisk = {
+  as_of: string | null;
+  equity: number;
+  value: number;
+  stocks: StockRisk[];
+  book_beta: number | null;
+  beta_sessions: number;
+  shocks: { index_move_pct: number; loss: number; loss_pct: number }[];
+  var_sessions: number;
+  var95: number | null;
+  var99: number | null;
+  es97: number | null;
+  worst_day: string | null;
+  worst_day_loss: number | null;
+  planned_loss: number;
+  gap_loss: number;
+  avg_correlation: number | null;
+  corr_sessions: number;
+  high_corr: number;
+  high_pairs: { a: string; b: string; correlation: number }[];
+  notes: string[];
 };

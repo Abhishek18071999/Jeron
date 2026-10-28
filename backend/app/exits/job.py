@@ -31,7 +31,7 @@ from app.backups import configured_status
 from app.calendar.nse import TradingCalendar, UnknownCalendarYearError
 from app.config import Settings
 from app.data import store
-from app.data.adjust import AdjustedBar, adjust_bars, build_adjustments
+from app.data.adjust import SHARE_COUNT_ACTIONS, Adjustment, adjust_bars, build_adjustments
 from app.data.events import next_results
 from app.enums import CorporateActionType
 from app.exits.rules import Action, ExitBar, ExitPlan, exit_plan
@@ -158,11 +158,15 @@ def _tier(view: EntryView) -> tuple[Tier, bool]:
     return Tier.SWING, True
 
 
-def _factor_on(adjusted: Sequence[AdjustedBar], day: date) -> float:
-    for a in adjusted:
-        if a.raw.trade_date >= day:
-            return float(a.factor)
-    return 1.0
+def _price_factor_on(adjustments: Sequence[Adjustment], day: date) -> float:
+    """The adjustment from `day`'s prices to today's that is not a share-count change
+    (rights issues, demergers). Splits and bonuses are already in the journal position
+    (`app.journal.basis`), which restates the shares as well as the prices."""
+    factor = 1.0
+    for adj in adjustments:
+        if adj.ex_date > day and adj.action.action_type not in SHARE_COUNT_ACTIONS:
+            factor *= float(adj.factor)
+    return factor
 
 
 def position_check(session: Session, view: EntryView, data_as_of: date | None) -> PositionCheck:
@@ -194,7 +198,9 @@ def position_check(session: Session, view: EntryView, data_as_of: date | None) -
         for a in store.symbol_actions(session, view.entry.ticker)
         if a.source == store.NSE_ACTIONS
     ]
-    adjusted = adjust_bars(bars, build_adjustments(bars, actions))
+    # An ex-date after the last close isn't in its prices yet (the events say it's coming).
+    adjustments = [a for a in build_adjustments(bars, actions) if a.ex_date <= bars[-1].trade_date]
+    adjusted = adjust_bars(bars, adjustments)
     highs = [float(a.high) for a in adjusted]
     lows = [float(a.low) for a in adjusted]
     closes = [float(a.close) for a in adjusted]
@@ -214,7 +220,7 @@ def position_check(session: Session, view: EntryView, data_as_of: date | None) -
     if not since:
         check.problem = f"no prices since the first buy on {pos.first_date:%d %b}"
         return check
-    factor = _factor_on(adjusted, pos.first_date)
+    factor = _price_factor_on(adjustments, pos.first_date)
     entry, stop = float(pos.avg_entry) * factor, float(view.stop) * factor
     check.last_close = since[-1].close
     if stop >= entry:

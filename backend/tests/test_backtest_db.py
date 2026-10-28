@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from alembic import command
 from app.backtest.job import load_inputs, run_backtests
 from app.backtest.market import build_market
 from app.backtest.strategies import COMBINED, STRATEGIES
@@ -25,7 +24,7 @@ from app.enums import CorporateActionType
 from app.main import app
 from app.models import BacktestRun, BacktestTrade, BacktestVariant
 from tests.backtest_helpers import weekdays
-from tests.conftest import TEST_DATABASE_URL, requires_db
+from tests.conftest import TEST_DATABASE_URL, requires_db, reset_database
 
 pytestmark = requires_db
 
@@ -66,8 +65,7 @@ def session(monkeypatch):
     get_engine.cache_clear()
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
+    reset_database(config)
     prices = _prices()
     with Session(get_engine()) as s:
         for i, day in enumerate(DAYS):

@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from alembic import command
 from app.config import get_settings
 from app.data import store
 from app.data.nse_lists import (
@@ -26,7 +25,7 @@ from app.enums import CorporateActionType, QualityStatus
 from app.main import app
 from app.models import DataQualityReport, IndexBar, ScanResult, ScanRun, SourceFile
 from app.scan.job import ASM, run_scan
-from tests.conftest import TEST_DATABASE_URL, requires_db
+from tests.conftest import TEST_DATABASE_URL, requires_db, reset_database
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -91,8 +90,7 @@ def session(monkeypatch):
     get_engine.cache_clear()
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
+    reset_database(config)
     with Session(get_engine()) as s:
         _load(s)
         yield s

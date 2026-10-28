@@ -9,7 +9,6 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from alembic import command
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.data import pipeline, store
@@ -19,7 +18,7 @@ from app.data.yahoo import YahooHistory
 from app.db import get_engine
 from app.enums import CorporateActionType, QualityStatus
 from app.main import app
-from tests.conftest import TEST_DATABASE_URL, requires_db
+from tests.conftest import TEST_DATABASE_URL, requires_db, reset_database
 from tests.helpers import bar, pr_zip, udiff_row, udiff_zip
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -116,8 +115,7 @@ def session(monkeypatch):
     get_engine.cache_clear()
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
+    reset_database(config)
     with Session(get_engine()) as s:
         yield s
     get_engine().dispose()

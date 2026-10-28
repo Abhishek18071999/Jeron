@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ActionBadge, BrokerStop, HeatMeter, HoldingCard, SectorBars } from "@/components/portfolio";
+import { RiskCard } from "@/components/portfolio-risk";
 import {
   Card,
   EmptyState,
@@ -20,7 +21,7 @@ import {
   signTone,
   RunCommand,
 } from "@/components/ui";
-import { type AccountGuardrails, type EquityCurve, type Portfolio, getJson } from "@/lib/api";
+import { type AccountGuardrails, type EquityCurve, type Portfolio, type PortfolioRisk, getJson } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +29,10 @@ export const dynamic = "force-dynamic";
 export default async function PortfolioPage({ searchParams }: { searchParams: Promise<{ day?: string }> }) {
   const { day } = await searchParams;
   const dayParam = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `?day=${day}` : "";
-  const [result, equity] = await Promise.all([
+  const [result, equity, risk] = await Promise.all([
     getJson<Portfolio>(`/portfolio${dayParam}`),
     getJson<EquityCurve>("/portfolio/equity"),
+    getJson<PortfolioRisk>(`/portfolio/risk${dayParam}`),
   ]);
   if (!result.ok) {
     return (
@@ -229,6 +231,8 @@ export default async function PortfolioPage({ searchParams }: { searchParams: Pr
           >
             <SectorBars totals={t} />
           </Card>
+
+          {risk.ok && risk.data.stocks.length > 0 && <RiskCard r={risk.data} />}
         </>
       )}
     </Page>
