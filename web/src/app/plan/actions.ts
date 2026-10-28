@@ -29,6 +29,7 @@ export async function savePlan(symbol: string, form: FormData) {
     reason: text(form, "reason"),
     signal_id: signalId,
     checklist: form.getAll("checklist").map(String),
+    drawdown_note: text(form, "drawdown_note"),
   });
   if (!result.ok) redirect(back({ error: result.error }));
   revalidatePath(`/plan/${symbol}`);

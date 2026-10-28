@@ -22,9 +22,11 @@ from app.alerts.format import (
     data_late_message,
     digest_message,
     digest_signals,
+    paper_first_message,
     signal_message,
     watch_message,
 )
+from app.backtest.engine import PortfolioRules
 from app.backtest.market import market_state
 from app.config import Settings
 from app.data import store
@@ -39,6 +41,7 @@ from app.models import (
     ScanRun,
 )
 from app.paper.job import day_signals, latest_scan_date
+from app.plan.calc import paper_first
 from app.scan.score import SCORE_VERSION
 from app.sections.calc import BY_KEY, section_for_tier
 from app.sections.service import sections
@@ -104,6 +107,19 @@ def account_rows(session: Session) -> list[DigestAccount]:
             )
         )
     return rows
+
+
+def paper_first_headline(session: Session, settings: Settings) -> str | None:
+    """`paper_first_message` while the real account is past the paper-first line."""
+    from app.portfolio.service import portfolio  # it builds on the pre-open, which uses this
+
+    account = portfolio(session, settings=settings).account
+    pause = PortfolioRules().drawdown_pause_pct
+    if account is None or not paper_first(
+        account.drawdown_pct, settings.drawdown_journal_pct, pause
+    ):
+        return None
+    return paper_first_message(account.drawdown_pct)
 
 
 def build_digest(session: Session, day: date, web_url: str) -> Digest:
@@ -208,6 +224,7 @@ def run_alerts(
     halt = halt_state(session)
     if halt is not None:
         log(f"Kill switch on: no signal or watchlist alerts. {halt.headline()}")
+    paper_line = None if halt else paper_first_headline(session, settings)
     for record, key in [] if halt else day_signals(session, day):
         if record.late or (record.research_only and not settings.alert_research_signals):
             continue
@@ -222,6 +239,8 @@ def run_alerts(
                 f"HELD, check by hand before buying: {record.ticker} {held[record.ticker]}, "
                 "possibly a demerger or rights issue the indicators don't reflect.\n\n" + text
             )
+        if paper_line and not record.research_only:
+            text = f"{paper_line}\n\n{text}"
         label = "Research only" if record.research_only else "Signal"
         _send(
             session,
@@ -260,6 +279,7 @@ def run_alerts(
         )
     summary = build_digest(session, day, settings.web_url)
     summary.halted = halt.headline() if halt else None
+    summary.paper_first = paper_line
     digest = digest_message(summary)
     _send(
         session,

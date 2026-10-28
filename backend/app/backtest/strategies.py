@@ -528,6 +528,68 @@ TOP_SCORE = Strategy(
 )
 
 
+# reversal-v1 (docs/plans/reversal-v1.md): the week's biggest losers without news behind
+# the fall, sold once they have caught up with the universe.
+REVERSAL_EXIT_AT = 0.5
+REVERSAL_NO_RESULTS_SESSIONS = 5
+
+
+def _rev_rank(m: Market) -> Array:
+    if m.rev_rank is None:
+        raise ValueError("this strategy needs the market's rev_rank")
+    return m.rev_rank
+
+
+def recent_results(m: Market) -> Array:
+    """Bool (stocks, days): a results session in the last `REVERSAL_NO_RESULTS_SESSIONS`
+    sessions, that day included."""
+    if m.results_session is None:
+        raise ValueError("this strategy needs the results calendar (run the events job)")
+    seen = np.cumsum(m.results_session.astype(int), axis=1)
+    before = np.zeros_like(seen)
+    n = REVERSAL_NO_RESULTS_SESSIONS
+    before[:, n:] = seen[:, :-n]
+    return np.asarray(seen - before > 0, dtype=bool)
+
+
+def _reversal_condition(m: Market, p: Params) -> Array:
+    rank = np.nan_to_num(_rev_rank(m), nan=np.inf)
+    return np.asarray((rank <= p["max_rank"]) & ~recent_results(m), dtype=bool)
+
+
+def _reversal_exit(m: Market, p: Params) -> Array:
+    # An unknown rank (left the universe, a gap in the data) is not an exit.
+    rank = np.nan_to_num(_rev_rank(m), nan=-1.0)
+    return np.asarray(rank >= REVERSAL_EXIT_AT, dtype=bool)
+
+
+REVERSAL = Strategy(
+    key="reversal",
+    version="reversal-v1",
+    name="Short-term reversal of no-news losers (swing)",
+    tier=Tier.SWING,
+    summary="Buy the week's biggest fallers when no results or bad news explain the fall.",
+    grid_axes={"max_rank": (0.1,), "stop_atr": (2.5,)},
+    default={"max_rank": 0.1, "stop_atr": 2.5},
+    describe=lambda p: [
+        "Enter at the close when the stock's 5-session return is in the bottom "
+        f"{100 * p['max_rank']:g}% of the universe and no results session (the first "
+        f"session on or after a results board meeting) fell in the last "
+        f"{REVERSAL_NO_RESULTS_SESSIONS} sessions. No trend, regime or score filter."
+    ],
+    condition=_reversal_condition,
+    results_blackout=True,
+    min_news_score=MIN_NEWS_SCORE,
+    exit_condition=_reversal_exit,
+    exit_reason=f"caught up (5-session rank {REVERSAL_EXIT_AT:g} or more)",
+    exit_rule=(
+        "Sell at the next open after a session on which the stock's 5-session return rank "
+        f"is {REVERSAL_EXIT_AT:g} or more (the fall made up against the universe)."
+    ),
+    registered_on=date(2026, 10, 28),
+)
+
+
 def with_events(base: Strategy) -> Strategy:
     """The M3 strategy with M6's results blackout and news filter."""
     return replace(
@@ -557,6 +619,7 @@ STRATEGIES = {
         QUALITY_TREND,
         MOMENTUM,
         TOP_SCORE,
+        REVERSAL,
     )
 }
 

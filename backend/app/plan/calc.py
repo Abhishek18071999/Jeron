@@ -22,6 +22,10 @@ the inputs from the database.
   JERON_DAILY_LOSS_LIMIT_PCT of capital, this week's below JERON_WEEKLY_LOSS_LIMIT_PCT,
   and fewer than JERON_MAX_ENTRIES_WEEK positions first bought this week.
 - The kill switch (`app.halt`, docs/runbook.md): while Jeron is stopped no plan is saved.
+- Paper first in a drawdown (docs/plans/post-review-v2.md, item 3): from
+  JERON_DRAWDOWN_JOURNAL_PCT below the peak (default 10%) until the 15% pause, signals
+  are paper only, and a plan is saved only with a written drawdown note of at least
+  `NOTE_MIN_WORDS` words saying why this trade, now. Hard, whatever JERON_RISK_LIMITS_BLOCK.
 - Warnings (shown, not blocking): heat at the 5% warning level, defend mode, a results
   calendar that isn't loaded, ex-dates ahead, and a trade so small that fixed charges
   (the DP charge per day with a sale) cost more than 0.1R (`costs.small_trade_warning`).
@@ -51,6 +55,9 @@ CHECKLIST: tuple[tuple[str, str], ...] = (
 )
 CHECKLIST_KEYS = tuple(k for k, _ in CHECKLIST)
 
+# The drawdown note: long enough to be a reason, not a tick.
+NOTE_MIN_WORDS = 20
+
 
 def _q(value: Decimal | float, places: str = "0.01") -> Decimal:
     return Decimal(str(value)).quantize(Decimal(places))
@@ -69,6 +76,7 @@ class Limits:
     weekly_loss_pct: float = 4.0
     max_entries_week: int = 5
     block: bool = True  # False: the loss and entry limits warn instead
+    drawdown_journal_pct: float = 10.0  # paper first, with a written note, from here
 
 
 @dataclass(frozen=True)
@@ -102,6 +110,8 @@ class PlanInputs:
     limits: Limits | None = None
     # The kill switch's reason (app/halt.py) when Jeron is stopped: no buy is saved.
     halted: str | None = None
+    # Why I'm trading through a drawdown (needed from `Limits.drawdown_journal_pct`).
+    drawdown_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -426,6 +436,21 @@ def guardrails(p: PlanInputs, rules: PortfolioRules, braked: bool) -> list[Check
                 hard=False,
             )
         )
+    if paper_first(a.drawdown_pct, lim.drawdown_journal_pct, float(pause)):
+        words = note_words(p.drawdown_note)
+        written = words >= NOTE_MIN_WORDS
+        checks.append(
+            Check(
+                "drawdown_note",
+                f"Paper first below -{_g(lim.drawdown_journal_pct)}%: write why",
+                "pass" if written else "fail",
+                f"drawdown note written ({words} words)"
+                if written
+                else f"{where}: signals are paper only. To trade this one anyway, write "
+                f"in the drawdown note, in at least {NOTE_MIN_WORDS} words, why this trade "
+                f"and why now, and what you'll do if it fails ({words} so far).",
+            )
+        )
     tier = p.tier.value
     held = a.open_by_tier.get(tier, 0)
     checks.append(
@@ -467,6 +492,16 @@ def guardrails(p: PlanInputs, rules: PortfolioRules, braked: bool) -> list[Check
             )
         )
     return checks
+
+
+def note_words(note: str) -> int:
+    return len(note.split())
+
+
+def paper_first(drawdown_pct: Decimal, journal_pct: float, pause_pct: float) -> bool:
+    """True from `journal_pct` below the peak up to the pause (where nothing is saved
+    anyway); a 0 turns the rule off."""
+    return 0 < journal_pct <= float(drawdown_pct) < pause_pct
 
 
 def missing_checklist(ticked: Iterable[str]) -> list[str]:

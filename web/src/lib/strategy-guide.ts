@@ -129,6 +129,17 @@ export const GUIDES: StrategyGuide[] = [
     exit: "Sold at the next open after the first session of a month on which its momentum rank is below 0.75.",
     lesson: "strategy-momentum",
   },
+  {
+    key: "reversal",
+    name: "Short-term reversal of no-news losers",
+    section: "swing",
+    lookFor:
+      "A stock among the 10% of the universe that fell most over the last 5 sessions, with no results in those 5 sessions and no recent bad news behind the fall. Not around results.",
+    works: "Choppy, sideways markets, where sharp drops without news tend to be partly made up within a week or two. It is the opposite bet to momentum.",
+    watch: "News that comes out after the signal: a fall with a reason behind it tends to keep going.",
+    exit: "Sold at the next open once its 5-session return ranks 0.5 or more in the universe (the fall made up).",
+    lesson: "strategy-reversal",
+  },
 ];
 
 const BY_KEY = new Map(GUIDES.map((g) => [g.key, g]));

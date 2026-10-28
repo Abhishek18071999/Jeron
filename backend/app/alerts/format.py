@@ -112,6 +112,16 @@ def signal_message(
     return "\n".join(lines)
 
 
+def paper_first_message(drawdown_pct: Decimal) -> str:
+    """The headline on live signals and the summary while the real account is past the
+    paper-first line (app/plan/calc.py, docs/plans/post-review-v2.md)."""
+    return (
+        f"PAPER ONLY: your account is {_num(drawdown_pct, 1)}% below its peak. Follow these "
+        "signals on paper. To trade one anyway, write why in the trade plan's drawdown note "
+        "first."
+    )
+
+
 @dataclass(frozen=True)
 class DigestSignal:
     strategy_key: str
@@ -170,6 +180,8 @@ class Digest:
     sections: list[DigestSection] = field(default_factory=list)
     # The kill switch's headline (app/halt.py) when Jeron is stopped.
     halted: str | None = None
+    # `paper_first_message` when the account is past the paper-first line.
+    paper_first: str | None = None
 
 
 def _signal_line(s: DigestSignal) -> str:
@@ -183,6 +195,8 @@ def digest_message(d: Digest) -> str:
     lines = [f"Jeron daily summary · {_day(d.day)}", ""]
     if d.halted:
         lines += [d.halted, ""]
+    if d.paper_first:
+        lines += [d.paper_first, ""]
     if d.quality is None:
         lines.append("Data quality: no report for the day")
     else:

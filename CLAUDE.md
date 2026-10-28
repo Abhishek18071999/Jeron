@@ -43,6 +43,10 @@ are part of done, never commit secrets.
     leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`);
     `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
     point, `docs/plans/paper-review-v1.md`),
+    `reversal-v1` (swing, short-term reversal of no-news losers on `Market.rev_rank`, one
+    grid point, pre-registered in `docs/plans/reversal-v1.md`; the first family that
+    buys weakness; post-review-v2's idea-first rule: a new family starts from a
+    documented anomaly, its plan committed before the code),
     `walkforward.py` (folds, holdout, gates), `missed.py` (orders skipped for opening
     above the zone, bought anyway: reporting only), `research.py` (the 2026-10 review's
     options, `PortfolioRules` fields off by default, run only by `research`, never saved
@@ -147,7 +151,9 @@ are part of done, never commit secrets.
     (`costs.small_trade_warning`, also on signal alerts and Trade cards); the real
     account's guardrails (the kill switch, `app/halt.py`, blocks every plan; `guardrails`: spec section 5's drawdown brake and max positions
     per tier, always hard; daily/weekly realised loss limits and a weekly entries cap from
-    settings, hard unless `JERON_RISK_LIMITS_BLOCK` is off; decision 0015); pure) and
+    settings, hard unless `JERON_RISK_LIMITS_BLOCK` is off; decision 0015; paper first from
+    `JERON_DRAWDOWN_JOURNAL_PCT` (10%) below the peak: a plan needs a 20-word drawdown note
+    and live signal alerts say PAPER ONLY, `docs/plans/post-review-v2.md`); pure) and
     `service.py` (database). `GET /plan/{symbol}`, `POST /plans`;
     plans are never changed (a new one supersedes), journal entries carry `plan_id`.
   - `app/watchlist/` `calc.py` (alert hits, alert keys; pure) and `service.py`; served at

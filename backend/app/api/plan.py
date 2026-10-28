@@ -141,6 +141,8 @@ class PlanIn(BaseModel):
     reason: str = Field(default="", max_length=2000)
     signal_id: UUID | None = None
     checklist: list[str] = []
+    # Needed when the account is past the paper-first line (app/plan/calc.py).
+    drawdown_note: str = Field(default="", max_length=2000)
 
 
 def plan_out(plan: Plan) -> PlanOut:
@@ -190,6 +192,7 @@ def plan_view(
     stop: Annotated[Decimal | None, Query(gt=0)] = None,
     tier: TierIn | None = None,
     signal_id: UUID | None = None,
+    drawdown_note: Annotated[str, Query(max_length=2000)] = "",
 ) -> PlanView:
     """The plan for a buy at `entry` with `stop` (default: the signal's levels, else the
     last close and a suggested stop), sized and checked, with what it is checked against."""
@@ -206,7 +209,9 @@ def plan_view(
     chosen_tier = tier_of(tier) if tier else d.tier
     entry, stop = entry or d.entry, stop or d.stop
     plan = (
-        None if entry is None or stop is None else service.plan_for(ctx, entry, stop, chosen_tier)
+        None
+        if entry is None or stop is None
+        else service.plan_for(ctx, entry, stop, chosen_tier, drawdown_note.strip())
     )
     mood = ctx.mood
     return PlanView(
@@ -248,6 +253,7 @@ def save(body: PlanIn, session: SessionDep) -> SavedPlan:
             reason=body.reason,
             checklist=body.checklist,
             signal_id=body.signal_id,
+            drawdown_note=body.drawdown_note,
         )
     except PlanError as e:
         raise HTTPException(422, str(e)) from None

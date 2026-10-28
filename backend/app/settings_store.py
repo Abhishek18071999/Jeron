@@ -56,6 +56,11 @@ EDITABLE: dict[str, Editable] = {
         "saved. Off: it is a warning. The drawdown brake, heat and position limits always "
         "block.",
     ),
+    "drawdown_journal_pct": Editable(
+        "Paper first in a drawdown (%)",
+        "From this far below the account's peak, signals are paper only, and a trade plan is "
+        "saved only with a written note of why this trade, now. 0 turns it off.",
+    ),
     "idle_cash_in_index": Editable(
         "Park idle cash in an index fund",
         "On: Jeron says to keep idle cash in a Nifty index fund instead of a liquid fund. "

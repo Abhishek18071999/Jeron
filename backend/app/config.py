@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     max_entries_week: int = Field(default=5, ge=0)
     # True: a plan past one of the three limits above can't be saved; False: a warning.
     risk_limits_block: bool = True
+    # Paper first in a drawdown (docs/plans/post-review-v2.md): from this far below the
+    # account's peak, signals are paper only and a plan needs a written note. 0 = off.
+    drawdown_journal_pct: float = Field(default=10.0, ge=0, le=100)
     # Where idle cash goes: off = a liquid fund (what the backtests credit), on = a Nifty
     # index fund (the backtests' cash-sweep line). An allocation choice, not an edge.
     idle_cash_in_index: bool = False

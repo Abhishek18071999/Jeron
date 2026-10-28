@@ -88,6 +88,7 @@ export function PlanForm({ symbol, signalId, initial, stopHint, plan: first, che
   const [entry, setEntry] = useState(initial.entry);
   const [stop, setStop] = useState(initial.stop);
   const [tier, setTier] = useState(initial.tier);
+  const [note, setNote] = useState("");
   const [plan, setPlan] = useState<PlanResult | null>(first);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -105,7 +106,14 @@ export function PlanForm({ symbol, signalId, initial, stopHint, plan: first, che
     const timer = setTimeout(async () => {
       setBusy(true);
       try {
-        const query = new URLSearchParams({ symbol, entry, stop, tier, ...(signalId ? { signal_id: signalId } : {}) });
+        const query = new URLSearchParams({
+          symbol,
+          entry,
+          stop,
+          tier,
+          ...(signalId ? { signal_id: signalId } : {}),
+          ...(note.trim() ? { drawdown_note: note.trim() } : {}),
+        });
         const res = await fetch(`/api/plan?${query}`, { signal: controller.signal });
         const body = await res.json();
         if (res.ok) {
@@ -124,7 +132,7 @@ export function PlanForm({ symbol, signalId, initial, stopHint, plan: first, che
       clearTimeout(timer);
       controller.abort();
     };
-  }, [symbol, signalId, entry, stop, tier]);
+  }, [symbol, signalId, entry, stop, tier, note]);
 
   const missing = !(Number(entry) > 0) || !(Number(stop) > 0);
   const problem = missing ? "Enter an entry and a stop price." : error;
@@ -133,6 +141,8 @@ export function PlanForm({ symbol, signalId, initial, stopHint, plan: first, che
   const canSave = !!plan && plan.ok && unticked.length === 0 && !busy && !problem;
   const hard = plan?.checks.filter((c) => c.hard) ?? [];
   const soft = plan?.checks.filter((c) => !c.hard) ?? [];
+  // Past the paper-first line in a drawdown, the plan needs a written note.
+  const paperFirst = !!plan?.checks.some((c) => c.key === "drawdown_note") || note !== "";
 
   return (
     <form action={action} onSubmit={() => setSubmitting(true)} className="space-y-5">
@@ -290,6 +300,23 @@ export function PlanForm({ symbol, signalId, initial, stopHint, plan: first, che
           className={inputClass}
         />
       </label>
+
+      {paperFirst && (
+        <label className="block space-y-1 rounded-lg border border-warn/40 bg-warn-bg p-3 text-sm">
+          <span className="font-medium">Drawdown note</span>
+          <span className="block text-xs text-muted">
+            The account is in a drawdown, so signals are paper only. To trade this one anyway, write why this trade and why now, and
+            what you will do if it fails. It is kept with the plan in the journal.
+          </span>
+          <textarea
+            name="drawdown_note"
+            rows={3}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className={inputClass}
+          />
+        </label>
+      )}
 
       <fieldset>
         <legend className="mb-1.5 text-sm font-semibold">Before you buy</legend>

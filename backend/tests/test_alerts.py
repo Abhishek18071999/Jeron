@@ -17,6 +17,7 @@ from app.alerts.format import (
     DigestSignal,
     digest_message,
     inr,
+    paper_first_message,
     signal_message,
     split_message,
 )
@@ -122,6 +123,15 @@ def test_daily_summary():
     assert "• breakout-52w (research only): ₹10,00,063 (+0.01%), 6 open, heat 3.2%" in text
     assert "• 1 open: TCS +0.42R" in text
     assert "• 2 live signals waiting for a decision" in text
+
+
+def test_summary_says_paper_only_in_a_drawdown():
+    line = paper_first_message(Decimal("11.24"))
+    assert line.startswith("PAPER ONLY: your account is 11.2% below its peak.")
+    assert "drawdown note" in line
+    text = digest_message(digest(paper_first=line))
+    assert text.startswith(f"Jeron daily summary · Thu 1 Oct 2026\n\n{line}\n\nData quality")
+    assert "PAPER ONLY" not in digest_message(digest())
 
 
 def test_summary_of_a_blocked_day_with_live_signals():
