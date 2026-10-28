@@ -382,6 +382,33 @@ export const STRATEGIES: Lesson[] = [
     ],
   },
   {
+    slug: "strategy-reversal",
+    track: "strategies",
+    title: "Strategy: short-term reversal (reversal)",
+    summary: "Buy the week's biggest fallers when no news explains the fall; sell once they catch up. Swing.",
+    minutes: 6,
+    goals: ["State the reversal rank, entry and exit", "See why news decides whether a fall reverses"],
+    blocks: [
+      { p: "**Idea**: the stocks that fell most over the last week tend to win back part of it over the next week or two. It is one of the oldest documented patterns in share prices. The catch: it holds for falls **without news**. A fall on bad results or an announcement tends to keep going, so this strategy stays out of those." },
+      { analogy: "A crowd rushing to one side of a boat for no reason drifts back to the middle. If the boat has a hole on that side, they don't come back." },
+      { h: "Why Jeron has it" },
+      { p: "Every other Jeron strategy buys strength (relative strength, momentum, breakouts), so one bad year for momentum hits all of them at once. Reversal buys weakness. Its rules were written down before any test, from the published idea, with one setting and no tuning (docs/plans/reversal-v1.md)." },
+      { h: "Rules (reversal-v1)" },
+      { list: [
+        "**Reversal rank**: the 5-session return, ranked against every stock in the universe that day; 0 fell most.",
+        "Enter when the rank is **0.10 or less**, there was **no results session** in those 5 sessions, and the news score is 40 or more. No buying in the results blackout.",
+        "Stop 2.5 × ATR. Swing tier: up to 5 positions, half sold at +2R, trail 2 × ATR, time stop 15 sessions.",
+        "**Its own exit**: sell at the next open once the rank is back at **0.5 or more**.",
+      ] },
+      { example: { title: "A signal, capital ₹10 lakh", rows: [["5-session return", "−11%, rank 0.03"], ["Results / news", "none in the week, news score 50"], ["Close / ATR", "₹400 / ₹14"], ["Stop (2.5 × ATR)", "₹400 − ₹35 = ₹365"], ["Size", "₹10,000 ÷ ₹35 = 285 shares, about ₹1.14 lakh"]], result: "Six sessions later its 5-session return ranks 0.55, so it is sold at the next open, whether or not T1 was reached." } },
+      { warn: "Buying what is falling feels wrong, and sometimes is: the stop is what limits a fall that doesn't stop. Its status (research, paper or live) is on Research > Strategies, like every other strategy." },
+      { recap: ["Bottom 10% over 5 sessions, no results or bad news.", "Sold once the fall is made up against the universe."] },
+    ],
+    quiz: [
+      { q: "A stock fell 12% this week, the most in the universe, the day after its results. reversal:", options: ["Buys it", "Stays out"], answer: 1, why: "A fall on results tends to keep drifting. The reversal is for falls without news." },
+    ],
+  },
+  {
     slug: "strategy-events-and-combined",
     track: "strategies",
     title: "The -events versions and the combined book",

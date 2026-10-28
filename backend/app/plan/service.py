@@ -97,6 +97,7 @@ def limits_for(settings: Settings, tier: Tier) -> Limits:
         weekly_loss_pct=settings.weekly_loss_limit_pct,
         max_entries_week=settings.max_entries_week,
         block=settings.risk_limits_block,
+        drawdown_journal_pct=settings.drawdown_journal_pct,
     )
 
 
@@ -265,7 +266,9 @@ def defaults(ctx: Context) -> Defaults:
     return Defaults(close, stop, Tier.SWING, "", "2 x ATR below the last close")
 
 
-def plan_for(ctx: Context, entry: Decimal, stop: Decimal, tier: Tier) -> Plan:
+def plan_for(
+    ctx: Context, entry: Decimal, stop: Decimal, tier: Tier, drawdown_note: str = ""
+) -> Plan:
     mood = ctx.mood
     return build_plan(
         PlanInputs(
@@ -290,6 +293,7 @@ def plan_for(ctx: Context, entry: Decimal, stop: Decimal, tier: Tier) -> Plan:
             account=ctx.account,
             limits=None if ctx.settings is None else limits_for(ctx.settings, tier),
             halted=ctx.halted,
+            drawdown_note=drawdown_note,
         )
     )
 
@@ -318,6 +322,8 @@ def _details(plan: Plan, ctx: Context) -> dict[str, Any]:
         "results_line": ctx.events.results_line,
         "ex_dates": list(ctx.events.ex_dates),
         "drawdown_pct": None if ctx.account is None else str(ctx.account.drawdown_pct),
+        # Written when the account was past the paper-first line (post-review-v2).
+        "drawdown_note": i.drawdown_note,
         "checks": [asdict(c) for c in plan.checks],
     }
 
@@ -340,6 +346,7 @@ def save_plan(
     checklist: list[str],
     signal_id: UUID | None = None,
     settings: Settings | None = None,
+    drawdown_note: str = "",
 ) -> TradePlan:
     """Re-check everything on the server and store a new plan. Raises PlanError (with
     every reason) when a hard check fails or the checklist isn't complete."""
@@ -349,7 +356,7 @@ def save_plan(
         raise PlanError(f"Unknown stock {ticker}")
     if signal_id is not None and ctx.signal is None:
         raise PlanError(f"No signal {signal_id}")
-    plan = plan_for(ctx, entry, stop, tier)
+    plan = plan_for(ctx, entry, stop, tier, drawdown_note.strip())
     problems = list(plan.blockers)
     unticked = missing_checklist(checklist)
     if unticked:

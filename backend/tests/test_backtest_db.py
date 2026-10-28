@@ -175,7 +175,7 @@ def test_every_strategy_runs_or_says_what_it_needs(session):
     tested = {r.strategy_key for r in runs}
     skipped = {line.split(":")[0] for line in lines if ": skipped, " in line}
     assert tested | skipped == {*STRATEGIES, *COMBINED}
-    assert skipped == {"results-drift", "quality-trend", "combined-book"}
+    assert skipped == {"results-drift", "quality-trend", "combined-book", "reversal"}
     assert any("run the events job" in line for line in lines)
     assert any("fundamentals-import" in line for line in lines)
 

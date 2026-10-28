@@ -258,6 +258,11 @@ No native mobile app for now. The PWA + Telegram covers phone use; a native app 
 - **M7 Exit engine + analytics:** pre-open checks, trailing and time stops, broker
   tradebook import, backtest-vs-paper-vs-real dashboard, weekly summary.
 
+After the milestones, outside reviews are tracked with their own plans: the 15-point
+review in `docs/plans/review-v1.md`, and "Section 20: Post-review hardening plan" (the
+second review: paper first in a drawdown, the second strategy family, idea-first
+research) in `docs/plans/post-review-v2.md`, with each item's status.
+
 ### 12. Ground rules
 
 - No signal without a backtested strategy behind it. The backtester decides, not

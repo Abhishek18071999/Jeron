@@ -183,6 +183,10 @@ class Market:
     # bool (stocks, days): the first session on or after a results board meeting (the
     # session results can move). None = the results calendar isn't loaded.
     results_session: Array | None = None
+    # reversal-v1 (docs/plans/reversal-v1.md): the 5-session return, and its percentile
+    # (0-1, 0 = fell most) among the universe that day. NaN outside the universe.
+    rev_return: Array | None = None
+    rev_rank: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -404,6 +408,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         score[members, t] = np.round(base[members, t] + half * p3 + MAX_POINTS["rs_6m"] * p6, 1)
 
     mom_return, mom_rank = momentum_ranks(close, eligible)
+    rev_return, rev_rank = reversal_ranks(close, eligible)
     symbols = [s.symbol for s in inputs.stocks]
     reactions = results_reactions(days, symbols, inputs.results, close, vol_ratio, nifty500)
     sector_closes = [_index_series(days, inputs.sector_indices.get(n, {})) for n in SECTOR_INDICES]
@@ -454,6 +459,8 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         mom_return=mom_return,
         mom_rank=mom_rank,
         results_session=results_sessions(days, symbols, inputs.results),
+        rev_return=rev_return,
+        rev_rank=rev_rank,
         fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
     )
 
@@ -511,6 +518,30 @@ def momentum_ranks(close: Array, universe: Array) -> tuple[Array, Array]:
         members = np.flatnonzero(universe[:, t])
         if len(members):
             rank[members, t] = percentile_ranks(score[members, t])
+    return ret, rank
+
+
+# reversal-v1: the week's losers.
+REVERSAL_SESSIONS = 5
+
+
+def reversal_ranks(close: Array, universe: Array) -> tuple[Array, Array]:
+    """reversal-v1 (docs/plans/reversal-v1.md), using only data up to each day: the
+    return over the last `REVERSAL_SESSIONS` sessions and its percentile among the day's
+    universe (0 = fell most). The rank is NaN outside the universe or where a close is
+    missing."""
+    s_count, d_count = close.shape
+    n = REVERSAL_SESSIONS
+    ret = np.full((s_count, d_count), NAN)
+    rank = np.full((s_count, d_count), NAN)
+    if d_count <= n:
+        return ret, rank
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ret[:, n:] = close[:, n:] / close[:, :-n] - 1
+    for t in range(n, d_count):
+        members = np.flatnonzero(universe[:, t])
+        if len(members):
+            rank[members, t] = percentile_ranks(ret[members, t])
     return ret, rank
 
 

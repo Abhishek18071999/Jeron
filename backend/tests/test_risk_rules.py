@@ -35,6 +35,7 @@ The same rules on my real account, in the trade plan before a real buy
 | at most N new positions a week (overtrading) | test_real_weekly_entries_cap |
 | limits warn instead when JERON_RISK_LIMITS_BLOCK is off | test_real_limits_can_warn_instead |
 | kill switch: no buy while Jeron is stopped | test_kill_switch_blocks_every_plan |
+| drawdown 10% -> paper first, a plan needs a note | test_real_drawdown_paper_first_needs_a_note |
 | equity, peak and drawdown from the journal | test_account_state_from_the_journal |
 
 Scenarios use the golden-test conventions: signal close 100, ATR 2, stop 96, entry
@@ -349,10 +350,16 @@ def _check(plan, key):
     return check
 
 
+NOTE = (
+    "Three losers in a row were all stopped out on gaps after results; this one has no "
+    "results for six weeks and I am taking half size."
+)
+
+
 def test_real_drawdown_10_pct_halves_risk():
     # 0.5% risk: 5,000 / 5 = 1,000 shares (the 20% cap is 1,980, so risk binds).
     assert _plan(_account("9.99"), risk_pct=0.5).shares == 1000
-    braked = _plan(_account("10"), risk_pct=0.5)
+    braked = _plan(_account("10"), risk_pct=0.5, drawdown_note=NOTE)
     assert braked.shares == 500
     assert _check(braked, "drawdown").status == "warn"
     assert braked.ok
@@ -361,10 +368,26 @@ def test_real_drawdown_10_pct_halves_risk():
 
 
 def test_real_drawdown_15_pct_blocks_the_plan():
-    plan = _plan(_account("15"))
+    plan = _plan(_account("15"), drawdown_note=NOTE)
     assert _check(plan, "drawdown").status == "fail"
     assert not plan.ok
-    assert _plan(_account("14.99")).ok
+    assert _plan(_account("14.99"), drawdown_note=NOTE).ok
+
+
+def test_real_drawdown_paper_first_needs_a_note():
+    assert not [c for c in _plan(_account("9.99")).checks if c.key == "drawdown_note"]
+    bare = _plan(_account("10"))
+    assert _check(bare, "drawdown_note").status == "fail" and not bare.ok
+    assert "paper only" in _check(bare, "drawdown_note").detail
+    short = _plan(_account("12"), drawdown_note="gut feel, it looks good")
+    assert not short.ok
+    written = _plan(_account("12"), drawdown_note=NOTE)
+    assert _check(written, "drawdown_note").status == "pass" and written.ok
+    # Hard even when the loss and entry limits only warn; 0 turns it off.
+    assert not _plan(_account("10"), Limits(5, block=False)).ok
+    assert _plan(_account("10"), Limits(5, drawdown_journal_pct=0)).ok
+    # At the 15% pause the brake already blocks; the note doesn't unblock it.
+    assert not [c for c in _plan(_account("15")).checks if c.key == "drawdown_note"]
 
 
 def test_real_max_open_positions_per_tier():

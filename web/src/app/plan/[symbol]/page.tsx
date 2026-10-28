@@ -47,6 +47,11 @@ function SavedPlans({ plans, saved }: { plans: SavedPlan[]; saved?: string }) {
             {p.supersedes_id ? ` · replaces #${p.supersedes_id}` : ""}
           </p>
           {p.reason && <p className="mt-0.5 text-xs">{p.reason}</p>}
+          {typeof p.details.drawdown_note === "string" && p.details.drawdown_note && (
+            <p className="mt-0.5 text-xs">
+              <span className="text-muted">Drawdown note:</span> {p.details.drawdown_note}
+            </p>
+          )}
         </li>
       ))}
     </ul>

@@ -115,6 +115,13 @@ def reasons(m: Market, s: int, t: int, strategy: Strategy, params: Params) -> li
             f"(needs {params['min_rank']:g}), checked on the first session of the month"
         )
         out.append(f"Rose {_value(m.mom_return, s, t) * 100:.0f}% from a year ago to a month ago")
+    elif strategy.key == "reversal" and m.rev_rank is not None and m.rev_return is not None:
+        out.append(
+            f"Fell {-_value(m.rev_return, s, t) * 100:.1f}% in 5 sessions: rank "
+            f"{_value(m.rev_rank, s, t):.2f} in the universe (needs {params['max_rank']:g} "
+            "or less)"
+        )
+        out.append("No results in the last 5 sessions and no recent bad news behind the fall")
     ema200 = _value(m.ema200, s, t)
     if not math.isnan(ema200) and c > ema200:
         out.append(f"Above its 200-day EMA ({_rs(ema200 / f)}): long-term uptrend")

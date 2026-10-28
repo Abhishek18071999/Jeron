@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const symbol = (params.get("symbol") ?? "").trim().toUpperCase();
   if (!/^[A-Z0-9&_.-]{1,32}$/.test(symbol)) return Response.json({ detail: "Unknown stock" }, { status: 400 });
   const query = new URLSearchParams();
-  for (const key of ["entry", "stop", "tier", "signal_id"]) {
+  for (const key of ["entry", "stop", "tier", "signal_id", "drawdown_note"]) {
     const value = params.get(key)?.trim();
     if (value) query.set(key, value);
   }
