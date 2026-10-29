@@ -16,7 +16,7 @@ import {
 
 import { signClass } from "../../backtests/format";
 import { BriefCard } from "./brief";
-import { type Level, PriceChart } from "./chart";
+import { type Level, type Marker, PriceChart } from "./chart";
 import { DealsPanel } from "./deals";
 import { FundamentalsPanel } from "./fundamentals";
 
@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 export default async function StockPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
   const [result, watch, deals, fundamentals, news, explain] = await Promise.all([
-    getJson<StockView>(`/stocks/${encodeURIComponent(symbol)}?sessions=500`),
+    getJson<StockView>(`/stocks/${encodeURIComponent(symbol)}?sessions=1000`),
     getJson<Watchlist>("/watchlist"),
     getJson<StockDeals>(`/stocks/${encodeURIComponent(symbol)}/deals`),
     getJson<StockFundamentals>(`/stocks/${encodeURIComponent(symbol)}/fundamentals`),
@@ -46,14 +46,17 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
   // An open position of mine comes first: its average entry and stop, and its signal's
   // targets. Otherwise the latest signal's zone, stop and targets.
   const held = s.journal.find((e) => e.position.status === "open" && e.position.avg_entry);
+  // The position and its stop are on today's share basis; the signal's targets come from
+  // its chart levels, which are adjusted to the same basis.
+  const heldTargets = held?.signal ? s.signals.find((x) => x.signal.signal_id === held.signal?.signal_id)?.chart : undefined;
   const levels: Level[] = held
     ? [
         { price: Number(held.position.avg_entry), title: "My entry", color: "#2563eb" },
         ...(held.stop ? [{ price: Number(held.stop), title: "Stop", color: "#dc2626" }] : []),
-        ...(held.signal
+        ...(heldTargets
           ? [
-              { price: Number(held.signal.t1), title: "T1", color: "#16a34a" },
-              { price: Number(held.signal.t2), title: "T2", color: "#16a34a", dashed: true },
+              { price: Number(heldTargets.t1), title: "T1", color: "#16a34a" },
+              { price: Number(heldTargets.t2), title: "T2", color: "#16a34a", dashed: true },
             ]
           : []),
       ]
@@ -66,6 +69,21 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
           { price: Number(latest.chart.t2), title: "T2", color: "#16a34a", dashed: true },
         ]
       : [];
+  // Each signal on its day, and every fill of mine.
+  const markers: Marker[] = [
+    ...s.signals.map((x) => ({
+      time: x.signal.signal_date,
+      kind: x.signal.research_only ? ("research" as const) : ("signal" as const),
+      text: x.signal.research_only ? "research signal" : "signal",
+    })),
+    ...s.journal.flatMap((e) =>
+      e.fills.map((f) => ({
+        time: f.trade_date,
+        kind: f.side === "buy" ? ("buy" as const) : ("sell" as const),
+        text: `${f.side === "buy" ? "bought" : "sold"} ${f.shares}`,
+      })),
+    ),
+  ];
   const last = s.candles[s.candles.length - 1];
   const scan = s.latest_scan;
 
@@ -98,9 +116,11 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
       </div>
 
       <Card title="Price (split/bonus-adjusted)">
-        <PriceChart candles={s.candles} levels={levels} />
+        <PriceChart candles={s.candles} levels={levels} markers={markers} />
         <p className="mt-2 text-xs text-muted">
-          Blue: EMA 50, purple: EMA 200.
+          Blue: EMA 50, purple: EMA 200; volume along the bottom. Arrows: signals (grey: research only); dots: my
+          buys and sells. The lower line is the stock against the Nifty 500, 100 where the range starts: above
+          100 it has done better than the index.
           {held
             ? " Lines: my open position's entry and stop, and its signal's targets."
             : latest
@@ -110,10 +130,10 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
         {held ? (
           <RRuler
             entry={held.position.avg_entry}
-            stop={held.signal?.stop ?? held.stop}
+            stop={held.stop}
             price={held.last_close}
-            t1={held.signal?.t1}
-            t2={held.signal?.t2}
+            t1={heldTargets?.t1}
+            t2={heldTargets?.t2}
           />
         ) : (
           latest &&

@@ -1,17 +1,20 @@
 """The journal in the database: decisions on signals, fills, positions and stats."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.data import store
+from app.data.adjust import SHARE_COUNT_ACTIONS, build_adjustments
 from app.enums import Exchange
+from app.journal.basis import ShareChange, basis_note, restate_fills, restate_price, share_changes
 from app.journal.calc import (
     DECISIONS,
     Fill,
@@ -36,6 +39,13 @@ class JournalError(ValueError):
     """A request the journal refuses (unknown signal, selling more than held...)."""
 
 
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _today() -> date:
+    return datetime.now(IST).date()
+
+
 @dataclass(frozen=True)
 class SignalInfo:
     signal_id: UUID
@@ -54,7 +64,10 @@ class EntryView:
     stop: Decimal | None  # mine, else the signal's
     last_close: Decimal | None
     last_close_date: date | None
+    # On the last close's share basis: fills before a split or bonus restated
+    # (app/journal/basis.py), and so is the stop.
     position: Position
+    basis_note: str | None = None
 
 
 def _signal_infos(session: Session, ids: Sequence[UUID]) -> dict[UUID, SignalInfo]:
@@ -108,6 +121,42 @@ def _signal_stop(info: SignalInfo | None) -> Decimal | None:
     return Decimal(str(info.payload["stop"]["price"]))
 
 
+def share_changes_for(session: Session, tickers: Iterable[str]) -> dict[str, list[ShareChange]]:
+    """Each ticker's splits and bonuses as the price adjustment applies them (revised
+    ex-dates settled by the price move); tickers without any are left out."""
+    out: dict[str, list[ShareChange]] = {}
+    for ticker in sorted(set(tickers)):
+        actions = [
+            a.record
+            for a in store.symbol_actions(session, ticker, store.NSE_ACTIONS)
+            if a.record.action_type in SHARE_COUNT_ACTIONS
+        ]
+        if not actions:
+            continue
+        start = min(a.ex_date for a in actions) - timedelta(days=10)
+        bars = store.symbol_bars(session, ticker, store.NSE_BARS, start)
+        changes = share_changes(build_adjustments(bars, actions))
+        if changes:
+            out[ticker] = changes
+    return out
+
+
+def restated(
+    fills: Iterable[JournalFill | Fill], changes: Sequence[ShareChange], basis: date
+) -> list[Fill]:
+    """Stored fills on `basis`'s share basis (app/journal/basis.py)."""
+    return restate_fills(
+        [Fill(f.trade_date, f.side, f.shares, f.price, f.charges) for f in fills], changes, basis
+    )
+
+
+def entry_fills(session: Session, entry: JournalEntry, extra: Sequence[Fill] = ()) -> list[Fill]:
+    """One entry's fills (plus `extra`), restated to today's share basis."""
+    stored = session.scalars(select(JournalFill).where(JournalFill.entry_id == entry.id)).all()
+    changes = share_changes_for(session, [entry.ticker]).get(entry.ticker, [])
+    return restated([*stored, *extra], changes, _today())
+
+
 def entry_views(
     session: Session,
     entries: Sequence[JournalEntry] | None = None,
@@ -127,21 +176,35 @@ def entry_views(
     ):
         fills.setdefault(f.entry_id, []).append(f)
     infos = _signal_infos(session, [e.signal_id for e in entries if e.signal_id])
-    closes = last_closes(session, [e.ticker for e in entries], as_of)
+    tickers = [e.ticker for e in entries]
+    closes = last_closes(session, tickers, as_of)
+    changes = share_changes_for(session, tickers)
     views = []
     for e in entries:
         info = infos.get(e.signal_id) if e.signal_id else None
-        stop = e.stop if e.stop is not None else _signal_stop(info)
         close = closes.get(e.ticker)
         own = fills.get(e.id, [])
-        pos = position(
-            [Fill(f.trade_date, f.side, f.shares, f.price, f.charges) for f in own],
-            stop,
-            close[1] if close else None,
-        )
+        own_changes = changes.get(e.ticker, [])
+        # Everything on the last close's basis: a split after it isn't priced in yet.
+        basis = close[0] if close else (as_of or _today())
+        first = min((f.trade_date for f in own), default=None)
+        if e.stop is not None:
+            stop = restate_price(e.stop, own_changes, e.stop_set_on or first or basis, basis)
+        else:
+            stop = restate_price(
+                _signal_stop(info), own_changes, info.signal_date if info else basis, basis
+            )
+        pos = position(restated(own, own_changes, basis), stop, close[1] if close else None)
         views.append(
             EntryView(
-                e, own, info, stop, close[1] if close else None, close[0] if close else None, pos
+                e,
+                own,
+                info,
+                stop,
+                close[1] if close else None,
+                close[0] if close else None,
+                pos,
+                basis_note(own_changes, first, basis),
             )
         )
     return views
@@ -169,6 +232,14 @@ def pending_signals(
 def _check_decision(decision: str) -> None:
     if decision not in DECISIONS:
         raise JournalError(f"Decision must be one of {', '.join(DECISIONS)}")
+
+
+def _set_stop(entry: JournalEntry, stop: Decimal | None) -> None:
+    """A changed stop is dated, so a later split restates it; an unchanged one keeps its
+    date (a form sends the stop back with every save)."""
+    if stop != entry.stop:
+        entry.stop_set_on = None if stop is None else _today()
+    entry.stop = stop
 
 
 def _check_plan(session: Session, plan_id: int | None, ticker: str) -> None:
@@ -207,7 +278,7 @@ def decide(
         session.add(entry)
     entry.decision = decision
     entry.reason = reason
-    entry.stop = stop
+    _set_stop(entry, stop)
     entry.followed_plan = followed_plan
     entry.notes = notes
     if plan_id is not None:
@@ -235,6 +306,7 @@ def manual_entry(
         decision="taken",
         reason=reason,
         stop=stop,
+        stop_set_on=None if stop is None else _today(),
         notes=notes,
         followed_plan=None,
         plan_id=plan_id,
@@ -259,7 +331,7 @@ def update_entry(
     _check_plan(session, plan_id, entry.ticker)
     entry.decision = decision
     entry.reason = reason
-    entry.stop = stop
+    _set_stop(entry, stop)
     entry.followed_plan = followed_plan
     entry.notes = notes
     if plan_id is not None:
@@ -285,9 +357,8 @@ def add_fill(
         raise JournalError("Side must be buy or sell")
     if shares <= 0 or price <= 0 or charges < 0:
         raise JournalError("Shares and price must be positive, charges not negative")
-    existing = session.scalars(select(JournalFill).where(JournalFill.entry_id == entry.id)).all()
-    fills = [Fill(f.trade_date, f.side, f.shares, f.price, f.charges) for f in existing]
-    fills.append(Fill(trade_date, side, shares, price, charges))
+    # Checked on today's share basis: after a split the broker sells the new count.
+    fills = entry_fills(session, entry, [Fill(trade_date, side, shares, price, charges)])
     try:
         position(fills, None, None)
     except ValueError as e:
@@ -314,10 +385,11 @@ def delete_fill(session: Session, fill: JournalFill) -> None:
     rest = session.scalars(
         select(JournalFill).where(JournalFill.entry_id == fill.entry_id, JournalFill.id != fill.id)
     ).all()
+    entry = session.get(JournalEntry, fill.entry_id)
+    ticker = entry.ticker if entry is not None else ""
+    changes = share_changes_for(session, [ticker]).get(ticker, [])
     try:
-        position(
-            [Fill(f.trade_date, f.side, f.shares, f.price, f.charges) for f in rest], None, None
-        )
+        position(restated(rest, changes, _today()), None, None)
     except ValueError as e:
         raise JournalError(f"Delete the sells first: {e}") from e
     session.delete(fill)

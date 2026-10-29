@@ -261,7 +261,9 @@ No native mobile app for now. The PWA + Telegram covers phone use; a native app 
 After the milestones, outside reviews are tracked with their own plans: the 15-point
 review in `docs/plans/review-v1.md`, and "Section 20: Post-review hardening plan" (the
 second review: paper first in a drawdown, the second strategy family, idea-first
-research) in `docs/plans/post-review-v2.md`, with each item's status.
+research) in `docs/plans/post-review-v2.md`, with each item's status. Platform reviews
+(bugs, data accuracy, risk views, charts) are in `docs/plans/platform-audit-v1.md` and
+`docs/plans/platform-review-v3.md`.
 
 ### 12. Ground rules
 

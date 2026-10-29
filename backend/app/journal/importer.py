@@ -16,8 +16,8 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.journal.calc import Fill, position
-from app.journal.service import JournalError, add_fill, decide, manual_entry
+from app.journal.calc import position
+from app.journal.service import JournalError, add_fill, decide, entry_fills, manual_entry
 from app.journal.tradebook import BrokerTrade, estimate_charges, parse_tradebook
 from app.models import Instrument, JournalEntry, JournalFill, PaperAccount, SignalRecord
 
@@ -47,11 +47,8 @@ def _symbols_by_isin(session: Session, trades: Sequence[BrokerTrade]) -> dict[st
 
 
 def _held(session: Session, entry: JournalEntry) -> int:
-    fills = session.scalars(select(JournalFill).where(JournalFill.entry_id == entry.id)).all()
-    pos = position(
-        [Fill(f.trade_date, f.side, f.shares, f.price, f.charges) for f in fills], None, None
-    )
-    return pos.held
+    """Shares held on today's basis (after any split or bonus since the buys)."""
+    return position(entry_fills(session, entry), None, None).held
 
 
 def _open_entry(session: Session, ticker: str) -> JournalEntry | None:

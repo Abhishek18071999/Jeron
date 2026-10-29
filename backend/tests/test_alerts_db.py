@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from alembic import command
 from app.alerts.channels import AlertError
 from app.alerts.job import run_alerts, send_test
 from app.backtest.job import run_backtests
@@ -21,7 +20,7 @@ from app.main import app
 from app.models import Alert, Instrument, SignalRecord, SymbolChange
 from app.paper.job import run_paper
 from app.signals.build import IST
-from tests.conftest import TEST_DATABASE_URL, requires_db
+from tests.conftest import TEST_DATABASE_URL, requires_db, reset_database
 from tests.test_backtest_db import BACKEND_DIR, DAYS
 from tests.test_backtest_db import session as session  # noqa: F401 - the fixture
 from tests.test_paper_db import _scans
@@ -37,8 +36,7 @@ def empty_session(monkeypatch):
     get_engine.cache_clear()
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
+    reset_database(config)
     with Session(get_engine()) as s:
         yield s
     get_engine().dispose()

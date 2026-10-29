@@ -85,7 +85,9 @@ class EntryOut(BaseModel):
     fills: list[FillOut]
     last_close: Decimal | None
     last_close_date: date | None
+    # Position and stop on the last close's share basis; says so after a split or bonus.
     position: PositionOut
+    basis_note: str | None = None
 
 
 class StatsOut(BaseModel):
@@ -195,6 +197,7 @@ def entry_out(view: EntryView) -> EntryOut:
         last_close=view.last_close,
         last_close_date=view.last_close_date,
         position=PositionOut.model_validate(view.position, from_attributes=True),
+        basis_note=view.basis_note,
     )
 
 

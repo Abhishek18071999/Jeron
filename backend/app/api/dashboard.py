@@ -16,6 +16,7 @@ from app.backtest.market import REGIME_RULES, Regime
 from app.data import store
 from app.data.adjust import adjust_bars, build_adjustments
 from app.data.events import EVENT_LOOKAHEAD_DAYS, next_results
+from app.data.nse_lists import NIFTY_500
 from app.db import get_session
 from app.indicators import ema
 from app.journal import service
@@ -258,6 +259,8 @@ class Candle(BaseModel):
     factor: Decimal
     ema50: float | None
     ema200: float | None
+    # The Nifty 500's close that day, for the relative-strength line; None if not loaded.
+    nifty500: float | None = None
 
 
 class ScorePoint(BaseModel):
@@ -343,6 +346,11 @@ def stock(
     closes = [float(a.close) for a in adjusted]
     ema50, ema200 = ema(closes, 50), ema(closes, 200)
     first = max(0, len(adjusted) - sessions)
+    index = (
+        store.index_closes(session, NIFTY_500, adjusted[first].raw.trade_date, bars[-1].trade_date)
+        if adjusted
+        else {}
+    )
     candles = [
         Candle(
             time=a.raw.trade_date,
@@ -354,6 +362,7 @@ def stock(
             factor=a.factor,
             ema50=_r(ema50[i]),
             ema200=_r(ema200[i]),
+            nifty500=None if a.raw.trade_date not in index else float(index[a.raw.trade_date]),
         )
         for i, a in enumerate(adjusted)
         if i >= first

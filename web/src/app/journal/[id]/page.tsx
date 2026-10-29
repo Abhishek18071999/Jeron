@@ -87,13 +87,15 @@ export default async function EntryPage({
             </Link>
           </p>
         )}
+        {e.basis_note && <p className="mt-3 text-sm text-muted">{e.basis_note}</p>}
         {p.status === "open" && (
           <RRuler
             entry={p.avg_entry}
-            stop={e.signal?.stop ?? e.stop}
+            stop={e.basis_note ? e.stop : (e.signal?.stop ?? e.stop)}
             price={e.last_close}
-            t1={e.signal?.t1}
-            t2={e.signal?.t2}
+            // The signal's targets are in the prices of its day, before the split or bonus.
+            t1={e.basis_note ? undefined : e.signal?.t1}
+            t2={e.basis_note ? undefined : e.signal?.t2}
             priceLabel={e.last_close_date ? `The ${shortDate(e.last_close_date)} close` : "Last close"}
           />
         )}

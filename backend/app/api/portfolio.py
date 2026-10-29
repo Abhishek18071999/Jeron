@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from app.backtest.engine import PortfolioRules
 from app.db import get_session
 from app.portfolio.calc import AccountState, Holding, SectorExposure
-from app.portfolio.service import equity_history
+from app.portfolio.risk import BETA_SESSIONS, HIGH_CORR
+from app.portfolio.service import equity_history, portfolio_risk
 from app.portfolio.service import portfolio as build_portfolio
 from app.settings_store import effective_settings
 
@@ -229,3 +230,62 @@ def portfolio_equity(session: SessionDep) -> EquityOut:
             "without dividends."
         ),
     )
+
+
+class StockRiskOut(BaseModel):
+    ticker: str
+    value: float
+    weight_pct: float
+    beta: float | None
+    beta_sessions: int
+    volatility_pct: float | None
+    worst_gap_pct: float | None
+    worst_gap_day: date | None
+    planned_loss: float | None
+    gap_loss: float | None
+    beyond_stop: float | None
+
+
+class ShockOut(BaseModel):
+    index_move_pct: float
+    loss: float
+    loss_pct: float
+
+
+class PairOut(BaseModel):
+    a: str
+    b: str
+    correlation: float
+
+
+class RiskOut(BaseModel):
+    as_of: date | None
+    equity: float
+    value: float
+    stocks: list[StockRiskOut]
+    book_beta: float | None
+    beta_sessions: int
+    shocks: list[ShockOut]
+    var_sessions: int
+    var95: float | None
+    var99: float | None
+    es97: float | None
+    worst_day: date | None
+    worst_day_loss: float | None
+    planned_loss: float
+    gap_loss: float
+    avg_correlation: float | None
+    corr_sessions: int
+    high_corr: float
+    high_pairs: list[PairOut]
+    notes: list[str]
+
+
+@router.get("/portfolio/risk")
+def portfolio_risk_route(session: SessionDep, day: date | None = None) -> RiskOut:
+    """What history says about the open positions on bad days: beta and market shocks,
+    one-day VaR from the last 500 sessions, each stock's worst gap against its stop, and
+    how closely the stocks move together (app/portfolio/risk.py). Not a forecast."""
+    r = portfolio_risk(session, build_portfolio(session, day))
+    data = asdict(r)
+    return RiskOut(**data, beta_sessions=BETA_SESSIONS, high_corr=HIGH_CORR)
