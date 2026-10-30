@@ -210,3 +210,43 @@ def test_review_research_options_run_and_are_not_saved(session):
     assert "Deflated Sharpe (item 7)" in text
     assert "rs-pullback-v1 as it is" in text and "Missed entries (item 10)" in text
     assert session.scalar(select(func.count()).select_from(BacktestRun)) == 0
+
+
+def test_news_research_end_to_end(session, tmp_path):
+    """`news-research` on the database: LLM labels become the news score, the arms
+    that have their input run, the blackout without a results calendar says why."""
+    from app.cli import main
+    from app.data.news import Announcement
+    from app.models import Announcement as AnnouncementRow
+    from app.news.job import save_labels
+    from app.news.labels import PROMPT_VERSION, EventType, NewsLabel
+
+    rng = np.random.default_rng(5)
+    days = [DAYS[i] for i in range(300, len(DAYS), 9)]
+    items = [
+        Announcement(symbol, day, "Litigation", f"{symbol} has informed the Exchange of a case")
+        for symbol in SYMBOLS
+        for day in days
+        if rng.random() < 0.3
+    ]
+    store.save_announcements(session, items, "test")
+    ids = session.scalars(select(AnnouncementRow.id)).all()
+    labeller = get_settings().news_model
+    bad = NewsLabel(event_type=EventType.LITIGATION, sentiment=-2, reason="Case.")
+    save_labels(session, labeller, PROMPT_VERSION, [(i, bad) for i in ids])
+    session.commit()
+
+    out = tmp_path / "news.md"
+    cutoff = DAYS[1000]
+    code = main(
+        ["news-research", "--strategy", "rs-pullback", "--cutoff", str(cutoff), "--out", str(out)]
+    )
+    assert code == 0
+    text = out.read_text()
+    assert "| rs-pullback-v1 | Neither rule | " in text
+    news_row = next(line for line in text.splitlines() if "| News filter |" in line)
+    assert "not run" not in news_row
+    assert "| Results blackout | not run: no results calendar" in text
+    assert f"From {cutoff}" in text and "bad news (below 40)" in text
+    assert f"news labels from {labeller} cover" in text
+    assert session.scalar(select(func.count()).select_from(BacktestRun)) == 0
