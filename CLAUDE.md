@@ -50,7 +50,9 @@ are part of done, never commit secrets.
     `walkforward.py` (folds, holdout, gates), `missed.py` (orders skipped for opening
     above the zone, bought anyway: reporting only), `research.py` (the 2026-10 review's
     options, `PortfolioRules` fields off by default, run only by `research`, never saved
-    as runs; `docs/plans/review-v1.md`), `stats.py` (also the Nifty 500 cash-sweep
+    as runs; `docs/plans/review-v1.md`), `news_research.py` (does the news filter or results blackout help? each
+    strategy's four arms, trades by news score, before and after the model's cut-off; run only
+    by `news-research`, never saved as runs; `docs/plans/news-brain-v1.md`), `stats.py` (also the Nifty 500 cash-sweep
     line reported beside the gates, M8 part 2, and `risk_profile`: Sortino, streaks, time
     under water, exposure, turnover; reporting only), `confidence.py` (the evidence-strength
     layer beside the gates, decision 0018: bootstrap intervals, block-bootstrap drawdown,
@@ -200,7 +202,7 @@ are part of done, never commit secrets.
     `events-import` (a board-meeting CSV saved from nseindia.com), `deals` (the day's bulk and
     block deals; `daily` runs it too), `deals-import FILE` (bulk/block deals or insider
     trades saved from nseindia.com), `watchdog`, `stop-all --reason` / `resume` (the kill
-    switch, `app/halt.py`, `docs/runbook.md`), `research` (the review's options), `api-token` (the web app's token for the API),
+    switch, `app/halt.py`, `docs/runbook.md`), `research` (the review's options), `news-research` (the news brain test), `api-token` (the web app's token for the API),
     `fundamentals-import FILE...` (quarterly results from
     Financial Results CSVs saved from nseindia.com), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,

@@ -18,6 +18,7 @@ python -m app.cli news-eval testset.csv         # the model's accuracy on your l
 python -m app.cli backtest                      # walk-forward test of every strategy
 python -m app.cli backtest --strategy combined-book  # rs-pullback + results drift in one account
 python -m app.cli research --out report.md      # the trading review's options on rs-pullback
+python -m app.cli news-research --cutoff 2024-06-01  # does the news brain help?
 python -m app.cli paper                         # signals and paper trades for the newest scan
 python -m app.cli strategy-status               # every strategy's status, evidence, health
 python -m app.cli strategy-status rs-pullback-v1 "small capital" --reason "..."
@@ -52,10 +53,11 @@ from app.alerts.late import data_late
 from app.alerts.watchdog import check_tonight, ping_heartbeat
 from app.analytics.strategies import set_status, strategy_views
 from app.analytics.weekly import run_weekly
-from app.backtest import research
+from app.backtest import news_research, research
 from app.backtest.job import load_inputs, run_backtests
 from app.backtest.market import build_market
 from app.backtest.strategies import COMBINED, STRATEGIES
+from app.backtest.walkforward import brains_summary
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
 from app.data import pipeline, store
@@ -105,6 +107,10 @@ def _archive() -> NseArchive:
 
 def _yahoo() -> YahooClient:
     return YahooClient(Fetcher(min_interval=get_settings().yahoo_request_interval))
+
+
+def _span(years: list[int]) -> str:
+    return f"{years[0]}-{years[-1]}" if years else "no year"
 
 
 def _date(value: str) -> date:
@@ -199,6 +205,25 @@ def main(argv: list[str] | None = None) -> int:
         help="strategy to test (repeatable; default: all; combined-book only when named)",
     )
     p.add_argument("--start", type=_date, help="first price date to use (default: all)")
+    p.add_argument("--end", type=_date, help="last price date to use (default: newest)")
+
+    p = sub.add_parser(
+        "news-research",
+        help="each strategy with and without the news filter and results blackout (research "
+        "only, not saved as runs); docs/plans/news-brain-v1.md",
+    )
+    p.add_argument(
+        "--strategy",
+        choices=sorted(STRATEGIES),
+        action="append",
+        help="default: " + ", ".join(news_research.DEFAULT_KEYS),
+    )
+    p.add_argument(
+        "--cutoff",
+        type=_date,
+        help="the news model's training cut-off: trades are also split before and after it",
+    )
+    p.add_argument("--out", type=Path, help="write the Markdown report here")
     p.add_argument("--end", type=_date, help="last price date to use (default: newest)")
 
     p = sub.add_parser(
@@ -649,6 +674,26 @@ def main(argv: list[str] | None = None) -> int:
             alert = _notify(session, f"halt:{now.isoformat()}", text, "Jeron kill switch", now)
             if alert is None:
                 _log(NOT_SET_UP)
+            return 0
+
+        if args.command == "news-research":
+            started = datetime.now()
+            market = build_market(load_inputs(session, None, args.end, log=_log))
+            keys = args.strategy or list(news_research.DEFAULT_KEYS)
+            arms = news_research.run(market, keys, log=_log)
+            brains = brains_summary(market, STRATEGIES[keys[0]])
+            note = (
+                f"Data {market.days[0]} to {market.days[-1]}, {len(market.symbols)} stocks; "
+                f"news labels from {market.news_labeller or 'no labeller'} cover "
+                f"{_span(brains['news_years'])}; the results calendar covers "
+                f"{_span(brains['results_calendar_years'])}. Where a year has no labels the "
+                f"news filter does nothing in it. Took "
+                f"{(datetime.now() - started).seconds // 60} minutes."
+            )
+            text = news_research.report(arms, market, note, args.cutoff)
+            print(text)
+            if args.out:
+                args.out.write_text(text + "\n")
             return 0
 
         if args.command == "research":
