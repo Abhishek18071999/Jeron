@@ -115,6 +115,15 @@ def reasons(m: Market, s: int, t: int, strategy: Strategy, params: Params) -> li
             f"(needs {params['min_rank']:g}), checked on the first session of the month"
         )
         out.append(f"Rose {_value(m.mom_return, s, t) * 100:.0f}% from a year ago to a month ago")
+    elif strategy.key == "fip-momentum" and m.mom_rank is not None and m.fip_id is not None:
+        out.append(
+            f"Momentum leader: rank {_value(m.mom_rank, s, t):.2f} in the universe "
+            f"(needs {params['min_rank']:g}), checked on the first session of the month"
+        )
+        out.append(
+            f"Rose smoothly: information discreteness {_value(m.fip_id, s, t):.2f}, in the "
+            "most continuous third of the momentum leaders"
+        )
     elif strategy.key == "reversal" and m.rev_rank is not None and m.rev_return is not None:
         out.append(
             f"Fell {-_value(m.rev_return, s, t) * 100:.1f}% in 5 sessions: rank "

@@ -161,6 +161,7 @@ def market_fingerprint(m: Market) -> str:
         m.results_reaction,
         m.sector_rank,
         m.mom_rank,
+        m.fip_rank,
     ):
         if extra is not None:
             h.update(np.ascontiguousarray(np.nan_to_num(extra, nan=-1.0)).tobytes())

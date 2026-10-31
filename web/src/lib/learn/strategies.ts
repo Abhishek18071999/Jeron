@@ -382,6 +382,36 @@ export const STRATEGIES: Lesson[] = [
     ],
   },
   {
+    slug: "strategy-fip-momentum",
+    track: "strategies",
+    title: "Strategy: momentum that rose smoothly (fip-momentum)",
+    summary: "Once a month, buy the momentum leaders whose rise came from many small steps, not a few jumps. Long-term.",
+    minutes: 6,
+    goals: ["State information discreteness and the entry", "See why a smooth rise is expected to last longer"],
+    blocks: [
+      { p: "**Idea**: two stocks can both be up 50% over the year. One got there with a few big jumps on headlines; the other crept up a little most days. Research (Da, Gurun and Warachka, 2014, \"frog in the pan\") found the second kind keeps rising for months longer: investors react to a big headline at once, but barely notice a slow trickle of small good news." },
+      { analogy: "The frog in slowly warming water doesn't notice until late. The market is slow to price news that arrives a little at a time." },
+      { h: "Information discreteness (ID)" },
+      { list: [
+        "Over the same 12-1 window momentum uses, count the **share of up days** and **down days**.",
+        "**ID = (down share − up share)** for a riser. Very negative means most days moved with the trend: smooth. Near zero means the trend came from a few big days: jumpy.",
+        "Among the momentum **top 20%**, the smoothest third pass.",
+      ] },
+      { h: "Rules (fip-momentum-v1)" },
+      { list: [
+        "On the **first session of each month**, enter stocks in the momentum top 20% whose ID is in the **smoothest third**.",
+        "Stop 4 × ATR. Long-term tier: up to 15 positions, half sold at +3R, trail 4 × ATR, time stop 250 sessions.",
+        "**Exit** as momentum: on the first session of a month, sell at the next open if the momentum rank is **below 0.75**.",
+      ] },
+      { h: "Status" },
+      { p: "Its rules were written down before any code or test (docs/plans/fip-momentum-v1.md), with one setting and no tuning, and it is judged against plain momentum on the same data. Like every strategy it must pass the backtest and then paper trading before real money." },
+      { recap: ["Momentum, but only the leaders that rose smoothly.", "Checked monthly; sold when it drops out of the top quarter, or by the usual stops."] },
+    ],
+    quiz: [
+      { q: "Two leaders are both up 50%. A rose on 60% of days, B on 45% with a few big jumps. fip-momentum prefers:", options: ["A", "B", "Neither"], answer: 0, why: "A's rise was more continuous (a lower ID), which the research found lasts longer." },
+    ],
+  },
+  {
     slug: "strategy-reversal",
     track: "strategies",
     title: "Strategy: short-term reversal (reversal)",

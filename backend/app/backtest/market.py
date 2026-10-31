@@ -187,6 +187,11 @@ class Market:
     # (0-1, 0 = fell most) among the universe that day. NaN outside the universe.
     rev_return: Array | None = None
     rev_rank: Array | None = None
+    # fip-momentum-v1 (docs/plans/fip-momentum-v1.md): information discreteness over the
+    # 12-1 window (low = the trend came from many small moves), and its percentile (0 =
+    # most continuous) among the day's momentum top fifth. NaN for every other stock.
+    fip_id: Array | None = None
+    fip_rank: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -409,6 +414,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
 
     mom_return, mom_rank = momentum_ranks(close, eligible)
     rev_return, rev_rank = reversal_ranks(close, eligible)
+    fip_id, fip_rank = fip_ranks(close, eligible, mom_return, mom_rank)
     symbols = [s.symbol for s in inputs.stocks]
     reactions = results_reactions(days, symbols, inputs.results, close, vol_ratio, nifty500)
     sector_closes = [_index_series(days, inputs.sector_indices.get(n, {})) for n in SECTOR_INDICES]
@@ -461,6 +467,8 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         results_session=results_sessions(days, symbols, inputs.results),
         rev_return=rev_return,
         rev_rank=rev_rank,
+        fip_id=fip_id,
+        fip_rank=fip_rank,
         fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
     )
 
@@ -519,6 +527,51 @@ def momentum_ranks(close: Array, universe: Array) -> tuple[Array, Array]:
         if len(members):
             rank[members, t] = percentile_ranks(score[members, t])
     return ret, rank
+
+
+# fip-momentum-v1: the daily returns inside momentum-v1's 12-1 window, and the top fifth.
+FIP_WINDOW_RETURNS = MOMENTUM_LOOKBACK_SESSIONS - MOMENTUM_SKIP_SESSIONS  # 231
+FIP_MIN_RETURNS = 180
+FIP_MOMENTUM_MIN = 0.8
+
+
+def fip_ranks(
+    close: Array, universe: Array, mom_return: Array, mom_rank: Array
+) -> tuple[Array, Array]:
+    """fip-momentum-v1 (docs/plans/fip-momentum-v1.md), using only data up to each day:
+    information discreteness, sign(12-1 return) x (share of negative - share of positive
+    daily returns) over the returns from session t - 251 to t - 21 (at least
+    `FIP_MIN_RETURNS` defined), and its percentile (0 = most continuous) among the day's
+    universe stocks with a momentum rank of at least `FIP_MOMENTUM_MIN`. NaN elsewhere."""
+    s_count, d_count = close.shape
+    n, skip = FIP_WINDOW_RETURNS, MOMENTUM_SKIP_SESSIONS
+    fid = np.full((s_count, d_count), NAN)
+    rank = np.full((s_count, d_count), NAN)
+    if d_count <= n + skip:
+        return fid, rank
+    daily = _returns(close)
+    defined = ~np.isnan(daily)
+
+    def window_sum(a: Array) -> Array:
+        # Sum over the returns at sessions t - skip - n + 1 .. t - skip, for each t.
+        c = np.zeros((s_count, d_count + 1))
+        np.cumsum(a, axis=1, out=c[:, 1:])
+        out = np.full((s_count, d_count), NAN)
+        out[:, n + skip - 1 :] = c[:, n : d_count + 1 - skip] - c[:, : d_count + 1 - n - skip]
+        return out
+
+    count = window_sum(defined.astype(float))
+    pos = window_sum(defined & (np.nan_to_num(daily) > 0))
+    neg = window_sum(defined & (np.nan_to_num(daily) < 0))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        raw = np.sign(mom_return) * (neg - pos) / count
+    fid = np.where((count >= FIP_MIN_RETURNS) & ~np.isnan(mom_return), raw, NAN)
+    top = universe & (np.nan_to_num(mom_rank, nan=-1.0) >= FIP_MOMENTUM_MIN)
+    for t in range(d_count):
+        members = np.flatnonzero(top[:, t])
+        if len(members):
+            rank[members, t] = percentile_ranks(fid[members, t])
+    return fid, rank
 
 
 # reversal-v1: the week's losers.
