@@ -40,7 +40,9 @@ are part of done, never commit secrets.
     `COMBINED_BOOK` trades rs-pullback-v1 and results-drift-v1 in one account through
     the engine's `Book`s, run only by `backtest --strategy combined-book`, see
     `docs/plans/combined-book-v1.md`; `momentum-v1` (invest tier, monthly 12-1 momentum
-    leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`);
+    leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`); `fip-momentum-v1` (invest,
+    momentum-v1's top fifth kept only where the rise was continuous, frog-in-the-pan,
+    `Market.fip_rank`, one grid point, `docs/plans/fip-momentum-v1.md`);
     `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
     point, `docs/plans/paper-review-v1.md`),
     `reversal-v1` (swing, short-term reversal of no-news losers on `Market.rev_rank`, one

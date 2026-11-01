@@ -19,7 +19,7 @@ version, and nothing goes live without passing spec section 6 and then paper tra
 | R2 | Morning entry re-validation | Done (2026-10-26, PR #38) | `app/exits/job.py` `entry_checks` |
 | R3 | Momentum-crash guard | Tested, not adopted | `docs/backtests/review-v1-report.md` |
 | R4 | Quality filter on rs-pullback | Built, not yet run: needs your results data | `app/backtest/research.py` `quality` |
-| R5 | A second, uncorrelated strategy family | Pre-registered and built; runs once on your install | `docs/plans/reversal-v1.md` |
+| R5 | A second, uncorrelated strategy family | Run 2026-11-01: reversal-v1 fails (0.04R, 3 of 7 checks), research only | `docs/backtests/fip-momentum-v1-report.md` |
 | B | Paper first in a drawdown over 10%, journal before trading | Built (this plan) | `app/plan/calc.py`, alerts |
 | P | Idea-first research instead of parameter search | Adopted as a rule (below) | this page |
 

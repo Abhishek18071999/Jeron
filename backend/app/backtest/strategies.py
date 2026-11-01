@@ -500,6 +500,46 @@ MOMENTUM = Strategy(
     registered_on=date(2026, 10, 18),
 )
 
+# fip-momentum-v1 (docs/plans/fip-momentum-v1.md): momentum-v1's top fifth, only the
+# third whose rise came most continuously; momentum-v1's exit.
+FIP_MAX_RANK = 1 / 3
+
+
+def _fip_condition(m: Market, p: Params) -> Array:
+    if m.fip_rank is None:
+        raise ValueError("this strategy needs the market's fip_rank")
+    mom = np.nan_to_num(_mom_rank(m), nan=-1.0)
+    fip = np.nan_to_num(m.fip_rank, nan=np.inf)
+    return np.asarray(
+        (mom >= p["min_rank"]) & (fip <= FIP_MAX_RANK) & rebalance_days(m), dtype=bool
+    )
+
+
+FIP_MOMENTUM = Strategy(
+    key="fip-momentum",
+    version="fip-momentum-v1",
+    name="Momentum leaders that rose smoothly (invest)",
+    tier=Tier.INVEST,
+    summary="Each month, own the momentum leaders whose rise came from many small steps.",
+    grid_axes={"min_rank": (0.8,), "stop_atr": (4.0,)},
+    default={"min_rank": 0.8, "stop_atr": 4.0},
+    describe=lambda p: [
+        "Enter at the close of the first session of a month when the stock's momentum "
+        f"rank is in the top {100 - 100 * p['min_rank']:g}% of the universe and, among "
+        "those, its rise was in the most continuous third: the most days moving with the "
+        "trend and the fewest against it over the 12-1 window (frog-in-the-pan, Da, "
+        "Gurun and Warachka 2014). No trend or market-regime filter."
+    ],
+    condition=_fip_condition,
+    exit_condition=_momentum_exit,
+    exit_reason=f"left the momentum leaders (rank below {MOMENTUM_EXIT_BELOW:g})",
+    exit_rule=(
+        "Sell at the next open after the first session of a month on which the stock's "
+        f"momentum rank is below {MOMENTUM_EXIT_BELOW:g} (out of the top quarter)."
+    ),
+    registered_on=date(2026, 10, 31),
+)
+
 # Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
 # back above 40 after about 26 days.
 MIN_NEWS_SCORE = 40.0
@@ -620,6 +660,7 @@ STRATEGIES = {
         MOMENTUM,
         TOP_SCORE,
         REVERSAL,
+        FIP_MOMENTUM,
     )
 }
 

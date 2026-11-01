@@ -130,6 +130,17 @@ export const GUIDES: StrategyGuide[] = [
     lesson: "strategy-momentum",
   },
   {
+    key: "fip-momentum",
+    name: "Momentum leaders that rose smoothly",
+    section: "invest",
+    lookFor:
+      "On the first session of each month, a stock in the top 20% of the universe for 12-1 momentum whose rise was in the smoothest third of those: the most days moving with the trend and the fewest against it (frog in the pan).",
+    works: "Steady, broad trends, where good news arrives in small pieces and the market under-reacts to it. Like momentum, it can give back a lot in sharp reversals.",
+    watch: "A sudden jump on news after entry: the idea is a slow trickle, not one headline.",
+    exit: "Sold at the next open after the first session of a month on which its momentum rank is below 0.75.",
+    lesson: "strategy-fip-momentum",
+  },
+  {
     key: "reversal",
     name: "Short-term reversal of no-news losers",
     section: "swing",

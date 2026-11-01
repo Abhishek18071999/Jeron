@@ -11,3 +11,5 @@ backend/data/
 backups/
 imports/*
 !imports/README.txt
+*.dump
+*.dump.sha256
