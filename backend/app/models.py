@@ -883,3 +883,7 @@ class FinancialResult(Base):
     audit_opinion: Mapped[str | None] = mapped_column(String(500))
     # Every numeric fact of the quarter as text, by XBRL element name.
     facts: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    # fundamentals-v2: the balance sheet on the last day (half-yearly and annual filings)
+    # and the year-to-date facts (the cash-flow statement), as text by element name.
+    balance: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    ytd: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
