@@ -1,0 +1,27 @@
+:root { --ink:#1b1f24; --muted:#5b6470; --line:#d9dee4; --accent:#0b5cad; --soft:#f4f6f8; }
+@page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+body { font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--ink);
+  font-size: 10.5pt; line-height: 1.55; max-width: 100%; margin: 0; }
+header#title-block-header { border-bottom: 3px solid var(--accent); padding-bottom: 14px; margin-bottom: 26px; }
+h1.title { font-size: 26pt; margin: 0 0 4px; color: var(--accent); }
+p.subtitle { font-size: 14pt; margin: 0 0 6px; color: var(--ink); }
+p.date { color: var(--muted); margin: 0; }
+h1 { font-size: 17pt; color: var(--accent); border-bottom: 1px solid var(--line); padding-bottom: 4px;
+  margin-top: 30px; break-after: avoid; }
+h2 { font-size: 13pt; margin-top: 22px; break-after: avoid; }
+h3 { font-size: 11pt; margin-top: 16px; break-after: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 9.3pt; break-inside: auto; }
+th, td { border: 1px solid var(--line); padding: 5px 7px; vertical-align: top; text-align: left; }
+th { background: var(--soft); }
+tr { break-inside: avoid; }
+code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 8.8pt; background: var(--soft);
+  padding: 1px 4px; border-radius: 3px; }
+pre:not(.mermaid) { background: var(--soft); border: 1px solid var(--line); padding: 8px 10px;
+  border-radius: 4px; overflow-x: auto; font-size: 8.6pt; break-inside: avoid; }
+pre:not(.mermaid) code { background: none; padding: 0; }
+pre.mermaid { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 10px;
+  text-align: center; break-inside: avoid; margin: 12px 0; }
+pre.mermaid svg { max-width: 100%; max-height: 225mm; width: auto; height: auto; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+blockquote { border-left: 3px solid var(--accent); margin: 10px 0; padding: 2px 12px; color: var(--muted); }
+strong { color: #111; }
