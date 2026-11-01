@@ -10,8 +10,8 @@ quality reports: all WARN (no second-source cross-check), none FAIL.
 `fip-momentum-v1` was pre-registered in `docs/plans/fip-momentum-v1.md` (commit
 e36c283) before its code was written or any data was loaded, and run once. The other
 untested versions (`momentum-v1`, `reversal-v1`, `top-score-v1`, `combined-book-v1`)
-were run once as their own plans say. `quality-trend-v1` was not run: the quarterly
-results import was still going.
+were run once as their own plans say. `quality-trend-v1` was run last (run 9), once
+the quarterly results import had finished; see its own section below.
 
 **Verdict: `fip-momentum-v1` is the strongest strategy Jeron has tested.** It passes all
 seven section 6 checks, it is the only strategy whose evidence rating is *strong*
@@ -43,6 +43,19 @@ trading with alerts; real money only after the paper gate.
 Nifty 500 over the test period: CAGR 16.4%, Sharpe above 6.5% of 0.59, max drawdown
 38.3%. No strategy beats its raw CAGR; the eligible ones do it with about a third of the
 drawdown, which is what the Sharpe check measures.
+
+## quality-trend-v1: strong test years, holdout not testable
+
+Run 9, after the bundled results were imported (25,343 filings stored, periods 2017 to
+2024). Out of sample: 201 trades, **+0.637R**, profit factor **1.91**, drawdown 16.0%,
+Sharpe 0.76 against Nifty 500's 0.59, positive in bull, bear and sideways markets. It
+passes six checks and fails the holdout with **0 trades**: Jeron has no quarterly
+results after 2024. The bundle's 2025 and 2026 lists carry no XBRL link
+(`.../xbrl/-`, 10,279 filings without one), so no fundamental score exists in the
+holdout year and the strategy can't enter. This is a gap in the data, not evidence
+against the strategy, and it stays research only until the holdout can be tested.
+Closing the gap needs a source for 2025-26 results (results CSVs with XBRL saved from
+nseindia.com, or another source you approve; spec section 0, rule 6).
 
 ## FIP momentum against plain momentum (the question the plan asked)
 
@@ -98,7 +111,8 @@ rotations.
    capital for 3 months.
 2. `momentum-v1` and `rs-pullback-v1` also paper-trade; the combined book passes too but
    adds nothing over its members.
-3. `reversal-v1` and `top-score-v1` failed: research only. `quality-trend-v1` runs once
-   the results import finishes.
+3. `reversal-v1` and `top-score-v1` failed: research only. `quality-trend-v1` has the
+   test-period numbers of a contender but no holdout; load 2025-26 results and run it
+   again (the same version, not a new one: the rules don't change, the data does).
 4. No new variant of any of these is tried on the same data; a change is a v2 with its
    own plan.
