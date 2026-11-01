@@ -5,11 +5,12 @@ from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
+import numpy as np
 import pytest
 from pydantic import ValidationError
 
 from app.backtest.engine import PortfolioRules, simulate
-from app.backtest.strategies import BREAKOUT_52W, SCORE_SWING, Tier
+from app.backtest.strategies import BREAKOUT_52W, FIP_MOMENTUM, SCORE_SWING, Tier
 from app.signals.build import IST, SignalContext, backtest_stats, build_signal, conviction
 from app.signals.schema import Signal
 from tests.backtest_helpers import NO_COSTS, one_stock_market, signal_on
@@ -203,6 +204,24 @@ def test_breakout_reasons():
         "Above its 200-day EMA (₹90.00): long-term uptrend",
     ]
     assert not signal.research_only
+
+
+def test_fip_momentum_reasons():
+    m, order = _order()
+    m.mom_rank = np.full(m.close.shape, 0.93)
+    m.mom_return = np.full(m.close.shape, 0.62)
+    m.fip_id = np.full(m.close.shape, -0.31)
+    m.fip_rank = np.full(m.close.shape, 0.1)
+    m.ema200[:] = 90.0
+    signal = build_signal(m, order, _context(FIP_MOMENTUM, dict(FIP_MOMENTUM.default)))
+    assert signal.tier == "invest"
+    assert signal.why[:2] == [
+        "Momentum leader: rank 0.93 in the universe (needs 0.8), checked on the first "
+        "session of the month",
+        "Rose smoothly: information discreteness -0.31, in the most continuous third of the "
+        "momentum leaders",
+    ]
+    assert Signal.model_validate(signal.model_dump(mode="json")) == signal
 
 
 def test_next_session_without_the_years_holidays():
