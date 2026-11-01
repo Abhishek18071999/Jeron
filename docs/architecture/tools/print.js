@@ -13,7 +13,7 @@ const fs = require('fs');
   mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose',
     flowchart: { htmlLabels: true, useMaxWidth: true }, fontFamily: 'Segoe UI, sans-serif' });
   mermaid.run({ querySelector: 'pre.mermaid' }).then(() => { window.__done = true; })
-    .catch(e => { window.__error = String(e); window.__done = true; });
+    .catch(e => { window.__error = (e && (e.message || e.str)) || JSON.stringify(e); window.__done = true; });
 </script></body>`);
   fs.writeFileSync(html, page_html);
   const browser = await chromium.launch();
