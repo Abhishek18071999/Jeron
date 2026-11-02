@@ -52,6 +52,9 @@ class CloseComparison:
     # Closes that differ only by the factor the second source shows on the
     # surrounding sessions (its scaling for a later corporate action).
     scaled: list[CloseDiff] = field(default_factory=list)
+    # Closes where the second source shows the primary's previous close although the
+    # price moved: the second source is stale for that stock and day, not disagreeing.
+    stale: list[CloseDiff] = field(default_factory=list)
     # Symbols the primary source has but the secondary doesn't, for that day.
     missing_in_secondary: list[str] = field(default_factory=list)
 
@@ -70,6 +73,16 @@ def _scale(neighbours: Neighbours | None, ratio: Decimal, tolerance: Decimal) ->
     return None
 
 
+# The second source's close within this fraction of the primary's previous close, on a
+# day the primary moved by more than the tolerance: the second source didn't update.
+STALE_MATCH = Decimal("0.0005")
+
+
+def _repeats_previous(bar: Bar, second: Decimal) -> bool:
+    prev = bar.prev_close
+    return bool(prev) and abs(second / prev - 1) <= STALE_MATCH  # type: ignore[operator]
+
+
 def compare_closes(
     primary: Iterable[Bar],
     secondary: Iterable[Bar],
@@ -78,7 +91,9 @@ def compare_closes(
 ) -> CloseComparison:
     """Compare closes for the same (symbol, date). Only primary rows are checked.
     With `neighbours`, a difference that matches the second source's factor on the
-    surrounding sessions is counted as scaled, not as a mismatch."""
+    surrounding sessions is counted as scaled, not as a mismatch. A second-source close
+    equal to the primary's previous close is counted as stale: the second source didn't
+    update that stock that day (Yahoo does this on some days for most of the market)."""
     other = {(b.symbol, b.trade_date): b.close for b in secondary}
     tolerance = tolerance_pct / 100
     result = CloseComparison()
@@ -93,7 +108,12 @@ def compare_closes(
             continue
         factor = _scale((neighbours or {}).get(bar.symbol), second / bar.close, tolerance)
         diff = CloseDiff(bar.symbol, bar.trade_date, bar.close, second, diff_pct, factor)
-        (result.scaled if factor is not None else result.mismatches).append(diff)
+        if factor is not None:
+            result.scaled.append(diff)
+        elif _repeats_previous(bar, second):
+            result.stale.append(diff)
+        else:
+            result.mismatches.append(diff)
     return result
 
 

@@ -211,3 +211,16 @@ def test_unexplained_drop_over_15pct_holds_the_stock():
     assert [i["symbol"] for i in drops.items] == ["H", "D"]
     assert drops.items[0]["actions"] == "CAPITAL REDUCTION"
     assert checks(build_report(clean_day()))["unexplained_drops"].status == QualityStatus.PASS
+
+
+def test_a_stale_second_source_is_a_warning_not_a_failure():
+    stale = [CloseDiff(f"S{i}", DAY, Decimal(105), Decimal(100), Decimal("4.76")) for i in range(8)]
+    day = CloseComparison(checked=10, stale=stale)
+    check = checks(build_report(clean_day(close_comparison=day)))["cross_check"]
+    assert check.status == QualityStatus.WARN
+    assert "repeated the previous session's close for 8 of 10" in check.message
+    assert check.items[0]["second_source_stale"] is True
+    # A few stale closes alone don't make a warning, and never count as mismatches.
+    few = CloseComparison(checked=100, stale=stale[:1])
+    check = checks(build_report(clean_day(close_comparison=few)))["cross_check"]
+    assert check.status == QualityStatus.PASS and "aren't counted" in check.message
