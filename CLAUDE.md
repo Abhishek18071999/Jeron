@@ -43,6 +43,8 @@ are part of done, never commit secrets.
     leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`); `fip-momentum-v1` (invest,
     momentum-v1's top fifth kept only where the rise was continuous, frog-in-the-pan,
     `Market.fip_rank`, one grid point, `docs/plans/fip-momentum-v1.md`);
+    `low-vol-v1` (invest, the calmest tenth by 252-session volatility, monthly, `Market.vol_rank`,
+    one grid point, `docs/plans/low-vol-v1.md`; the defensive family);
     `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
     point, `docs/plans/paper-review-v1.md`),
     `reversal-v1` (swing, short-term reversal of no-news losers on `Market.rev_rank`, one

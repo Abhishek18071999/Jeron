@@ -540,6 +540,51 @@ FIP_MOMENTUM = Strategy(
     registered_on=date(2026, 10, 31),
 )
 
+# low-vol-v1 (docs/plans/low-vol-v1.md): the calmest tenth of the universe, monthly.
+LOW_VOL_MAX_RANK = 0.10
+LOW_VOL_EXIT_ABOVE = 0.30
+
+
+def _vol_rank(m: Market) -> Array:
+    if m.vol_rank is None:
+        raise ValueError("this strategy needs the market's vol_rank")
+    return m.vol_rank
+
+
+def _low_vol_condition(m: Market, p: Params) -> Array:
+    rank = np.nan_to_num(_vol_rank(m), nan=np.inf)
+    return np.asarray((rank <= LOW_VOL_MAX_RANK) & rebalance_days(m), dtype=bool)
+
+
+def _low_vol_exit(m: Market, p: Params) -> Array:
+    # An unknown rank (left the universe, a gap in the data) is not an exit.
+    rank = np.nan_to_num(_vol_rank(m), nan=-1.0)
+    return np.asarray((rank > LOW_VOL_EXIT_ABOVE) & rebalance_days(m), dtype=bool)
+
+
+LOW_VOL = Strategy(
+    key="low-vol",
+    version="low-vol-v1",
+    name="The calmest stocks, monthly (invest)",
+    tier=Tier.INVEST,
+    summary="Each month, own the stocks whose prices moved least over the past year.",
+    grid_axes={"stop_atr": (4.0,)},
+    default={"stop_atr": 4.0},
+    describe=lambda p: [
+        "Enter at the close of the first session of a month when the stock's volatility "
+        "(the standard deviation of daily returns over 252 sessions) is in the calmest "
+        f"{100 * LOW_VOL_MAX_RANK:g}% of the universe. No trend or market-regime filter."
+    ],
+    condition=_low_vol_condition,
+    exit_condition=_low_vol_exit,
+    exit_reason=f"no longer among the calmest (volatility rank above {LOW_VOL_EXIT_ABOVE:g})",
+    exit_rule=(
+        "Sell at the next open after the first session of a month on which the stock's "
+        f"volatility rank is above {LOW_VOL_EXIT_ABOVE:g} (out of the calmest three tenths)."
+    ),
+    registered_on=date(2026, 11, 1),
+)
+
 # Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
 # back above 40 after about 26 days.
 MIN_NEWS_SCORE = 40.0
@@ -661,6 +706,7 @@ STRATEGIES = {
         TOP_SCORE,
         REVERSAL,
         FIP_MOMENTUM,
+        LOW_VOL,
     )
 }
 

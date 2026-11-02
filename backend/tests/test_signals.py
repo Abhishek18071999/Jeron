@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.backtest.engine import PortfolioRules, simulate
-from app.backtest.strategies import BREAKOUT_52W, FIP_MOMENTUM, SCORE_SWING, Tier
+from app.backtest.strategies import BREAKOUT_52W, FIP_MOMENTUM, LOW_VOL, SCORE_SWING, Tier
 from app.signals.build import IST, SignalContext, backtest_stats, build_signal, conviction
 from app.signals.schema import Signal
 from tests.backtest_helpers import NO_COSTS, one_stock_market, signal_on
@@ -222,6 +222,19 @@ def test_fip_momentum_reasons():
         "momentum leaders",
     ]
     assert Signal.model_validate(signal.model_dump(mode="json")) == signal
+
+
+def test_low_vol_reasons():
+    m, order = _order()
+    m.vol_rank = np.full(m.close.shape, 0.04)
+    m.volatility = np.full(m.close.shape, 0.0112)
+    signal = build_signal(m, order, _context(LOW_VOL, dict(LOW_VOL.default)))
+    assert signal.tier == "invest"
+    assert signal.why[:2] == [
+        "Among the calmest stocks: volatility rank 0.04 in the universe (needs 0.10 or "
+        "less), checked on the first session of the month",
+        "Daily moves of 1.12% on average (standard deviation over a year)",
+    ]
 
 
 def test_next_session_without_the_years_holidays():

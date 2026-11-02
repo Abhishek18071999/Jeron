@@ -192,6 +192,10 @@ class Market:
     # most continuous) among the day's momentum top fifth. NaN for every other stock.
     fip_id: Array | None = None
     fip_rank: Array | None = None
+    # low-vol-v1 (docs/plans/low-vol-v1.md): the standard deviation of daily returns over
+    # 252 sessions, and its percentile (0 = calmest) among the day's universe.
+    volatility: Array | None = None
+    vol_rank: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -415,6 +419,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
     mom_return, mom_rank = momentum_ranks(close, eligible)
     rev_return, rev_rank = reversal_ranks(close, eligible)
     fip_id, fip_rank = fip_ranks(close, eligible, mom_return, mom_rank)
+    volatility, vol_rank = volatility_ranks(close, eligible)
     symbols = [s.symbol for s in inputs.stocks]
     reactions = results_reactions(days, symbols, inputs.results, close, vol_ratio, nifty500)
     sector_closes = [_index_series(days, inputs.sector_indices.get(n, {})) for n in SECTOR_INDICES]
@@ -469,6 +474,8 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         rev_rank=rev_rank,
         fip_id=fip_id,
         fip_rank=fip_rank,
+        volatility=volatility,
+        vol_rank=vol_rank,
         fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
     )
 
@@ -572,6 +579,43 @@ def fip_ranks(
         if len(members):
             rank[members, t] = percentile_ranks(fid[members, t])
     return fid, rank
+
+
+def volatility_ranks(close: Array, universe: Array) -> tuple[Array, Array]:
+    """low-vol-v1 (docs/plans/low-vol-v1.md), using only data up to each day: the
+    standard deviation of daily returns over the last `MOMENTUM_LOOKBACK_SESSIONS` (at
+    least `MOMENTUM_MIN_RETURNS` defined), the measure momentum-v1 divides by, and its
+    percentile among the day's universe (0 = calmest). NaN outside the universe or with
+    too little history."""
+    s_count, d_count = close.shape
+    n = MOMENTUM_LOOKBACK_SESSIONS
+    vol = np.full((s_count, d_count), NAN)
+    rank = np.full((s_count, d_count), NAN)
+    if d_count < n:
+        return vol, rank
+    daily = _returns(close)
+    defined = ~np.isnan(daily)
+    x = np.where(defined, daily, 0.0)
+
+    def window_sum(a: Array) -> Array:
+        c = np.zeros((s_count, d_count + 1))
+        np.cumsum(a, axis=1, out=c[:, 1:])
+        out = np.full((s_count, d_count), NAN)
+        out[:, n - 1 :] = c[:, n:] - c[:, : d_count + 1 - n]
+        return out
+
+    count = window_sum(defined.astype(float))
+    total, squares = window_sum(x), window_sum(x * x)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean = total / count
+        var = (squares - count * mean * mean) / (count - 1)
+        sd = np.sqrt(np.maximum(var, 0.0))
+    vol = np.where(count >= MOMENTUM_MIN_RETURNS, sd, NAN)
+    for t in range(n - 1, d_count):
+        members = np.flatnonzero(universe[:, t])
+        if len(members):
+            rank[members, t] = percentile_ranks(vol[members, t])
+    return vol, rank
 
 
 # reversal-v1: the week's losers.
