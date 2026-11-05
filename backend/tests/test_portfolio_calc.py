@@ -1,8 +1,10 @@
 """Portfolio maths (app.portfolio.calc): open risk, heat, give-back, sector exposure."""
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
+from app.backtest.costs import is_long_term, long_term_from
 from app.journal.calc import Fill
 from app.portfolio.calc import (
     UNKNOWN_SECTOR,
@@ -220,3 +222,35 @@ def test_totals_carry_the_exemption_and_pass_what_is_left_to_the_notes():
     t = totals(*args, as_of=date(2027, 8, 1), sales=[_sale(date(2027, 5, 1), "100000", 400)])
     assert t.exemption is not None and t.exemption.left == Decimal("25000.00")
     assert "₹25,000 of this financial year's" in t.tax_notes[0]
+
+
+def test_long_term_means_more_than_twelve_months_by_the_calendar():
+    # The day after the first anniversary, whatever the day count.
+    assert long_term_from(date(2025, 1, 10)) == date(2026, 1, 11)
+    # Across 29 February 2024: 366 days after 1 Mar 2023 is still "12 months", not more.
+    assert not is_long_term(date(2023, 3, 1), date(2024, 3, 1))
+    assert is_long_term(date(2023, 3, 1), date(2024, 3, 2))
+    # A 29 February buy: the later reading of its anniversary (1 March), so never early.
+    assert long_term_from(date(2024, 2, 29)) == date(2025, 3, 2)
+
+
+def test_a_sale_on_the_leap_year_anniversary_is_short_term():
+    fills = [
+        Fill(date(2023, 3, 1), "buy", 10, Decimal("100")),
+        Fill(date(2024, 3, 1), "sell", 10, Decimal("150")),
+    ]
+    (sale,) = realised_sales("A", fills)
+    assert sale.held_days == 366  # more than 365 days, but not more than 12 months
+    assert sale.long_term is False
+    later = [fills[0], Fill(date(2024, 3, 2), "sell", 10, Decimal("150"))]
+    assert realised_sales("A", later)[0].long_term is True
+
+
+def test_tax_notes_date_the_mark_by_the_calendar_across_a_leap_day():
+    # Bought 1 Mar 2023: long-term from 2 Mar 2024 (not 1 Mar, 366 days later).
+    h = replace(_h(close="150"), first_date=date(2023, 3, 1))
+    (note,) = tax_notes([h], date(2024, 2, 1))
+    assert note.startswith("A becomes long-term on 02 Mar 2024 (in 30 days)")
+    # On 1 Mar 2024 selling is still short-term, so the note is still shown.
+    assert tax_notes([h], date(2024, 3, 1))
+    assert tax_notes([h], date(2024, 3, 2)) == []
