@@ -148,7 +148,8 @@ are part of done, never commit secrets.
     exposure vs settings, idle cash to park in a liquid fund or, with
     `JERON_IDLE_CASH_IN_INDEX`, an index fund; tax timing notes with the rupee tax of selling
     now vs after the 12-month mark; the financial year's ₹1.25 lakh long-term exemption used,
-    from journal sales matched first in, first out; `account_state`: equity, peak and
+    from journal sales matched first in, first out; long-term is more than 12 months by the
+      calendar, `costs.long_term_from`; `account_state`: equity, peak and
     drawdown, realised today and this week, entries this week; pure), `equity.py` (the
     account's daily equity from the journal against the Nifty 500; its peak is the
     guardrails' peak; pure), `risk.py` (the "Bad days" card: beta and Nifty 500 shocks,
@@ -157,7 +158,8 @@ are part of done, never commit secrets.
     (journal positions + the pre-open exit plan). Served at `/portfolio` (with `account`,
     the Guardrails card), `/portfolio/equity` and `/portfolio/risk`.
   - `app/plan/` trade plans (decision 0010): `calc.py` (the engine's `position_size` and
-    `reward_risk`, spec section 4 checks, heat and sector after the buy, the 5-item
+    `reward_risk`, sized on the journal account's equity and capped at its free cash like
+    the engine, `docs/plans/platform-review-v4.md`; spec section 4 checks, heat and sector after the buy, the 5-item
     checklist, the small-trade warning when fixed charges pass 0.1R
     (`costs.small_trade_warning`, also on signal alerts and Trade cards); the real
     account's guardrails (the kill switch, `app/halt.py`, blocks every plan; `guardrails`: spec section 5's drawdown brake and max positions

@@ -31,7 +31,7 @@ paise when stored, and the backtester's prices are adjusted floats anyway.
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 CRORE = 10_000_000.0
 
@@ -155,6 +155,24 @@ class Realised:
     sell_date: date
     gain: float
     held_days: int
+
+
+def long_term_from(bought: date) -> date:
+    """The first sale date on which listed shares bought on `bought` are long-term:
+    held for more than 12 months (Income Tax Act section 2(42A)), so the day after the
+    first anniversary. A day count is wrong across a 29 February: shares bought on
+    1 March 2023 are not long-term on 1 March 2024, though 366 days have passed. A
+    29 February buy's anniversary is taken as 1 March, the later reading, so a sale is
+    never called long-term too early."""
+    try:
+        anniversary = bought.replace(year=bought.year + 1)
+    except ValueError:  # 29 February
+        anniversary = date(bought.year + 1, 3, 1)
+    return anniversary + timedelta(days=1)
+
+
+def is_long_term(bought: date, sold: date) -> bool:
+    return sold >= long_term_from(bought)
 
 
 def financial_year(day: date) -> int:

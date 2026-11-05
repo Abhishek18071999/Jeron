@@ -55,7 +55,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from app.backtest.costs import TaxRules, financial_year
+from app.backtest.costs import TaxRules, financial_year, is_long_term, long_term_from
 from app.journal.calc import Fill
 
 ZERO = Decimal(0)
@@ -179,9 +179,14 @@ class Sale:
     shares: int
     gain: Decimal
     held_days: int
+    # The lot's buy date: long-term is "more than 12 months", by the calendar. Without
+    # it, more than 365 days stands in (wrong by a day across a 29 February).
+    buy_date: date | None = None
 
     @property
     def long_term(self) -> bool:
+        if self.buy_date is not None:
+            return is_long_term(self.buy_date, self.sell_date)
         return self.held_days > TAX.long_term_days
 
 
@@ -202,7 +207,14 @@ def realised_sales(ticker: str, fills: Sequence[Fill]) -> list[Sale]:
             lot = lots[0]
             n = min(left, lot[1])
             sales.append(
-                Sale(ticker, f.trade_date, n, _q((net - lot[2]) * n), (f.trade_date - lot[0]).days)
+                Sale(
+                    ticker,
+                    f.trade_date,
+                    n,
+                    _q((net - lot[2]) * n),
+                    (f.trade_date - lot[0]).days,
+                    lot[0],
+                )
             )
             lot[1] -= n
             left -= n
@@ -279,7 +291,6 @@ def tax_notes(
     """Tax timing notes for the open positions (see the module docstring).
     `exemption_left` is this financial year's unused long-term exemption (the whole of
     it when not given)."""
-    long_after = TAX.long_term_days
     st_pct, lt_pct = Decimal(str(TAX.stcg_new_pct)), Decimal(str(TAX.ltcg_new_pct))
     left = Decimal(str(TAX.ltcg_exempt_new)) if exemption_left is None else exemption_left
     notes = []
@@ -287,9 +298,8 @@ def tax_notes(
         if h.last_close is None:
             continue
         gain = (h.last_close - h.avg_entry) * h.shares
-        held = h.days_held(as_of)
-        if gain > 0 and long_after - LTCG_SOON_DAYS <= held <= long_after:
-            turns = h.first_date + timedelta(days=long_after + 1)
+        turns = long_term_from(h.first_date)
+        if gain > 0 and as_of < turns <= as_of + timedelta(days=LTCG_SOON_DAYS + 1):
             now, later, exempt = sell_now_or_later(gain, as_of, turns, left)
             which = (
                 "next financial year's"
@@ -438,6 +448,9 @@ class AccountState:
     entries_week: int  # journal positions first bought Monday to `as_of`
     open_by_tier: dict[str, int]
     as_of: date
+    # Cash not in a position: capital + realised gains - open positions at cost. The
+    # trade plan never sizes a buy above it (the engine's "not enough cash" rule).
+    cash: Decimal | None = None
 
 
 def account_state(
@@ -484,4 +497,5 @@ def account_state(
         entries_week=sum(1 for d in first_buys if monday <= d <= as_of),
         open_by_tier=tiers,
         as_of=as_of,
+        cash=_q(capital + running - sum((h.cost for h in holdings), ZERO)),
     )

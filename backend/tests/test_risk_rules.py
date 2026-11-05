@@ -37,6 +37,8 @@ The same rules on my real account, in the trade plan before a real buy
 | kill switch: no buy while Jeron is stopped | test_kill_switch_blocks_every_plan |
 | drawdown 10% -> paper first, a plan needs a note | test_real_drawdown_paper_first_needs_a_note |
 | equity, peak and drawdown from the journal | test_account_state_from_the_journal |
+| real account: risk % of equity, as the engine sizes | test_real_plan_sizes_on_equity |
+| real account: never more than the cash left | test_real_plan_never_spends_more_than_the_cash |
 
 Scenarios use the golden-test conventions: signal close 100, ATR 2, stop 96, entry
 zone up to 101.
@@ -326,10 +328,12 @@ REAL = dict(
 TODAY = date(2026, 10, 21)  # a Wednesday
 
 
-def _account(drawdown="0", today="0", week="0", entries=0, swing=0) -> AccountState:
+def _account(
+    drawdown="0", today="0", week="0", entries=0, swing=0, equity="1000000", cash=None
+) -> AccountState:
     return AccountState(
         capital=Decimal("1000000"),
-        equity=Decimal("1000000"),
+        equity=Decimal(equity),
         peak=Decimal("1000000"),
         drawdown_pct=Decimal(drawdown),
         realised_today=Decimal(today),
@@ -337,6 +341,7 @@ def _account(drawdown="0", today="0", week="0", entries=0, swing=0) -> AccountSt
         entries_week=entries,
         open_by_tier={"swing": swing} if swing else {},
         as_of=TODAY,
+        cash=None if cash is None else Decimal(cash),
     )
 
 
@@ -494,3 +499,41 @@ def test_account_state_from_the_journal():
     # No trades yet: the capital, no drawdown.
     empty = account_state(capital, [], [], [], TODAY)
     assert (empty.equity, empty.drawdown_pct, empty.entries_week) == (capital, Decimal("0.00"), 0)
+
+
+def test_real_plan_sizes_on_equity():
+    # A 10-rupee stop: 1% of 9,00,000 equity = 9,000 / 10 = 900 shares, not 1% of the
+    # 10,00,000 capital (1,000): after losses the risk per trade shrinks, as in the engine.
+    wide = {"stop": Decimal("91")}
+    assert _plan(_account(), **wide).shares == 1000
+    assert _plan(_account(equity="900000"), **wide).shares == 900
+    # And grows with gains: 1% of 11,00,000 = 1,100 shares.
+    assert _plan(_account(equity="1100000"), **wide).shares == 1100
+    # The 20% cap is of equity too: 1,80,000 / 101 = 1,782 shares at a 5-rupee stop.
+    assert _plan(_account(equity="900000")).shares == 1782
+
+
+def test_real_plan_never_spends_more_than_the_cash():
+    # The size wants 1,980 shares x 101 = 2,00,000, but only 1,00,000 is free: the size is
+    # what that pays for, buy charges included, and a warning says so.
+    plan = _plan(_account(cash="100000"))
+    assert plan.shares == 988  # 988 x 101 = 99,788 + ~₹120 charges; 989 is over
+    assert plan.sized_by == "cash available"
+    assert _check(plan, "cash").status == "warn"
+    assert plan.ok
+    # No cash at all: nothing to buy, and the plan says why.
+    broke = _plan(_account(cash="0"))
+    assert broke.shares == 0
+    assert _check(broke, "size").status == "fail"
+    assert "cash" in _check(broke, "size").detail
+    # Enough cash: no cash line.
+    assert _plan(_account(cash="500000")).shares == 1980
+    assert not [c for c in _plan(_account(cash="500000")).checks if c.key == "cash"]
+
+
+def test_account_cash_from_the_journal():
+    # 10,00,000 + 60,000 realised - 100 shares at 100 at cost = 10,50,000.
+    a = account_state(
+        Decimal("1000000"), [_sale(date(2026, 9, 1), "60000")], [], [_held("80")], TODAY
+    )
+    assert a.cash == Decimal("1050000.00")

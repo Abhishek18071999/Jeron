@@ -4,9 +4,12 @@ the inputs from the database.
 
 - Targets are the engine's: T1 = entry + 2R (book half), T2 = entry + 3R, R = entry - stop.
 - Shares come from `app.backtest.engine.position_size`, the function the engine (and so
-  paper trading and the signals) sizes with: risk % of capital x the mood's multiplier
+  paper trading and the signals) sizes with: risk % of equity x the mood's multiplier
   (0.5 in defend, the engine's regime filter), over the risk per share, capped at 20% of
-  capital and 1% of the 20-day average volume. Capital is JERON_CAPITAL.
+  equity and 1% of the 20-day average volume, and, like the engine, at the cash left
+  (a warning says when cash cut the size). Equity is the journal account's
+  (`AccountState.equity`: JERON_CAPITAL + realised + open P&L); without the account,
+  JERON_CAPITAL.
 - Reward:risk comes from `app.backtest.engine.reward_risk`: estimated charges and
   slippage come off the reward and are added to the risk.
 - Hard checks (a plan that fails one can't be saved): stop below entry; stop at least
@@ -173,6 +176,16 @@ def sized_by(
     return "risk per trade"
 
 
+def shares_for_cash(cash: float, entry: float) -> int:
+    """Whole shares that `cash` pays for at `entry`, buy charges included."""
+    if cash <= 0 or entry <= 0:
+        return 0
+    shares = math.floor(cash / (entry * 1.002))
+    while shares > 0 and shares * entry + COSTS.charges(shares * entry, "buy").total > cash:
+        shares -= 1
+    return shares
+
+
 def build_plan(p: PlanInputs) -> Plan:
     tier = TIERS[p.tier]
     rules = tier.apply(rules_for(p.risk_pct))
@@ -199,9 +212,19 @@ def build_plan(p: PlanInputs) -> Plan:
     )
     if braked:
         multiplier *= 0.5
+    # Sized on the account's equity, as the engine sizes paper and backtest trades
+    # (risk % of equity, not of the starting capital), and never above the cash left.
+    if p.account is not None and p.account.equity > 0:
+        capital = float(p.account.equity)
+    cash = None if p.account is None or p.account.cash is None else p.account.cash
+    cash_capped = False
     if valid:
         avg = math.nan if p.avg_volume20 is None else p.avg_volume20
         shares = max(0, position_size(capital, rules, multiplier, entry, stop, 1.0, avg))
+        if cash is not None:
+            affordable = shares_for_cash(float(cash), entry)
+            if affordable < shares:
+                shares, cash_capped = affordable, True
     one_r = p.entry - p.stop if valid else ZERO
     target1 = _q(p.entry + Decimal(str(rules.t1_r)) * one_r)
     target2 = _q(p.entry + Decimal(str(rules.t2_r)) * one_r)
@@ -267,16 +290,31 @@ def build_plan(p: PlanInputs) -> Plan:
                     f"{rr2} after about ₹{costs} of charges and slippage",
                 )
             )
-        checks.append(
-            Check(
-                "size",
-                "At least one share",
-                "pass" if shares >= 1 else "fail",
-                f"{shares} shares, set by {sized_by(shares, capital, entry, p.avg_volume20, rules)}"
-                if shares >= 1
-                else "the risk budget buys less than one share",
+        if shares >= 1:
+            how = (
+                "cash available"
+                if cash_capped
+                else sized_by(shares, capital, entry, p.avg_volume20, rules)
             )
+            detail = f"{shares} shares, set by {how}"
+        elif cash_capped and cash is not None:
+            detail = f"only ₹{max(cash, ZERO):,.0f} of cash is free: close or trim a position first"
+        else:
+            detail = "the risk budget buys less than one share"
+        checks.append(
+            Check("size", "At least one share", "pass" if shares >= 1 else "fail", detail)
         )
+        if cash_capped and shares >= 1 and cash is not None:
+            checks.append(
+                Check(
+                    "cash",
+                    "Enough cash for the full size",
+                    "warn",
+                    f"only ₹{cash:,.0f} is free, so the buy is cut to {shares} shares: "
+                    "less than the full risk per trade",
+                    hard=False,
+                )
+            )
 
     risk_amount = _q(one_r * shares)
     value = _q(p.entry * shares)
@@ -383,7 +421,13 @@ def build_plan(p: PlanInputs) -> Plan:
     return Plan(
         inputs=p,
         shares=shares,
-        sized_by=sized_by(shares, capital, entry, p.avg_volume20, rules) if valid else "no size",
+        sized_by=(
+            "cash available"
+            if cash_capped
+            else sized_by(shares, capital, entry, p.avg_volume20, rules)
+            if valid
+            else "no size"
+        ),
         risk_per_share=_q(one_r),
         risk_amount=risk_amount,
         position_value=value,
