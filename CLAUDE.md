@@ -43,7 +43,6 @@ are part of done, never commit secrets.
     leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`); `fip-momentum-v1` (invest,
     momentum-v1's top fifth kept only where the rise was continuous, frog-in-the-pan,
     `Market.fip_rank`, one grid point, `docs/plans/fip-momentum-v1.md`);
-    `high52-v1` (invest, monthly leaders by nearness to the 52-week high with a positive 12-1 return, `Market.high52_rank`, one grid point, `docs/plans/high52-v1.md`, not yet run on data);
     `high52-v1` (invest, monthly leaders by nearness to the 52-week high with a positive
     12-1 return, `Market.high52_rank`, one grid point, `docs/plans/high52-v1.md`; failed
     on Yahoo data, research only, `docs/backtests/yahoo-2026-11-06/`);
