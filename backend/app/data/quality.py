@@ -24,6 +24,8 @@ MIN_ROW_RATIO = Decimal("0.8")
 STALE_SESSIONS = 5
 CROSSCHECK_FAIL_RATE = Decimal("0.05")
 CROSSCHECK_MISSING_WARN_RATE = Decimal("0.2")
+# Above this share of stale second-source closes, the day's cross-check is a WARN.
+STALE_WARN_RATE = Decimal("0.2")
 MAX_ITEMS = 200
 
 _ORDER = {QualityStatus.PASS: 0, QualityStatus.WARN: 1, QualityStatus.FAIL: 2}
@@ -353,11 +355,36 @@ def _check_crosscheck(day: DayData) -> Check:
         "surrounding sessions (its scaling for a later corporate action), so they count "
         "as agreeing"
     )
+    stale = comparison.stale
+    stale_note = (
+        f"the second source repeated the previous session's close for {len(stale)} of "
+        f"{comparison.checked} stocks (it didn't update them that day), so they aren't counted"
+    )
+    if stale:
+        items += [
+            {
+                "symbol": d.symbol,
+                "nse_close": str(d.primary),
+                "second_source_close": str(d.secondary),
+                "diff_pct": str(d.diff_pct),
+                "second_source_stale": True,
+            }
+            for d in stale
+        ]
+        if Decimal(len(stale)) / comparison.checked > STALE_WARN_RATE:
+            # Most of the second source is yesterday's: the cross-check couldn't really
+            # run that day. Say so; don't fail NSE's data for it.
+            status = max(status, QualityStatus.WARN, key=_ORDER.__getitem__)
+            notes.append(stale_note)
     if not notes:
         message = f"All {comparison.checked} checked closes agree within 0.5%"
         if scaled:
             message += f"; {scaled_note}"
+        if stale:
+            message += f"; {stale_note}"
         return Check("cross_check", QualityStatus.PASS, message, items)
+    if stale and stale_note not in notes:
+        notes.append(stale_note)
     if scaled:
         notes.append(scaled_note)
     message = "; ".join(notes)

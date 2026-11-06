@@ -124,6 +124,15 @@ def reasons(m: Market, s: int, t: int, strategy: Strategy, params: Params) -> li
             f"Rose smoothly: information discreteness {_value(m.fip_id, s, t):.2f}, in the "
             "most continuous third of the momentum leaders"
         )
+    elif strategy.key == "low-vol" and m.vol_rank is not None and m.volatility is not None:
+        out.append(
+            f"Among the calmest stocks: volatility rank {_value(m.vol_rank, s, t):.2f} in the "
+            "universe (needs 0.10 or less), checked on the first session of the month"
+        )
+        out.append(
+            f"Daily moves of {_value(m.volatility, s, t) * 100:.2f}% on average (standard "
+            "deviation over a year)"
+        )
     elif strategy.key == "high52" and m.high52_rank is not None and m.high52_ratio is not None:
         out.append(
             f"Near its 52-week high: close {_value(m.high52_ratio, s, t) * 100:.1f}% of the "

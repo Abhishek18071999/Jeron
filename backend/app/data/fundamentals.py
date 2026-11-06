@@ -25,7 +25,9 @@ from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
-QUARTER = "OneD"
+QUARTER = "OneD"  # the quarter
+BALANCE = "OneI"  # the balance sheet on the quarter's last day
+YEAR_TO_DATE = "FourD"  # the year to date (the cash-flow statement)
 
 # Our field -> XBRL element names, first found wins (Ind-AS, NBFC, bank forms).
 FIELDS: dict[str, tuple[str, ...]] = {
@@ -83,6 +85,10 @@ class QuarterResult:
     # Every numeric fact of the quarter, by element name, for later use.
     facts: dict[str, Decimal] = field(default_factory=dict)
     audit_opinion: str | None = None
+    # The balance sheet on the last day (half-yearly and annual filings), and the
+    # year-to-date figures such as the cash-flow statement (fundamentals-v2).
+    balance: dict[str, Decimal] = field(default_factory=dict)
+    ytd: dict[str, Decimal] = field(default_factory=dict)
 
 
 def _clean(header: str) -> str:
@@ -156,17 +162,19 @@ def parse_xbrl(content: bytes, period_end: date | None = None) -> QuarterResult:
         raise ResultsFormatError(f"not XBRL: {exc}") from exc
     text: dict[str, str] = {}
     facts: dict[str, Decimal] = {}
+    by_context: dict[str, dict[str, Decimal]] = {QUARTER: facts, BALANCE: {}, YEAR_TO_DATE: {}}
     for el in root:
-        if el.get("contextRef") != QUARTER or el.text is None:
+        numbers = by_context.get(el.get("contextRef") or "")
+        if numbers is None or el.text is None:
             continue
         name = _local(el.tag)
         value = el.text.strip()
         if el.get("unitRef"):
             try:
-                facts[name] = Decimal(value)
+                numbers[name] = Decimal(value)
             except InvalidOperation:
                 continue
-        else:
+        elif numbers is facts:
             text[name] = value
     try:
         if "DateOfEndOfReportingPeriod" in text:
@@ -201,6 +209,8 @@ def parse_xbrl(content: bytes, period_end: date | None = None) -> QuarterResult:
         audit_opinion=text.get(
             "DeclarationOfUnmodifiedOpinionOrStatementOnImpactOfAuditQualification"
         ),
+        balance=by_context[BALANCE],
+        ytd=by_context[YEAR_TO_DATE],
     )
 
 

@@ -12,6 +12,8 @@ python -m app.cli deals                         # today's bulk and block deals
 python -m app.cli deals-import deals.csv        # bulk/block deals or insider trades saved
                                                 # from nseindia.com
 python -m app.cli fundamentals-import CF-FR*.csv # quarterly results (CSV from nseindia.com)
+python -m app.cli fundamentals-reparse          # balance sheets and cash flow from saved XBRL
+                                                # (--download: fetch the files not saved)
 python -m app.cli news-label --limit 100        # label news (JERON_NEWS_PROVIDER; needs a key)
 python -m app.cli news-testset                  # write headlines for you to label by hand
 python -m app.cli news-eval testset.csv         # the model's accuracy on your labels
@@ -70,7 +72,7 @@ from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
 from app.exits.job import run_preopen
-from app.fundamentals.job import cached_fetch, import_results
+from app.fundamentals.job import cached_fetch, import_results, reparse_cached
 from app.journal.importer import import_tradebook
 from app.models import Alert, StrategyProposal
 from app.news.deepseek import LabellerError
@@ -347,6 +349,16 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     p = sub.add_parser(
+        "fundamentals-reparse",
+        help="fill stored results' balance sheets and cash flow from the saved XBRL files",
+    )
+    p.add_argument(
+        "--download",
+        action="store_true",
+        help="download filings not saved locally (about one a second)",
+    )
+
+    p = sub.add_parser(
         "news-label",
         help="label announcements: event type by subject (free), then an LLM (needs a key)",
     )
@@ -501,6 +513,22 @@ def main(argv: list[str] | None = None) -> int:
             read = len(insider) or len(found)
             _log(f"{read} {what} read, {stored} new.")
             return 0 if read else 1
+
+        if args.command == "fundamentals-reparse":
+            settings = get_settings()
+            folder = Path(settings.data_dir) / "xbrl"
+            download = Fetcher(min_interval=settings.nse_request_interval).get
+            rerun = reparse_cached(
+                session, folder, fetch=download if args.download else None, log=_log
+            )
+            _log(
+                f"{rerun.rows} filings without balance-sheet or year-to-date facts: "
+                f"{rerun.updated} updated, {rerun.not_cached} not saved locally, "
+                f"{len(rerun.failed)} failed."
+            )
+            for problem in rerun.failed[:20]:
+                _log(f"  {problem}")
+            return 0 if not rerun.failed else 1
 
         if args.command == "fundamentals-import":
             refs = []

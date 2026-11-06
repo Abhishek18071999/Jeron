@@ -162,6 +162,7 @@ def market_fingerprint(m: Market) -> str:
         m.sector_rank,
         m.mom_rank,
         m.fip_rank,
+        m.vol_rank,
         m.high52_rank,
     ):
         if extra is not None:

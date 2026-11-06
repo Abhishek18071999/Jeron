@@ -71,7 +71,8 @@ SECTIONS = (
         "Long-term",
         "6 to 12 months or more",
         Tier.INVEST,
-        "Companies with strong results, held while the results and the trend hold.",
+        "Stocks held for months: momentum leaders, strong results in an uptrend, calm "
+        "stocks; most are checked once a month.",
     ),
 )
 BY_KEY = {s.key: s for s in SECTIONS}

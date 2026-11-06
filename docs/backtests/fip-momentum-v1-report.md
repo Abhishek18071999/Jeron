@@ -90,6 +90,26 @@ By year (expectancy, trades): 2019 -0.54R (7), 2020 +1.14R (34), 2021 +0.81R (32
 of seven, and 2024's loss came in a year Nifty 500 rose 15%: momentum lags in sharp
 rotations.
 
+## Two accounts, half the capital each (added 2026-11-01)
+
+The engine trades one tier per account, so `fip-momentum-v1` (invest) and
+`rs-pullback-v1` (positional) can't share one simulated account. Two separate accounts
+with half the capital each can be read straight from runs 1 and 2's equity curves. The
+split was fixed at 50/50 before computing, with no rebalancing. The Sharpe ratios below
+use a simpler daily calculation than the engine's, so compare them with each other, not
+with the tables above.
+
+| | CAGR | Sharpe | Max drawdown | Holdout CAGR |
+|---|---|---|---|---|
+| fip-momentum-v1 alone | 14.9% | 1.04 | 14.1% | +8.4% |
+| rs-pullback-v1 alone | 15.4% | 1.03 | 13.5% | +2.1% |
+| 50/50 in two accounts | 15.1% | 1.15 | 13.0% | +5.3% |
+| Nifty 500 | 16.2% | 0.70 | 38.3% | -7.7% |
+
+Splitting smooths the curve a little (a higher Sharpe, a smaller drawdown) but doesn't
+add return, and in the holdout year it did worse than fip-momentum alone. It is an
+option for spreading risk across two ideas, not a better strategy.
+
 ## What this report doesn't claim
 
 - **Not proof of an edge.** The deflated Sharpe against all 67 variants is 0.37. Jeron

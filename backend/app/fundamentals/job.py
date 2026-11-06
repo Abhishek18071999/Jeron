@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -28,11 +29,13 @@ from app.data.fundamentals import (
 from app.data.http import FetchError, NotPublishedError
 from app.data.store import NSE_BARS
 from app.enums import Exchange
+from app.fundamentals.health import Health, health
 from app.fundamentals.score import FundScore, Quarter, known_quarters, score_with_history
 from app.models import DailyBar, FinancialResult, Instrument
 from app.news.job import liquid_years
 
 IST = ZoneInfo("Asia/Kolkata")
+OCF = "CashFlowsFromUsedInOperatingActivities"
 Log = Callable[[str], None]
 Fetch = Callable[[str], bytes]
 
@@ -148,6 +151,8 @@ def import_results(
                 xbrl_url=ref.xbrl_url,
                 audit_opinion=(result.audit_opinion or "")[:500] or None,
                 facts={k: str(v) for k, v in result.facts.items()},
+                balance={k: str(v) for k, v in result.balance.items()},
+                ytd={k: str(v) for k, v in result.ytd.items()},
                 **{k: result.numbers.get(k) for k in FIELDS},
             )
             .on_conflict_do_nothing()
@@ -156,6 +161,49 @@ def import_results(
         if n % 50 == 0:
             session.commit()
             log(f"  {n} of {len(chosen)} filings read, {run.stored} stored.")
+    session.commit()
+    return run
+
+
+@dataclass
+class ReparseRun:
+    rows: int = 0  # stored filings without balance-sheet or year-to-date facts
+    updated: int = 0
+    not_cached: int = 0
+    failed: list[str] = field(default_factory=list)
+
+
+def reparse_cached(
+    session: Session, folder: Path, *, fetch: Fetch | None = None, log: Log = _quiet
+) -> ReparseRun:
+    """fundamentals-v2: fill the balance-sheet and year-to-date facts of filings stored
+    before they were kept, from the XBRL files under `folder`. With `fetch`, a file not
+    there is downloaded (and kept); without, it is counted and the filing left as it is."""
+    run = ReparseRun()
+    rows = session.scalars(
+        select(FinancialResult).where(FinancialResult.balance == {}, FinancialResult.ytd == {})
+    ).all()
+    run.rows = len(rows)
+    for n, row in enumerate(rows, start=1):
+        path = folder / row.xbrl_url.rsplit("/", 1)[-1]
+        if not path.exists() and fetch is None:
+            run.not_cached += 1
+            continue
+        try:
+            content = (
+                path.read_bytes() if fetch is None else cached_fetch(fetch, folder)(row.xbrl_url)
+            )
+            result = parse_xbrl(content, row.period_end)
+        except (FetchError, NotPublishedError, ResultsFormatError) as exc:
+            run.failed.append(f"{row.symbol} {row.period_end}: {exc}")
+            continue
+        if result.balance or result.ytd:
+            row.balance = {k: str(v) for k, v in result.balance.items()}
+            row.ytd = {k: str(v) for k, v in result.ytd.items()}
+            run.updated += 1
+        if n % 500 == 0:
+            session.commit()
+            log(f"  {n} of {run.rows} filings read, {run.updated} updated.")
     session.commit()
     return run
 
@@ -200,6 +248,31 @@ def _f(value: object) -> float | None:
     return None if value is None else float(value)  # type: ignore[arg-type]
 
 
+def _fact(facts: dict[str, Any] | None, *names: str) -> float | None:
+    for name in names:
+        value = (facts or {}).get(name)
+        if value is not None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _debt(balance: dict[str, Any] | None) -> float | None:
+    parts = [_fact(balance, n) for n in ("BorrowingsCurrent", "BorrowingsNoncurrent")]
+    if all(p is None for p in parts):
+        return None
+    return sum(p or 0.0 for p in parts)
+
+
+def _ocf(row: FinancialResult) -> float | None:
+    # The cash-flow statement is tagged year to date, or (in about one filing in six)
+    # with the quarter's facts.
+    ytd = _fact(row.ytd, OCF)
+    return ytd if ytd is not None else _fact(row.facts, OCF)
+
+
 def quarter_of(row: FinancialResult) -> Quarter:
     return Quarter(
         period_end=row.period_end,
@@ -215,6 +288,10 @@ def quarter_of(row: FinancialResult) -> Quarter:
         other_income=_f(row.other_income),
         audit_opinion=row.audit_opinion,
         shares=_shares(row),
+        equity=_fact(row.balance, "EquityAttributableToOwnersOfParent", "Equity"),
+        debt=_debt(row.balance),
+        cash=_fact(row.balance, "CashAndCashEquivalents"),
+        ocf_ytd=_ocf(row),
     )
 
 
@@ -256,6 +333,7 @@ class StockFundamentals:
     price: float | None
     score: FundScore
     quarters: list[Quarter]
+    health: Health
 
 
 def _closes(session: Session, symbol: str, days: Sequence[date]) -> dict[date, float]:
@@ -293,5 +371,10 @@ def stock_fundamentals(
     closes = _closes(session, symbol, [*filed[-20:], day])
     price = closes.get(day)
     return StockFundamentals(
-        symbol, day, price, score_with_history(quarters, day, closes), quarters
+        symbol,
+        day,
+        price,
+        score_with_history(quarters, day, closes),
+        quarters,
+        health(quarters, day, price),
     )

@@ -141,6 +141,17 @@ export const GUIDES: StrategyGuide[] = [
     lesson: "strategy-fip-momentum",
   },
   {
+    key: "low-vol",
+    name: "The calmest stocks, monthly",
+    section: "invest",
+    lookFor:
+      "On the first session of each month, a stock in the calmest 10% of the universe: the smallest daily price swings over the past year (standard deviation of daily returns over 252 sessions).",
+    works: "Falling and choppy markets, where steady businesses hold up. It lags in sharp rallies led by risky stocks: the opposite of momentum, which is why it exists.",
+    watch: "A sudden jump in volatility (results, news): a calm stock that stops being calm leaves at the next month's check.",
+    exit: "Sold at the next open after the first session of a month on which its volatility rank is above 0.30 (out of the calmest three tenths).",
+    lesson: "strategy-low-vol",
+  },
+  {
     key: "high52",
     name: "Stocks nearest their 52-week high",
     section: "invest",
