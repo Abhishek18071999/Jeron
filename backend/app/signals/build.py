@@ -139,6 +139,19 @@ def reasons(m: Market, s: int, t: int, strategy: Strategy, params: Params) -> li
             f"high, rank {_value(m.high52_rank, s, t):.2f} in the universe (needs "
             f"{params['min_rank']:g}), checked on the first session of the month"
         )
+    elif (
+        strategy.key == "residual-momentum"
+        and m.resmom_rank is not None
+        and m.resmom_score is not None
+    ):
+        out.append(
+            f"Residual momentum leader: rank {_value(m.resmom_rank, s, t):.2f} in the "
+            f"universe (needs {params['min_rank']:g}), checked on the first session of the month"
+        )
+        out.append(
+            f"Rose on its own, beyond what Nifty 500 explains: residual score "
+            f"{_value(m.resmom_score, s, t):.1f} over the 12-1 window"
+        )
     elif strategy.key == "reversal" and m.rev_rank is not None and m.rev_return is not None:
         out.append(
             f"Fell {-_value(m.rev_return, s, t) * 100:.1f}% in 5 sessions: rank "

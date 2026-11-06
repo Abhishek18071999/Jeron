@@ -163,6 +163,17 @@ export const GUIDES: StrategyGuide[] = [
     lesson: "strategy-momentum",
   },
   {
+    key: "residual-momentum",
+    name: "Residual momentum leaders",
+    section: "invest",
+    lookFor:
+      "On the first session of each month, a stock in the top 10% of the universe for residual momentum: its rise from a year ago to a month ago after taking out what Nifty 500's moves explain (beta x the index), divided by how much that part swung.",
+    works: "Markets where company-specific good news is under-priced. Because it ignores rises that came only from riding the market, it should give back less than plain momentum when the market turns.",
+    watch: "The rank on the first session of each month. A high-beta stock that only rose with the market is not what it looks for.",
+    exit: "Sold at the next open after the first session of a month on which its residual momentum rank is below 0.75.",
+    lesson: "strategy-momentum",
+  },
+  {
     key: "reversal",
     name: "Short-term reversal of no-news losers",
     section: "swing",

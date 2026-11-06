@@ -200,6 +200,11 @@ class Market:
     # its percentile (1 = nearest the high) among the universe that day.
     high52_ratio: Array | None = None
     high52_rank: Array | None = None
+    # residual-momentum-v1 (docs/plans/residual-momentum-v1.md): the 12-1 market-model
+    # residuals' sum over their standard deviation, and its percentile (1 = strongest)
+    # among the universe that day.
+    resmom_score: Array | None = None
+    resmom_rank: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -425,6 +430,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
     fip_id, fip_rank = fip_ranks(close, eligible, mom_return, mom_rank)
     volatility, vol_rank = volatility_ranks(close, eligible)
     high52_ratio, high52_rank = high52_ranks(close, high, eligible)
+    resmom_score, resmom_rank = residual_momentum_ranks(close, eligible, nifty500)
     symbols = [s.symbol for s in inputs.stocks]
     reactions = results_reactions(days, symbols, inputs.results, close, vol_ratio, nifty500)
     sector_closes = [_index_series(days, inputs.sector_indices.get(n, {})) for n in SECTOR_INDICES]
@@ -483,6 +489,8 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         vol_rank=vol_rank,
         high52_ratio=high52_ratio,
         high52_rank=high52_rank,
+        resmom_score=resmom_score,
+        resmom_rank=resmom_rank,
         fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
     )
 
@@ -586,6 +594,55 @@ def fip_ranks(
         if len(members):
             rank[members, t] = percentile_ranks(fid[members, t])
     return fid, rank
+
+
+RESMOM_MIN_RETURNS = 180
+
+
+def residual_momentum_ranks(close: Array, universe: Array, nifty500: Array) -> tuple[Array, Array]:
+    """residual-momentum-v1 (docs/plans/residual-momentum-v1.md), using only data up to
+    each day: over the daily returns at sessions t - 251 to t - 21 where both the stock's
+    and Nifty 500's are defined (at least `RESMOM_MIN_RETURNS`), beta is the OLS slope of
+    the stock on the index, the residual is the stock's return minus beta x the index's
+    (intercept left in), and the score is the residuals' sum over their standard
+    deviation. The rank is its percentile among the day's universe (1 = strongest).
+    NaN outside the universe or with too few returns."""
+    s_count, d_count = close.shape
+    n, skip = FIP_WINDOW_RETURNS, MOMENTUM_SKIP_SESSIONS
+    score = np.full((s_count, d_count), NAN)
+    rank = np.full((s_count, d_count), NAN)
+    if d_count <= n + skip:
+        return score, rank
+    stock = _returns(close)
+    market = np.broadcast_to(_returns(np.asarray(nifty500, dtype=float)), stock.shape)
+    defined = ~np.isnan(stock) & ~np.isnan(market)
+    x = np.where(defined, stock, 0.0)
+    y = np.where(defined, market, 0.0)
+
+    def window_sum(a: Array) -> Array:
+        # Sum over the returns at sessions t - skip - n + 1 .. t - skip, for each t.
+        c = np.zeros((s_count, d_count + 1))
+        np.cumsum(a, axis=1, out=c[:, 1:])
+        out = np.full((s_count, d_count), NAN)
+        out[:, n + skip - 1 :] = c[:, n : d_count + 1 - skip] - c[:, : d_count + 1 - n - skip]
+        return out
+
+    count = window_sum(defined.astype(float))
+    sx, sy = window_sum(x), window_sum(y)
+    sxx, syy, sxy = window_sum(x * x), window_sum(y * y), window_sum(x * y)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        beta = (sxy - sx * sy / count) / (syy - sy * sy / count)
+        resid_sum = sx - beta * sy
+        resid_sq = sxx - 2 * beta * sxy + beta * beta * syy
+        var = (resid_sq - resid_sum * resid_sum / count) / (count - 1)
+        sd = np.sqrt(np.maximum(var, 0.0))
+        raw = resid_sum / sd
+    score = np.where((count >= RESMOM_MIN_RETURNS) & (sd > 0) & np.isfinite(raw), raw, NAN)
+    for t in range(n + skip - 1, d_count):
+        members = np.flatnonzero(universe[:, t])
+        if len(members):
+            rank[members, t] = percentile_ranks(score[members, t])
+    return score, rank
 
 
 def volatility_ranks(close: Array, universe: Array) -> tuple[Array, Array]:
