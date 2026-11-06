@@ -51,7 +51,29 @@ for sym in (S / "syms.txt").read_text().split():
 n500 = idx["^CRSLDX"] or idx["^NSEI"]
 vix = idx["^INDIAVIX"]
 print(f"{len(stocks)} stocks, {len(skipped)} skipped, {len(days)} days {days[0]}..{days[-1]}, n500 {len(n500)}", flush=True)
-inputs = MarketInputs(days, stocks, n500, idx["^NSEI"], vix)
+import csv, glob, re
+from app.data.events import ResultsDate
+def norm(x):
+    x = re.sub(r"[^a-z0-9 ]", " ", x.lower().replace("&", " and "))
+    return " ".join(w for w in x.split() if w not in ("limited", "ltd", "the", "india", "co", "company", "corporation"))
+names = {}
+for st in stocks:
+    meta = json.loads((S / "yh" / (st.symbol + ".json")).read_bytes())["chart"]["result"][0]["meta"]
+    names[norm(meta.get("longName") or meta.get("shortName") or "")] = st.symbol
+cal = {}
+for f in sorted(glob.glob(str(S / "seed" / "nse-results-*.csv"))):
+    for row in csv.DictReader(open(f, encoding="utf-8-sig")):
+        sym = names.get(norm(row["COMPANY NAME"]))
+        t = row.get("Exchange Dissemination Time") or ""
+        if not sym or not t.strip(): continue
+        try: dt = datetime.strptime(t.strip(), "%d-%b-%Y %H:%M:%S")
+        except ValueError: continue
+        d = dt.date() + (timedelta(days=1) if dt.hour * 60 + dt.minute >= 15 * 60 + 30 else timedelta(0))
+        cal.setdefault(sym, set()).add(d)
+# Board meetings are announced at least 5 working days ahead (SEBI LODR 29): known 7 days before.
+results = {k: sorted((ResultsDate(d, d - timedelta(days=7)) for d in v), key=lambda r: r.meeting_date) for k, v in cal.items()}
+print(f"results calendar: {len(results)} of {len(stocks)} stocks, {sum(map(len, results.values()))} dates", flush=True)
+inputs = MarketInputs(days, stocks, n500, idx["^NSEI"], vix, results=results, results_updated=days[-1])
 m = build_market(inputs)
 out = {}
 todo = [(k, s, False) for k, s in STRATEGIES.items()] + [(k, c, True) for k, c in COMBINED.items()]

@@ -7,11 +7,17 @@ unchanged `build_market` and `evaluate` (engine-v3, the usual folds: walk-forwar
 
 **Research only, not a replacement for the NSE runs.** 346 of 368 hand-listed large
 and mid caps that still trade today (`scripts/syms.txt`): no delisted stocks, so results
-are survivorship-biased upward; no security list (bands, GSM/ASM), no results calendar,
-fundamentals, news or sectoral indices. Benchmark is Nifty 500 (`^CRSLDX`).
+are survivorship-biased upward; no security list (bands, GSM/ASM), fundamentals, news or sectoral indices. The
+**results calendar** comes from the bundled `backend/seed/nse-results-2016-2026.zip`
+(each filing's dissemination time, after 15:30 counted on the next day; company names
+matched to Yahoo's long names: 335 of 346 stocks, 12,354 dates; treated as known 7 days
+ahead, SEBI's minimum notice). The seed has few filings after mid-2025. Benchmark is Nifty 500 (`^CRSLDX`).
 
 | Strategy | Trades | Expectancy | PF | CAGR | Max DD | Sharpe | Holdout | Section 6 |
 |---|---|---|---|---|---|---|---|---|
+| **combined-book-v1** | 264 | +0.414R | 1.75 | 17.6% | 13.1% | 1.05 | **+0.04R (49), +5.8%** | **7 of 7** |
+| results-drift-v1 | 166 | +0.339R | 1.83 | 12.3% | 9.0% | 0.74 | 0 trades (no 2026 results in seed) | 6 (holdout untestable) |
+| reversal-v1 | 1,208 | +0.023R | 1.09 | 7.2% | 10.0% | 0.13 | -0.09R (211) | 3 |
 | **momentum-v1** | 226 | **+0.833R** | 1.78 | 16.5% | 16.4% | 0.88 | **+0.18R (36), +3.8%** | **7 of 7** |
 | fip-momentum-v1 | 220 | +0.569R | 2.03 | 17.5% | 15.5% | 0.96 | -0.29R (37) | 6 (holdout) |
 | rs-pullback-v1 | 251 | +0.443R | 1.93 | 18.7% | 11.8% | 1.13 | -0.10R (53) | 6 (holdout) |
@@ -22,13 +28,12 @@ fundamentals, news or sectoral indices. Benchmark is Nifty 500 (`^CRSLDX`).
 | pullback-trend (+events) | 371 | +0.073R | 1.08 | 6.6% | 14.5% | 0.05 | -0.15R (68) | 3 |
 | top-score-v1 | 422 | +0.023R | 1.00 | 4.4% | 14.3% | -0.18 | +0.07R (68) | 4 |
 
-Nifty 500's Sharpe over the test: 0.60. The `-events` versions equal their base here
-because no results calendar or news is loaded.
+Nifty 500's Sharpe over the test: 0.60. The `-events` versions use the results blackout
+(no news labels): it helped breakout-52w (+0.21R vs +0.16R) and pullback-trend, hurt
+score-swing.
 
-Not testable on this data (each refuses with a clear error, as designed):
-`results-drift-v1`, `reversal-v1` and `combined-book-v1` need the results calendar,
-`quality-trend-v1` the fundamental scores; `sector-rotation-v1` made no trades without
-the sectoral indices.
+Not testable: `quality-trend-v1` needs fundamental scores (XBRL from NSE) and refuses
+with a clear error; `sector-rotation-v1` made no trades without the sectoral indices.
 
 ## Reading
 
@@ -42,6 +47,11 @@ the sectoral indices.
   the universes differ, so this is a warning, not a verdict: one year, ~40 trades.
 - **high52-v1 failed** (pre-registered, run once): positive test years but below the
   benchmark Sharpe and a losing holdout. Research only; per its plan, not tuned.
+- **combined-book-v1** (rs-pullback + results-drift in one account) also passes all
+  seven, with a higher Sharpe (1.05) and smaller drawdown (13.1%) than momentum, but a
+  thinner holdout (+0.04R). Two strategies pass on this data: momentum for expectancy,
+  the combined book for a smoother curve.
+- reversal-v1 fails again, as on NSE data.
 - No parameter was changed after seeing these numbers.
 
 Reproduce from `backend/`: `PYTHONPATH=. uv run python scripts/fetch.py DIR/yh
