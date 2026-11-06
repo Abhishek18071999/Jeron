@@ -43,6 +43,8 @@ are part of done, never commit secrets.
     leaders on `Market.mom_rank`, pre-registered in `docs/plans/momentum-v1.md`); `fip-momentum-v1` (invest,
     momentum-v1's top fifth kept only where the rise was continuous, frog-in-the-pan,
     `Market.fip_rank`, one grid point, `docs/plans/fip-momentum-v1.md`);
+    `low-vol-v1` (invest, the calmest tenth by 252-session volatility, monthly, `Market.vol_rank`,
+    one grid point, `docs/plans/low-vol-v1.md`; the defensive family);
     `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
     point, `docs/plans/paper-review-v1.md`),
     `reversal-v1` (swing, short-term reversal of no-news losers on `Market.rev_rank`, one
@@ -76,8 +78,13 @@ are part of done, never commit secrets.
     stored once per model and `PROMPT_VERSION`; changing the prompt means a new version.
   - `app/fundamentals/` the fundamental brain (decision 0013): `score.py` (TTM, growth,
     P/E against own history, `FUND_SCORE_VERSION`; pure) and `job.py` (load filings from
-    NSE's Financial Results CSVs and XBRL, point-in-time `quarters_known`, the stock page).
-    `app/data/fundamentals.py` parses the CSV and the XBRL (pure).
+    NSE's Financial Results CSVs and XBRL, point-in-time `quarters_known`, the stock page;
+    `reparse_cached` fills the balance sheet and year-to-date facts of filings stored before
+    they were kept) and `health.py` (fundamentals-v2: ROE, ROCE, debt/equity, operating cash
+    flow vs profit by financial year, EV/EBITDA from the half-yearly and annual filings'
+    balance sheet and cash flow; shown on the stock page, not scored in fund-v1; pure;
+    `docs/plans/fundamentals-v2.md`). `app/data/fundamentals.py` parses the CSV and the XBRL
+    (pure; contexts `OneD` quarter, `OneI` balance sheet, `FourD` year to date).
   - `app/signals/` the spec section 4 signal: `schema.py` (Pydantic, every field
     required) and `build.py` (engine order -> signal).
   - `app/paper/job.py` paper trading: one account per strategy version, replayed by the
@@ -208,7 +215,8 @@ are part of done, never commit secrets.
     trades saved from nseindia.com), `watchdog`, `stop-all --reason` / `resume` (the kill
     switch, `app/halt.py`, `docs/runbook.md`), `research` (the review's options), `news-research` (the news brain test), `api-token` (the web app's token for the API),
     `fundamentals-import FILE...` (quarterly results from
-    Financial Results CSVs saved from nseindia.com), `news-label`,
+    Financial Results CSVs saved from nseindia.com), `fundamentals-reparse [--download]`
+    (balance sheets and cash flow of stored filings from the saved XBRL), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
     `strategy-status [VERSION STATUS --reason]` (list, or set a status; decision 0018),
     `paper-review` (strategy proposals from paper trades, forward checks),

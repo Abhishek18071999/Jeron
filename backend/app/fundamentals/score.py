@@ -3,10 +3,11 @@ margins and interest cover for quality, and the price-to-earnings ratio against 
 stock's own history for valuation. 0-100, versioned as FUND_SCORE_VERSION: changing the
 points or rules means a new version.
 
-What the quarterly filings can't give is said, not guessed: balance-sheet ratios (ROE,
-ROCE, debt), operating cash flow and promoter pledges need the half-yearly and
-shareholding filings, which are not loaded yet. Of the spec's hard rejects only a
-qualified audit opinion can be checked.
+What the quarterly filings can't give is said, not guessed. The balance sheet and cash
+flow of the half-yearly and annual filings are shown beside the score
+(`app/fundamentals/health.py`, fundamentals-v2) but not scored in fund-v1; promoter
+pledges need the shareholding filings, which are not loaded. Of the spec's hard rejects
+only a qualified audit opinion is scored.
 
 Pure module: no database.
 """
@@ -38,6 +39,12 @@ class Quarter:
     financial: bool = False  # bank or NBFC form: interest is the business, not a cost
     audit_opinion: str | None = None
     shares: float | None = None  # paid-up capital / face value
+    # fundamentals-v2: the balance sheet on the quarter's last day (half-yearly and annual
+    # filings only; None elsewhere) and the operating cash flow for the year to date.
+    equity: float | None = None  # to the parent's owners when reported, else the total
+    debt: float | None = None  # current plus non-current borrowings
+    cash: float | None = None  # cash and cash equivalents
+    ocf_ytd: float | None = None
 
 
 def units_mismatch(q: Quarter) -> bool:

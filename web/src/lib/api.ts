@@ -1368,6 +1368,24 @@ export type StockFundamentals = {
   facts: Record<string, number | null>;
   notes: string[];
   quarters: FundQuarter[];
+  // fundamentals-v2 (docs/plans/fundamentals-v2.md): shown, not scored in fund-v1.
+  health?: FundHealth;
+};
+
+export type FundCashFlowYear = { year_end: string; operating_cash_flow: number; profit: number | null };
+
+export type FundHealth = {
+  balance_sheet_as_of: string | null;
+  roe: number | null;
+  roce: number | null;
+  debt_equity: number | null;
+  ev_ebitda: number | null;
+  equity: number | null;
+  debt: number | null;
+  cash: number | null;
+  cash_flow: FundCashFlowYear[]; // newest first
+  warnings: string[];
+  notes: string[];
 };
 
 // --- The four sections (docs/plans/sections-v1.md) ----------------------------------

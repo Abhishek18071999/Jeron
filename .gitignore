@@ -13,3 +13,4 @@ imports/*
 !imports/README.txt
 *.dump
 *.dump.sha256
+web/AGENTS.md

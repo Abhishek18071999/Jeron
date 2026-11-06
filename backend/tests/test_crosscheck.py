@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -90,3 +91,15 @@ def test_bonus_and_split_on_one_day_compare_as_one():
     ]
     yahoo = [action("X", date(2024, 10, 29), CorporateActionType.SPLIT, 4, 1, "split 4:1")]
     assert compare_share_actions(nse, yahoo, DAY, date(2024, 10, 31)) == []
+
+
+def test_a_second_source_repeating_yesterday_is_stale_not_a_mismatch():
+    # 18 March 2025: Yahoo repeated 17 March's close for 745 of 844 stocks. A close equal
+    # to NSE's previous close, on a day NSE moved, is Yahoo not updating, not a bad close.
+    a = bar("A", DAY, 100, 106, 99, 105)
+    b = bar("B", DAY, 100, 106, 99, 105)
+    nse = [replace(a, prev_close=Decimal(100)), replace(b, prev_close=Decimal(100))]
+    other = [bar("A", DAY, 100, 100, 100, 100), bar("B", DAY, 100, 103, 99, 102)]
+    result = compare_closes(nse, other)
+    assert [d.symbol for d in result.stale] == ["A"]
+    assert [d.symbol for d in result.mismatches] == ["B"]  # B is just different

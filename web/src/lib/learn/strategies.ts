@@ -412,6 +412,31 @@ export const STRATEGIES: Lesson[] = [
     ],
   },
   {
+    slug: "strategy-low-vol",
+    track: "strategies",
+    title: "Strategy: the calmest stocks (low-vol)",
+    summary: "Once a month, own the stocks whose prices moved least over the past year. Long-term and defensive.",
+    minutes: 6,
+    goals: ["State the volatility rank, entry and exit", "See why calm stocks can earn as much as exciting ones"],
+    blocks: [
+      { p: "**Idea**: you would expect riskier stocks to pay more. Decades of research found the opposite: the calmest stocks have earned about as much as the most volatile ones, or more, with much smaller falls (Ang and others, 2006; Blitz and van Vliet, 2007). The usual explanation: many investors overpay for exciting stocks that might double, and neglect dull, steady ones. NSE even runs an index on it, the Nifty Low Volatility 30." },
+      { analogy: "A lottery ticket costs more than its expected payout because people love the chance of a big win. Exciting stocks can be like that; the boring ones are priced more fairly." },
+      { h: "Why Jeron has it" },
+      { p: "Every strategy that passed Jeron's tests so far buys strength (momentum, relative strength), and their results rise and fall together. Low volatility is a different bet: it should hold up in falls and lag in sharp rallies. Its rules were written down before any test (docs/plans/low-vol-v1.md), with one setting and no tuning." },
+      { h: "Rules (low-vol-v1)" },
+      { list: [
+        "**Volatility**: the standard deviation of daily returns over the last 252 sessions, ranked against the day's universe (0 = calmest).",
+        "On the **first session of each month**, enter stocks in the **calmest 10%**.",
+        "Stop 4 x ATR. Long-term tier: up to 15 positions, half sold at +3R, trail 4 x ATR, time stop 250 sessions.",
+        "**Exit**: on the first session of a month, sell at the next open if the rank is **above 0.30**.",
+      ] },
+      { recap: ["The calmest tenth of the universe, checked monthly.", "Sold when it stops being calm, or by the usual stops.", "A defensive partner to momentum, not a replacement."] },
+    ],
+    quiz: [
+      { q: "A held stock's volatility rank rises to 0.25. low-vol:", options: ["Sells it", "Keeps it", "Buys more"], answer: 1, why: "It sells only above 0.30, and it never adds to a position it already holds." },
+    ],
+  },
+  {
     slug: "strategy-reversal",
     track: "strategies",
     title: "Strategy: short-term reversal (reversal)",
