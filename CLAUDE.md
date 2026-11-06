@@ -45,8 +45,8 @@ are part of done, never commit secrets.
     `Market.fip_rank`, one grid point, `docs/plans/fip-momentum-v1.md`);
     `high52-v1` (invest, monthly leaders by nearness to the 52-week high with a positive 12-1 return, `Market.high52_rank`, one grid point, `docs/plans/high52-v1.md`, not yet run on data);
     `high52-v1` (invest, monthly leaders by nearness to the 52-week high with a positive
-    12-1 return, `Market.high52_rank`, one grid point, `docs/plans/high52-v1.md`, not yet
-    run on data);
+    12-1 return, `Market.high52_rank`, one grid point, `docs/plans/high52-v1.md`; failed
+    on Yahoo data, research only, `docs/backtests/yahoo-2026-11-06/`);
     `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
     point, `docs/plans/paper-review-v1.md`),
     `reversal-v1` (swing, short-term reversal of no-news losers on `Market.rev_rank`, one
