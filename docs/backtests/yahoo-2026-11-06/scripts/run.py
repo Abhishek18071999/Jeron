@@ -73,7 +73,14 @@ for f in sorted(glob.glob(str(S / "seed" / "nse-results-*.csv"))):
 # Board meetings are announced at least 5 working days ahead (SEBI LODR 29): known 7 days before.
 results = {k: sorted((ResultsDate(d, d - timedelta(days=7)) for d in v), key=lambda r: r.meeting_date) for k, v in cal.items()}
 print(f"results calendar: {len(results)} of {len(stocks)} stocks, {sum(map(len, results.values()))} dates", flush=True)
-inputs = MarketInputs(days, stocks, n500, idx["^NSEI"], vix, results=results, results_updated=days[-1])
+SEC = {"Nifty Auto": "^CNXAUTO", "Nifty Financial Services": "NIFTY_FIN_SERVICE.NS", "Nifty PSU Bank": "^CNXPSUBANK", "Nifty Energy": "^CNXENERGY", "Nifty FMCG": "^CNXFMCG", "Nifty IT": "^CNXIT", "Nifty Media": "^CNXMEDIA", "Nifty Metal": "^CNXMETAL", "Nifty Pharma": "^CNXPHARMA", "Nifty Realty": "^CNXREALTY"}
+sectors = {}
+for name, t in SEC.items():
+    try: x = load(t)
+    except Exception: x = None
+    if x: sectors[name] = {d: v[3] for d, v in x[0].items()}
+print(f"sector indices: {len(sectors)} of {len(SEC)}", flush=True)
+inputs = MarketInputs(days, stocks, n500, idx["^NSEI"], vix, results=results, results_updated=days[-1], sector_indices=sectors)
 m = build_market(inputs)
 out = {}
 todo = [(k, s, False) for k, s in STRATEGIES.items()] + [(k, c, True) for k, c in COMBINED.items()]

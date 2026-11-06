@@ -7,7 +7,8 @@ unchanged `build_market` and `evaluate` (engine-v3, the usual folds: walk-forwar
 
 **Research only, not a replacement for the NSE runs.** 346 of 368 hand-listed large
 and mid caps that still trade today (`scripts/syms.txt`): no delisted stocks, so results
-are survivorship-biased upward; no security list (bands, GSM/ASM), fundamentals, news or sectoral indices. The
+are survivorship-biased upward; no security list (bands, GSM/ASM), fundamentals or news. Sectoral indices from Yahoo
+(nine of ten; Yahoo has no Nifty Media history). The
 **results calendar** comes from the bundled `backend/seed/nse-results-2016-2026.zip`
 (each filing's dissemination time, after 15:30 counted on the next day; company names
 matched to Yahoo's long names: 335 of 346 stocks, 12,354 dates; treated as known 7 days
@@ -17,6 +18,7 @@ ahead, SEBI's minimum notice). The seed has few filings after mid-2025. Benchmar
 |---|---|---|---|---|---|---|---|---|
 | **combined-book-v1** | 264 | +0.414R | 1.75 | 17.6% | 13.1% | 1.05 | **+0.04R (49), +5.8%** | **7 of 7** |
 | results-drift-v1 | 166 | +0.339R | 1.83 | 12.3% | 9.0% | 0.74 | 0 trades (no 2026 results in seed) | 6 (holdout untestable) |
+| sector-rotation-v1 | 296 | +0.235R | 1.37 | 10.5% | 16.5% | 0.39 | +0.41R (47), +14.2% | 6 (benchmark) |
 | reversal-v1 | 1,208 | +0.023R | 1.09 | 7.2% | 10.0% | 0.13 | -0.09R (211) | 3 |
 | **momentum-v1** | 226 | **+0.833R** | 1.78 | 16.5% | 16.4% | 0.88 | **+0.18R (36), +3.8%** | **7 of 7** |
 | fip-momentum-v1 | 220 | +0.569R | 2.03 | 17.5% | 15.5% | 0.96 | -0.29R (37) | 6 (holdout) |
@@ -33,7 +35,7 @@ Nifty 500's Sharpe over the test: 0.60. The `-events` versions use the results b
 score-swing.
 
 Not testable: `quality-trend-v1` needs fundamental scores (XBRL from NSE) and refuses
-with a clear error; `sector-rotation-v1` made no trades without the sectoral indices.
+with a clear error, as designed.
 
 ## Reading
 
