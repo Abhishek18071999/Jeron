@@ -152,6 +152,17 @@ export const GUIDES: StrategyGuide[] = [
     lesson: "strategy-low-vol",
   },
   {
+    key: "high52",
+    name: "Stocks nearest their 52-week high",
+    section: "invest",
+    lookFor:
+      "On the first session of each month, a stock in the top 10% of the universe for how close it closes to its 52-week high, with a positive return from a year ago to a month ago.",
+    works: "Markets where investors anchor on the old high and under-react to good news that pushes a stock through it. Like momentum, it can give back a lot in sharp reversals.",
+    watch: "The rank on the first session of each month; a stock that slips well below its high drops out.",
+    exit: "Sold at the next open after the first session of a month on which its 52-week-high rank is below 0.7.",
+    lesson: "strategy-momentum",
+  },
+  {
     key: "reversal",
     name: "Short-term reversal of no-news losers",
     section: "swing",

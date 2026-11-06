@@ -1,0 +1,1541 @@
+{
+ "score-swing": {
+  "version": "score-swing-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.146R",
+    "passed": false
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.37",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "8.1%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "375",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.53 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.158R over 75 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1858875.7462,
+    "total_return": 0.8589,
+    "cagr": 0.1111,
+    "max_drawdown_pct": 8.1491,
+    "sharpe": 0.5328,
+    "volatility": 0.0866,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 375,
+    "wins": 167,
+    "win_rate": 0.4453,
+    "avg_r": 0.1461,
+    "expectancy_r": 0.1461,
+    "profit_factor": 1.3746,
+    "net_pnl": 541351.8235,
+    "avg_win_r": 1.1751,
+    "avg_loss_r": -0.6801,
+    "avg_sessions": 18.5227
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1858875.7462,
+    "end_value": 1781015.9856,
+    "total_return": -0.0419,
+    "cagr": -0.0429,
+    "max_drawdown_pct": 9.7822,
+    "sharpe": -1.5416,
+    "volatility": 0.0678,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 75,
+    "wins": 27,
+    "win_rate": 0.36,
+    "avg_r": -0.1576,
+    "expectancy_r": -0.1576,
+    "profit_factor": 0.641,
+    "net_pnl": -150003.9755,
+    "avg_win_r": 0.9636,
+    "avg_loss_r": -0.7883,
+    "avg_sessions": 13.7467
+   }
+  }
+ },
+ "breakout-52w": {
+  "version": "breakout-52w-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.163R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.33",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "14.3%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "302",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.34 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.039R over 52 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1706261.6676,
+    "total_return": 0.7063,
+    "cagr": 0.095,
+    "max_drawdown_pct": 14.3164,
+    "sharpe": 0.3402,
+    "volatility": 0.0951,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 302,
+    "wins": 116,
+    "win_rate": 0.3841,
+    "avg_r": 0.1633,
+    "expectancy_r": 0.1633,
+    "profit_factor": 1.327,
+    "net_pnl": 461843.8435,
+    "avg_win_r": 1.7035,
+    "avg_loss_r": -0.7972,
+    "avg_sessions": 35.8609
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1706261.6676,
+    "end_value": 1837603.4214,
+    "total_return": 0.077,
+    "cagr": 0.0789,
+    "max_drawdown_pct": 7.7777,
+    "sharpe": 0.1769,
+    "volatility": 0.1041,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 52,
+    "wins": 15,
+    "win_rate": 0.2885,
+    "avg_r": -0.0386,
+    "expectancy_r": -0.0386,
+    "profit_factor": 1.1017,
+    "net_pnl": 34781.1963,
+    "avg_win_r": 2.0978,
+    "avg_loss_r": -0.9047,
+    "avg_sessions": 28.1731
+   }
+  }
+ },
+ "pullback-trend": {
+  "version": "pullback-trend-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.073R",
+    "passed": false
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.08",
+    "passed": false
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "14.5%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "371",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.05 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.153R over 68 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1454153.607,
+    "total_return": 0.4542,
+    "cagr": 0.0657,
+    "max_drawdown_pct": 14.5389,
+    "sharpe": 0.0497,
+    "volatility": 0.084,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 371,
+    "wins": 135,
+    "win_rate": 0.3639,
+    "avg_r": 0.0729,
+    "expectancy_r": 0.0729,
+    "profit_factor": 1.08,
+    "net_pnl": 127260.6645,
+    "avg_win_r": 1.5456,
+    "avg_loss_r": -0.7695,
+    "avg_sessions": 17.2183
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1454153.607,
+    "end_value": 1397867.1615,
+    "total_return": -0.0387,
+    "cagr": -0.0396,
+    "max_drawdown_pct": 6.8928,
+    "sharpe": -1.3544,
+    "volatility": 0.0743,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 68,
+    "wins": 20,
+    "win_rate": 0.2941,
+    "avg_r": -0.1532,
+    "expectancy_r": -0.1532,
+    "profit_factor": 0.5466,
+    "net_pnl": -98834.6137,
+    "avg_win_r": 1.0341,
+    "avg_loss_r": -0.6479,
+    "avg_sessions": 14.4412
+   }
+  }
+ },
+ "score-swing-events": {
+  "version": "score-swing-events-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.080R",
+    "passed": false
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.16",
+    "passed": false
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "12.7%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "390",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.14 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.165R over 75 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1524882.1856,
+    "total_return": 0.5249,
+    "cagr": 0.0743,
+    "max_drawdown_pct": 12.7428,
+    "sharpe": 0.1446,
+    "volatility": 0.0858,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 390,
+    "wins": 158,
+    "win_rate": 0.4051,
+    "avg_r": 0.0797,
+    "expectancy_r": 0.0797,
+    "profit_factor": 1.1615,
+    "net_pnl": 235000.0539,
+    "avg_win_r": 1.2146,
+    "avg_loss_r": -0.6932,
+    "avg_sessions": 17.7615
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1524882.1856,
+    "end_value": 1476633.7075,
+    "total_return": -0.0316,
+    "cagr": -0.0324,
+    "max_drawdown_pct": 9.2682,
+    "sharpe": -1.4074,
+    "volatility": 0.0666,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 75,
+    "wins": 28,
+    "win_rate": 0.3733,
+    "avg_r": -0.1654,
+    "expectancy_r": -0.1654,
+    "profit_factor": 0.6037,
+    "net_pnl": -118961.9974,
+    "avg_win_r": 0.886,
+    "avg_loss_r": -0.7918,
+    "avg_sessions": 13.8133
+   }
+  }
+ },
+ "breakout-52w-events": {
+  "version": "breakout-52w-events-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.213R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.38",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "13.7%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "289",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.42 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.040R over 51 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1792777.3005,
+    "total_return": 0.7928,
+    "cagr": 0.1043,
+    "max_drawdown_pct": 13.6808,
+    "sharpe": 0.4219,
+    "volatility": 0.0971,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 289,
+    "wins": 118,
+    "win_rate": 0.4083,
+    "avg_r": 0.2126,
+    "expectancy_r": 0.2126,
+    "profit_factor": 1.3769,
+    "net_pnl": 545943.2652,
+    "avg_win_r": 1.7125,
+    "avg_loss_r": -0.8224,
+    "avg_sessions": 37.4429
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1792777.3005,
+    "end_value": 1934542.7212,
+    "total_return": 0.0791,
+    "cagr": 0.0811,
+    "max_drawdown_pct": 7.7295,
+    "sharpe": 0.1981,
+    "volatility": 0.1018,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 51,
+    "wins": 15,
+    "win_rate": 0.2941,
+    "avg_r": -0.04,
+    "expectancy_r": -0.04,
+    "profit_factor": 1.1135,
+    "net_pnl": 37227.7434,
+    "avg_win_r": 1.9562,
+    "avg_loss_r": -0.8718,
+    "avg_sessions": 28.7647
+   }
+  }
+ },
+ "pullback-trend-events": {
+  "version": "pullback-trend-events-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.116R",
+    "passed": false
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.20",
+    "passed": false
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "12.5%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "365",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.32 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.152R over 68 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1664884.9611,
+    "total_return": 0.6649,
+    "cagr": 0.0905,
+    "max_drawdown_pct": 12.5236,
+    "sharpe": 0.3162,
+    "volatility": 0.0867,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 365,
+    "wins": 138,
+    "win_rate": 0.3781,
+    "avg_r": 0.1159,
+    "expectancy_r": 0.1159,
+    "profit_factor": 1.2037,
+    "net_pnl": 332467.0735,
+    "avg_win_r": 1.5287,
+    "avg_loss_r": -0.7429,
+    "avg_sessions": 17.5205
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1664884.9611,
+    "end_value": 1596475.7905,
+    "total_return": -0.0411,
+    "cagr": -0.0421,
+    "max_drawdown_pct": 7.2458,
+    "sharpe": -1.3101,
+    "volatility": 0.0785,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 68,
+    "wins": 20,
+    "win_rate": 0.2941,
+    "avg_r": -0.1522,
+    "expectancy_r": -0.1522,
+    "profit_factor": 0.581,
+    "net_pnl": -114528.05,
+    "avg_win_r": 1.0348,
+    "avg_loss_r": -0.6468,
+    "avg_sessions": 14.4412
+   }
+  }
+ },
+ "trend-breakout": {
+  "version": "trend-breakout-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.208R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.33",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "10.6%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "271",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bull",
+    "passed": false
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.48 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "0.116R over 36 trades",
+    "passed": true
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1895098.9129,
+    "total_return": 0.8951,
+    "cagr": 0.1147,
+    "max_drawdown_pct": 10.5957,
+    "sharpe": 0.4773,
+    "volatility": 0.1079,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 271,
+    "wins": 101,
+    "win_rate": 0.3727,
+    "avg_r": 0.2081,
+    "expectancy_r": 0.2081,
+    "profit_factor": 1.3254,
+    "net_pnl": 535634.9826,
+    "avg_win_r": 1.8641,
+    "avg_loss_r": -0.7757,
+    "avg_sessions": 32.9483
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1895098.9129,
+    "end_value": 2000143.8456,
+    "total_return": 0.0554,
+    "cagr": 0.0568,
+    "max_drawdown_pct": 8.0195,
+    "sharpe": -0.0247,
+    "volatility": 0.1019,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 36,
+    "wins": 12,
+    "win_rate": 0.3333,
+    "avg_r": 0.1158,
+    "expectancy_r": 0.1158,
+    "profit_factor": 1.3596,
+    "net_pnl": 88069.01,
+    "avg_win_r": 2.0369,
+    "avg_loss_r": -0.8447,
+    "avg_sessions": 26.2222
+   }
+  }
+ },
+ "rs-pullback": {
+  "version": "rs-pullback-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.443R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.93",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "11.8%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "251",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "1.13 vs 0.60",
+    "passed": true
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.096R over 53 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 2741335.8091,
+    "total_return": 1.7413,
+    "cagr": 0.1869,
+    "max_drawdown_pct": 11.8348,
+    "sharpe": 1.1319,
+    "volatility": 0.1002,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 251,
+    "wins": 114,
+    "win_rate": 0.4542,
+    "avg_r": 0.4427,
+    "expectancy_r": 0.4427,
+    "profit_factor": 1.9327,
+    "net_pnl": 1341089.4512,
+    "avg_win_r": 1.9145,
+    "avg_loss_r": -0.7819,
+    "avg_sessions": 40.8645
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 2741335.8091,
+    "end_value": 2690717.6014,
+    "total_return": -0.0185,
+    "cagr": -0.0189,
+    "max_drawdown_pct": 11.1418,
+    "sharpe": -0.652,
+    "volatility": 0.1156,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 53,
+    "wins": 17,
+    "win_rate": 0.3208,
+    "avg_r": -0.0963,
+    "expectancy_r": -0.0963,
+    "profit_factor": 0.7414,
+    "net_pnl": -140834.5473,
+    "avg_win_r": 1.613,
+    "avg_loss_r": -0.9034,
+    "avg_sessions": 28.6038
+   }
+  }
+ },
+ "results-drift": {
+  "version": "results-drift-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.339R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.83",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "9.0%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "166",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.74 vs 0.60",
+    "passed": true
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "0.000R over 0 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1984321.322,
+    "total_return": 0.9843,
+    "cagr": 0.1235,
+    "max_drawdown_pct": 8.9928,
+    "sharpe": 0.7406,
+    "volatility": 0.0761,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 166,
+    "wins": 77,
+    "win_rate": 0.4639,
+    "avg_r": 0.3385,
+    "expectancy_r": 0.3385,
+    "profit_factor": 1.8339,
+    "net_pnl": 605143.8712,
+    "avg_win_r": 1.5774,
+    "avg_loss_r": -0.7333,
+    "avg_sessions": 45.259
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1984321.322,
+    "end_value": 2113302.2079,
+    "total_return": 0.065,
+    "cagr": 0.0666,
+    "max_drawdown_pct": 0.0,
+    "sharpe": 0.6389,
+    "volatility": 0.0024,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 0,
+    "wins": 0,
+    "win_rate": 0.0,
+    "avg_r": 0.0,
+    "expectancy_r": 0.0,
+    "profit_factor": 0.0,
+    "net_pnl": 0.0,
+    "avg_win_r": 0.0,
+    "avg_loss_r": 0.0,
+    "avg_sessions": 0.0
+   }
+  }
+ },
+ "sector-rotation": {
+  "version": "sector-rotation-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.235R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.37",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "16.5%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "296",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.39 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "0.410R over 47 trades",
+    "passed": true
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1795593.5514,
+    "total_return": 0.7956,
+    "cagr": 0.1046,
+    "max_drawdown_pct": 16.4657,
+    "sharpe": 0.39,
+    "volatility": 0.1088,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 296,
+    "wins": 113,
+    "win_rate": 0.3818,
+    "avg_r": 0.2351,
+    "expectancy_r": 0.2351,
+    "profit_factor": 1.3723,
+    "net_pnl": 552948.6129,
+    "avg_win_r": 1.9545,
+    "avg_loss_r": -0.8267,
+    "avg_sessions": 30.4088
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1795593.5514,
+    "end_value": 2050025.4121,
+    "total_return": 0.1417,
+    "cagr": 0.1454,
+    "max_drawdown_pct": 8.002,
+    "sharpe": 0.726,
+    "volatility": 0.1084,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 47,
+    "wins": 19,
+    "win_rate": 0.4043,
+    "avg_r": 0.4103,
+    "expectancy_r": 0.4103,
+    "profit_factor": 1.7524,
+    "net_pnl": 184176.0689,
+    "avg_win_r": 2.1078,
+    "avg_loss_r": -0.7416,
+    "avg_sessions": 28.4255
+   }
+  }
+ },
+ "quality-trend": {
+  "error": "this strategy needs the fundamental scores (run fundamentals-import)"
+ },
+ "momentum": {
+  "version": "momentum-v1",
+  "live_eligible": true,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.833R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.78",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "16.4%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "226",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.88 vs 0.60",
+    "passed": true
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "0.182R over 36 trades",
+    "passed": true
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 2456268.0159,
+    "total_return": 1.4563,
+    "cagr": 0.165,
+    "max_drawdown_pct": 16.4493,
+    "sharpe": 0.8769,
+    "volatility": 0.1092,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 226,
+    "wins": 85,
+    "win_rate": 0.3761,
+    "avg_r": 0.8329,
+    "expectancy_r": 0.8329,
+    "profit_factor": 1.7821,
+    "net_pnl": 1045380.6022,
+    "avg_win_r": 3.4565,
+    "avg_loss_r": -0.7487,
+    "avg_sessions": 73.0841
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 2456268.0159,
+    "end_value": 2550093.8125,
+    "total_return": 0.0382,
+    "cagr": 0.0391,
+    "max_drawdown_pct": 9.6694,
+    "sharpe": -0.1614,
+    "volatility": 0.1129,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 36,
+    "wins": 11,
+    "win_rate": 0.3056,
+    "avg_r": 0.1815,
+    "expectancy_r": 0.1815,
+    "profit_factor": 1.2552,
+    "net_pnl": 55885.3515,
+    "avg_win_r": 2.1703,
+    "avg_loss_r": -0.6935,
+    "avg_sessions": 67.6944
+   }
+  }
+ },
+ "top-score": {
+  "version": "top-score-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.054R",
+    "passed": false
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.08",
+    "passed": false
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "13.3%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "419",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.03 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "0.071R over 68 trades",
+    "passed": true
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1436034.0859,
+    "total_return": 0.436,
+    "cagr": 0.0634,
+    "max_drawdown_pct": 13.2655,
+    "sharpe": 0.0299,
+    "volatility": 0.092,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 419,
+    "wins": 157,
+    "win_rate": 0.3747,
+    "avg_r": 0.0542,
+    "expectancy_r": 0.0542,
+    "profit_factor": 1.0762,
+    "net_pnl": 124211.4133,
+    "avg_win_r": 1.3929,
+    "avg_loss_r": -0.7479,
+    "avg_sessions": 15.778
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1436034.0859,
+    "end_value": 1579358.0731,
+    "total_return": 0.0998,
+    "cagr": 0.1024,
+    "max_drawdown_pct": 5.4611,
+    "sharpe": 0.4074,
+    "volatility": 0.0959,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 68,
+    "wins": 19,
+    "win_rate": 0.2794,
+    "avg_r": 0.071,
+    "expectancy_r": 0.071,
+    "profit_factor": 1.3492,
+    "net_pnl": 95208.2668,
+    "avg_win_r": 2.0455,
+    "avg_loss_r": -0.6947,
+    "avg_sessions": 14.7353
+   }
+  }
+ },
+ "reversal": {
+  "version": "reversal-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.023R",
+    "passed": false
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.09",
+    "passed": false
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "10.0%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "1208",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.13 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.088R over 211 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1509209.6022,
+    "total_return": 0.5092,
+    "cagr": 0.0724,
+    "max_drawdown_pct": 10.0199,
+    "sharpe": 0.1271,
+    "volatility": 0.08,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 1208,
+    "wins": 737,
+    "win_rate": 0.6101,
+    "avg_r": 0.0231,
+    "expectancy_r": 0.0231,
+    "profit_factor": 1.0855,
+    "net_pnl": 191229.85,
+    "avg_win_r": 0.3508,
+    "avg_loss_r": -0.4897,
+    "avg_sessions": 4.9677
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1509209.6022,
+    "end_value": 1449111.584,
+    "total_return": -0.0398,
+    "cagr": -0.0408,
+    "max_drawdown_pct": 6.2618,
+    "sharpe": -2.4508,
+    "volatility": 0.0423,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 211,
+    "wins": 106,
+    "win_rate": 0.5024,
+    "avg_r": -0.0875,
+    "expectancy_r": -0.0875,
+    "profit_factor": 0.5475,
+    "net_pnl": -132366.4502,
+    "avg_win_r": 0.3351,
+    "avg_loss_r": -0.5142,
+    "avg_sessions": 4.6825
+   }
+  }
+ },
+ "fip-momentum": {
+  "version": "fip-momentum-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.569R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "2.03",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "15.5%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "220",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.96 vs 0.60",
+    "passed": true
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.289R over 37 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 2579254.6728,
+    "total_return": 1.5793,
+    "cagr": 0.1747,
+    "max_drawdown_pct": 15.5314,
+    "sharpe": 0.9638,
+    "volatility": 0.1078,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 220,
+    "wins": 88,
+    "win_rate": 0.4,
+    "avg_r": 0.5694,
+    "expectancy_r": 0.5694,
+    "profit_factor": 2.026,
+    "net_pnl": 1229697.5484,
+    "avg_win_r": 2.4795,
+    "avg_loss_r": -0.7041,
+    "avg_sessions": 75.8955
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 2579254.6728,
+    "end_value": 2530435.7942,
+    "total_return": -0.0189,
+    "cagr": -0.0194,
+    "max_drawdown_pct": 10.9965,
+    "sharpe": -0.9998,
+    "volatility": 0.0794,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 37,
+    "wins": 13,
+    "win_rate": 0.3514,
+    "avg_r": -0.2891,
+    "expectancy_r": -0.2891,
+    "profit_factor": 0.421,
+    "net_pnl": -137098.3524,
+    "avg_win_r": 0.8072,
+    "avg_loss_r": -0.8828,
+    "avg_sessions": 54.9189
+   }
+  }
+ },
+ "high52": {
+  "version": "high52-v1",
+  "live_eligible": false,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.312R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.62",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "12.5%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "219",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "0.53 vs 0.60",
+    "passed": false
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "-0.315R over 46 trades",
+    "passed": false
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 1854664.5993,
+    "total_return": 0.8547,
+    "cagr": 0.1107,
+    "max_drawdown_pct": 12.5337,
+    "sharpe": 0.5255,
+    "volatility": 0.0872,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 219,
+    "wins": 98,
+    "win_rate": 0.4475,
+    "avg_r": 0.3121,
+    "expectancy_r": 0.3121,
+    "profit_factor": 1.6235,
+    "net_pnl": 560315.3154,
+    "avg_win_r": 1.5157,
+    "avg_loss_r": -0.6627,
+    "avg_sessions": 58.0548
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 1854664.5993,
+    "end_value": 1798325.91,
+    "total_return": -0.0304,
+    "cagr": -0.0311,
+    "max_drawdown_pct": 7.7599,
+    "sharpe": -0.9338,
+    "volatility": 0.0963,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 46,
+    "wins": 10,
+    "win_rate": 0.2174,
+    "avg_r": -0.3152,
+    "expectancy_r": -0.3152,
+    "profit_factor": 0.3331,
+    "net_pnl": -157900.9578,
+    "avg_win_r": 1.097,
+    "avg_loss_r": -0.7074,
+    "avg_sessions": 38.3696
+   }
+  }
+ },
+ "combined-book": {
+  "version": "combined-book-v1",
+  "live_eligible": true,
+  "gates": [
+   {
+    "key": "expectancy",
+    "label": "Expectancy above 0.15R",
+    "value": "0.414R",
+    "passed": true
+   },
+   {
+    "key": "profit_factor",
+    "label": "Profit factor at least 1.3",
+    "value": "1.75",
+    "passed": true
+   },
+   {
+    "key": "drawdown",
+    "label": "Max drawdown at most 20%",
+    "value": "13.1%",
+    "passed": true
+   },
+   {
+    "key": "trades",
+    "label": "At least 100 trades",
+    "value": "264",
+    "passed": true
+   },
+   {
+    "key": "regimes",
+    "label": "Positive in at least 2 of 3 regimes",
+    "value": "bear, bull, sideways",
+    "passed": true
+   },
+   {
+    "key": "benchmark",
+    "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+    "value": "1.05 vs 0.60",
+    "passed": true
+   },
+   {
+    "key": "holdout",
+    "label": "Final 12-month holdout has positive expectancy",
+    "value": "0.041R over 49 trades",
+    "passed": true
+   }
+  ],
+  "out_of_sample": {
+   "curve": {
+    "start_value": 1000000.0,
+    "end_value": 2590653.0127,
+    "total_return": 1.5907,
+    "cagr": 0.1756,
+    "max_drawdown_pct": 13.0504,
+    "sharpe": 1.0483,
+    "volatility": 0.099,
+    "sessions": 1484
+   },
+   "trades": {
+    "trades": 264,
+    "wins": 121,
+    "win_rate": 0.4583,
+    "avg_r": 0.4143,
+    "expectancy_r": 0.4143,
+    "profit_factor": 1.754,
+    "net_pnl": 1189037.3354,
+    "avg_win_r": 1.8283,
+    "avg_loss_r": -0.7821,
+    "avg_sessions": 41.2083
+   }
+  },
+  "holdout": {
+   "curve": {
+    "start_value": 2590653.0127,
+    "end_value": 2740054.9116,
+    "total_return": 0.0577,
+    "cagr": 0.0591,
+    "max_drawdown_pct": 8.5351,
+    "sharpe": -0.0084,
+    "volatility": 0.0972,
+    "sessions": 247
+   },
+   "trades": {
+    "trades": 49,
+    "wins": 17,
+    "win_rate": 0.3469,
+    "avg_r": 0.0407,
+    "expectancy_r": 0.0407,
+    "profit_factor": 1.1303,
+    "net_pnl": 51232.4171,
+    "avg_win_r": 1.7179,
+    "avg_loss_r": -0.8503,
+    "avg_sessions": 30.3878
+   }
+  }
+ }
+}

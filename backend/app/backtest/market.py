@@ -196,6 +196,10 @@ class Market:
     # 252 sessions, and its percentile (0 = calmest) among the day's universe.
     volatility: Array | None = None
     vol_rank: Array | None = None
+    # high52-v1 (docs/plans/high52-v1.md): close over the 252-session highest high, and
+    # its percentile (1 = nearest the high) among the universe that day.
+    high52_ratio: Array | None = None
+    high52_rank: Array | None = None
 
     @property
     def traded(self) -> Array:
@@ -420,6 +424,7 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
     rev_return, rev_rank = reversal_ranks(close, eligible)
     fip_id, fip_rank = fip_ranks(close, eligible, mom_return, mom_rank)
     volatility, vol_rank = volatility_ranks(close, eligible)
+    high52_ratio, high52_rank = high52_ranks(close, high, eligible)
     symbols = [s.symbol for s in inputs.stocks]
     reactions = results_reactions(days, symbols, inputs.results, close, vol_ratio, nifty500)
     sector_closes = [_index_series(days, inputs.sector_indices.get(n, {})) for n in SECTOR_INDICES]
@@ -476,6 +481,8 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         fip_rank=fip_rank,
         volatility=volatility,
         vol_rank=vol_rank,
+        high52_ratio=high52_ratio,
+        high52_rank=high52_rank,
         fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
     )
 
@@ -616,6 +623,38 @@ def volatility_ranks(close: Array, universe: Array) -> tuple[Array, Array]:
         if len(members):
             rank[members, t] = percentile_ranks(vol[members, t])
     return vol, rank
+
+
+# high52-v1: nearness to the 52-week high.
+HIGH52_SESSIONS = 252
+HIGH52_MIN_TRADED = 200
+
+
+def high52_ranks(close: Array, high: Array, universe: Array) -> tuple[Array, Array]:
+    """high52-v1 (docs/plans/high52-v1.md), using only data up to each day: close over
+    the highest high of the last `HIGH52_SESSIONS` sessions including the day (at least
+    `HIGH52_MIN_TRADED` traded), and its percentile among the day's universe (1 =
+    nearest the high). NaN outside the universe or where an input is missing."""
+    s_count, d_count = close.shape
+    n = HIGH52_SESSIONS
+    ratio = np.full((s_count, d_count), NAN)
+    rank = np.full((s_count, d_count), NAN)
+    if d_count < n:
+        return ratio, rank
+    traded = ~np.isnan(high)
+    c = np.zeros((s_count, d_count + 1))
+    np.cumsum(traded, axis=1, out=c[:, 1:])
+    count = c[:, n:] - c[:, : d_count + 1 - n]
+    windows = np.lib.stride_tricks.sliding_window_view(np.where(traded, high, -np.inf), n, axis=1)
+    top = windows.max(axis=2)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        r = close[:, n - 1 :] / top
+    ratio[:, n - 1 :] = np.where((count >= HIGH52_MIN_TRADED) & (top > 0), r, NAN)
+    for t in range(n - 1, d_count):
+        members = np.flatnonzero(universe[:, t])
+        if len(members):
+            rank[members, t] = percentile_ranks(ratio[members, t])
+    return ratio, rank
 
 
 # reversal-v1: the week's losers.

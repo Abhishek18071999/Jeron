@@ -133,6 +133,12 @@ def reasons(m: Market, s: int, t: int, strategy: Strategy, params: Params) -> li
             f"Daily moves of {_value(m.volatility, s, t) * 100:.2f}% on average (standard "
             "deviation over a year)"
         )
+    elif strategy.key == "high52" and m.high52_rank is not None and m.high52_ratio is not None:
+        out.append(
+            f"Near its 52-week high: close {_value(m.high52_ratio, s, t) * 100:.1f}% of the "
+            f"high, rank {_value(m.high52_rank, s, t):.2f} in the universe (needs "
+            f"{params['min_rank']:g}), checked on the first session of the month"
+        )
     elif strategy.key == "reversal" and m.rev_rank is not None and m.rev_return is not None:
         out.append(
             f"Fell {-_value(m.rev_return, s, t) * 100:.1f}% in 5 sessions: rank "

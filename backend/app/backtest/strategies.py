@@ -585,6 +585,56 @@ LOW_VOL = Strategy(
     registered_on=date(2026, 11, 1),
 )
 
+
+# high52-v1 (docs/plans/high52-v1.md): the stocks nearest their 52-week high, monthly.
+HIGH52_EXIT_BELOW = 0.7
+
+
+def _high52_rank(m: Market) -> Array:
+    if m.high52_rank is None:
+        raise ValueError("this strategy needs the market's high52_rank")
+    return m.high52_rank
+
+
+def _high52_condition(m: Market, p: Params) -> Array:
+    rank = np.nan_to_num(_high52_rank(m), nan=-1.0)
+    if m.mom_return is None:
+        raise ValueError("this strategy needs the market's mom_return")
+    rising = np.nan_to_num(m.mom_return, nan=-1.0) > 0
+    return np.asarray((rank >= p["min_rank"]) & rising & rebalance_days(m), dtype=bool)
+
+
+def _high52_exit(m: Market, p: Params) -> Array:
+    # An unknown rank (left the universe, a gap in the data) is not an exit.
+    rank = np.nan_to_num(_high52_rank(m), nan=1.0)
+    return np.asarray((rank < HIGH52_EXIT_BELOW) & rebalance_days(m), dtype=bool)
+
+
+HIGH52 = Strategy(
+    key="high52",
+    version="high52-v1",
+    name="Stocks nearest their 52-week high (invest)",
+    tier=Tier.INVEST,
+    summary="Each month, own the rising stocks trading closest to their 52-week high.",
+    grid_axes={"min_rank": (0.9,), "stop_atr": (4.0,)},
+    default={"min_rank": 0.9, "stop_atr": 4.0},
+    describe=lambda p: [
+        "Enter at the close of the first session of a month when the stock's close over "
+        "its highest high of the last 252 sessions ranks in the top "
+        f"{100 - 100 * p['min_rank']:g}% of the universe and its 12-1 return is above 0 "
+        "(the 52-week-high effect, George and Hwang 2004). No trend or market-regime "
+        "filter."
+    ],
+    condition=_high52_condition,
+    exit_condition=_high52_exit,
+    exit_reason=f"no longer near its 52-week high (rank below {HIGH52_EXIT_BELOW:g})",
+    exit_rule=(
+        "Sell at the next open after the first session of a month on which the stock's "
+        f"52-week-high rank is below {HIGH52_EXIT_BELOW:g} (out of the top 30%)."
+    ),
+    registered_on=date(2026, 11, 6),
+)
+
 # Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
 # back above 40 after about 26 days.
 MIN_NEWS_SCORE = 40.0
@@ -707,6 +757,7 @@ STRATEGIES = {
         REVERSAL,
         FIP_MOMENTUM,
         LOW_VOL,
+        HIGH52,
     )
 }
 
