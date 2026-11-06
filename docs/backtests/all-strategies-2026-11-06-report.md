@@ -30,27 +30,27 @@ one that passes all seven section 6 checks *and* has a *strong* evidence rating 
 
 Sorted by checks passed, then evidence. **New** marks the eight versions first run today.
 
-| Strategy | Trades | Expectancy | PF | Max DD | CAGR | Sharpe | Positive regimes | Holdout expectancy (trades) | Holdout return | Section 6 | Evidence | Deflated Sharpe, own grid |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **fip-momentum-v1** | 212 | **0.493R** | **1.85** | 14.1% | 15.2% | **0.85** | bull, bear | **+0.392R** (42) | +8.5% | **7 of 7** | **strong** | **0.97** |
-| momentum-v1 | 206 | **0.667R** | 1.79 | 15.3% | 12.6% | 0.61 | all three | **+0.531R** (35) | **+20.9%** | **7 of 7** | moderate | 0.87 |
-| rs-pullback-v1 | 280 | 0.323R | 1.59 | 13.5% | **15.6%** | **0.85** | bull, sideways | +0.003R (46) | +2.3% | **7 of 7** | moderate | 0.95 |
-| combined-book-v1 | 292 | 0.237R | 1.54 | 13.3% | 13.6% | 0.70 | all three | +0.038R (54) | +4.1% | **7 of 7** | moderate | 0.85 |
-| trend-breakout-v1 (new) | 302 | 0.309R | 1.40 | 11.5% | 14.5% | 0.70 | bull only | +0.172R (31) | +6.5% | 6 (regimes) | moderate | 0.82 |
-| sector-rotation-v1 | 263 | 0.278R | 1.50 | 17.0% | 12.0% | 0.57 | bull, sideways | +0.226R (38) | +11.0% | 6 (benchmark) | moderate | 0.81 |
-| quality-trend-v1 | 201 | 0.637R | 1.91 | 16.0% | 14.2% | 0.76 | all three | 0 trades | (cash only) | 6 (holdout untestable) | weak | 0.93 |
-| results-drift-v1 | 209 | 0.341R | 1.49 | 12.0% | 12.4% | 0.69 | all three | -0.159R (41) | -2.6% | 6 (holdout) | weak | 0.87 |
-| low-vol-v1 | 167 | 0.485R | 1.66 | 14.8% | 9.1% | 0.34 | bull, bear | +0.137R (36) | -0.4% | 6 (benchmark) | weak | 0.79 |
-| score-swing-events-v1 (new) | 391 | 0.147R | 1.31 | **10.0%** | 10.6% | 0.46 | bull, bear | +0.033R (69) | +5.9% | 5 (expectancy, benchmark) | moderate | 0.61 |
-| high52-v1 (new) | 230 | 0.193R | 1.17 | 12.8% | 7.4% | 0.15 | all three | +0.085R (55) | -3.0% | 5 (PF, benchmark) | weak | 0.64 |
-| score-swing-v1 (new) | 449 | 0.046R | 1.02 | 15.1% | 5.2% | -0.11 | bull, bear | +0.061R (72) | +8.3% | 4 | weak | 0.13 |
-| pullback-trend-v1 (new) | 362 | 0.003R | 0.91 | 15.9% | 3.1% | -0.40 | bull, sideways | +0.096R (59) | +4.1% | 4 | weak | 0.03 |
-| breakout-52w-events-v1 (new) | 500 | 0.129R | 1.20 | 21.4% | 11.0% | 0.44 | bull, bear | +0.183R (98) | +9.0% | 3 | weak | 0.79 |
-| breakout-52w-v1 (new) | 501 | 0.090R | 1.15 | 22.2% | 10.1% | 0.36 | bull, bear | +0.233R (96) | +10.4% | 3 | weak | 0.76 |
-| reversal-v1 | 1,202 | 0.039R | 1.15 | 11.1% | 9.3% | 0.38 | bull, bear | -0.012R (209) | 0.0% | 3 | weak | 0.82 |
-| top-score-v1 | 441 | 0.015R | 0.96 | 14.0% | 3.4% | -0.30 | bear, sideways | -0.223R (86) | -2.3% | 3 | weak | 0.23 |
-| pullback-trend-events-v1 (new) | 396 | -0.005R | 0.89 | 18.0% | 2.5% | -0.51 | bull, bear | -0.040R (65) | +6.0% | 3 | weak | 0.03 |
-| *Spec bar* | >= 100 | > 0.15R | >= 1.3 | <= 20% | | > Nifty 500 | >= 2 of 3 | > 0 | | 7 of 7 | | 0.95 |
+| Strategy | Trades | Expectancy | PF | Max DD | CAGR | Sharpe | Positive regimes | Holdout expectancy (trades) | Holdout return | Section 6 | Evidence | Deflated Sharpe, own grid | Deflated Sharpe, all 68 variants |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **fip-momentum-v1** | 212 | **0.493R** | **1.85** | 14.1% | 15.2% | **0.85** | bull, bear | **+0.392R** (42) | +8.5% | **7 of 7** | **strong** | **0.97** | **0.38** |
+| momentum-v1 | 206 | **0.667R** | 1.79 | 15.3% | 12.6% | 0.61 | all three | **+0.531R** (35) | **+20.9%** | **7 of 7** | moderate | 0.87 | 0.19 |
+| rs-pullback-v1 | 280 | 0.323R | 1.59 | 13.5% | **15.6%** | **0.85** | bull, sideways | +0.003R (46) | +2.3% | **7 of 7** | moderate | 0.95 | 0.37 |
+| combined-book-v1 | 292 | 0.237R | 1.54 | 13.3% | 13.6% | 0.70 | all three | +0.038R (54) | +4.1% | **7 of 7** | moderate | 0.85 | 0.24 |
+| trend-breakout-v1 (new) | 302 | 0.309R | 1.40 | 11.5% | 14.5% | 0.70 | bull only | +0.172R (31) | +6.5% | 6 (regimes) | moderate | 0.82 | 0.24 |
+| sector-rotation-v1 | 263 | 0.278R | 1.50 | 17.0% | 12.0% | 0.57 | bull, sideways | +0.226R (38) | +11.0% | 6 (benchmark) | moderate | 0.81 | 0.16 |
+| quality-trend-v1 | 201 | 0.637R | 1.91 | 16.0% | 14.2% | 0.76 | all three | 0 trades | (cash only) | 6 (holdout untestable) | weak | 0.93 | 0.29 |
+| results-drift-v1 | 209 | 0.341R | 1.49 | 12.0% | 12.4% | 0.69 | all three | -0.159R (41) | -2.6% | 6 (holdout) | weak | 0.87 | 0.24 |
+| low-vol-v1 | 167 | 0.485R | 1.66 | 14.8% | 9.1% | 0.34 | bull, bear | +0.137R (36) | -0.4% | 6 (benchmark) | weak | 0.79 | 0.06 |
+| score-swing-events-v1 (new) | 391 | 0.147R | 1.31 | **10.0%** | 10.6% | 0.46 | bull, bear | +0.033R (69) | +5.9% | 5 (expectancy, benchmark) | moderate | 0.61 | 0.10 |
+| high52-v1 (new) | 230 | 0.193R | 1.17 | 12.8% | 7.4% | 0.15 | all three | +0.085R (55) | -3.0% | 5 (PF, benchmark) | weak | 0.64 | 0.02 |
+| score-swing-v1 (new) | 449 | 0.046R | 1.02 | 15.1% | 5.2% | -0.11 | bull, bear | +0.061R (72) | +8.3% | 4 | weak | 0.13 | 0.004 |
+| pullback-trend-v1 (new) | 362 | 0.003R | 0.91 | 15.9% | 3.1% | -0.40 | bull, sideways | +0.096R (59) | +4.1% | 4 | weak | 0.03 | 0.0003 |
+| breakout-52w-events-v1 (new) | 500 | 0.129R | 1.20 | 21.4% | 11.0% | 0.44 | bull, bear | +0.183R (98) | +9.0% | 3 | weak | 0.79 | 0.09 |
+| breakout-52w-v1 (new) | 501 | 0.090R | 1.15 | 22.2% | 10.1% | 0.36 | bull, bear | +0.233R (96) | +10.4% | 3 | weak | 0.76 | 0.06 |
+| reversal-v1 | 1,202 | 0.039R | 1.15 | 11.1% | 9.3% | 0.38 | bull, bear | -0.012R (209) | 0.0% | 3 | weak | 0.82 | 0.07 |
+| top-score-v1 | 441 | 0.015R | 0.96 | 14.0% | 3.4% | -0.30 | bear, sideways | -0.223R (86) | -2.3% | 3 | weak | 0.23 | 0.001 |
+| pullback-trend-events-v1 (new) | 396 | -0.005R | 0.89 | 18.0% | 2.5% | -0.51 | bull, bear | -0.040R (65) | +6.0% | 3 | weak | 0.03 | 0.0001 |
+| *Spec bar* | >= 100 | > 0.15R | >= 1.3 | <= 20% | | > Nifty 500 | >= 2 of 3 | > 0 | | 7 of 7 | | 0.95 | 0.95 |
 
 Nifty 500 over the test period: Sharpe above 6.5% of 0.59 (runs 1 to 9) and 0.57 (runs 11
 to 18), CAGR 16.0 to 16.4%, max drawdown 38.3%. Win rates are in `runs-2026-11-06/runs.json`
@@ -106,7 +106,8 @@ strategy's holdout from an earlier run is not directly comparable with today's.
   zero (+0.25R to +0.75R, profit factor 1.23 to 2.68). It stays positive with slippage
   x2 (+0.48R), charges x1.5 (+0.50R), entries one session late (+0.56R), without its
   five best trades (+0.31R) and without its best year (+0.37R). It is the only strategy
-  whose own-grid deflated Sharpe clears 0.95 (0.97, one grid point).
+  whose own-grid deflated Sharpe clears 0.95 (0.97, one grid point), and its deflated
+  Sharpe against all 68 variants (0.38) is the highest of all 18 versions.
 - `momentum-v1` has the higher expectancy (0.67R) and the better holdout (+0.53R,
   +20.9%), and it is positive in all three regimes. On risk-adjusted terms it is weaker
   (Sharpe 0.61, only 0.02 above Nifty 500) and its evidence is moderate. It was also the
@@ -119,9 +120,13 @@ strategy's holdout from an earlier run is not directly comparable with today's.
 
 ## What this report doesn't claim
 
-- **Not proof of an edge.** fip-momentum-v1's deflated Sharpe against all 67 variants
-  tried by 2026-11-01 was 0.37. Today's eight versions add more trials on the same ten
-  years, which can only lower that number. It was not recomputed here.
+- **Not proof of an edge.** Against all 68 variants tried (every grid point of every
+  strategy on this branch; quality-trend excluded as on 2026-11-01, low-vol-v1's code not
+  on this branch), fip-momentum-v1's deflated Sharpe is 0.38, the highest of any
+  strategy, with rs-pullback-v1 at 0.37. That is far from 0.95: luck across ten years of
+  trying is not ruled out. Today's runs add only one trial (high52-v1's single grid
+  point); the seven older versions' grids were already among the 67 counted on 2026-11-01,
+  so fip's figure is unchanged (0.37 then, 0.38 now).
 - **The holdout read differs by version.** fip, momentum, rs-pullback, results-drift and
   sector-rotation had their holdouts read on 2026-11-01 (some earlier). Today's eight
   versions read theirs for the first time, on a window a week later and in a flatter
@@ -148,17 +153,28 @@ strategy's holdout from an earlier run is not directly comparable with today's.
 ## Reproduce
 
 `docs/backtests/runs-2026-11-06/`: `runs.json` (runs 11 to 18: metadata and full
-summaries) and `scripts/extract.py` (prints every stored run's gates, holdout and
-evidence checks). The commands, run inside the `scheduler` container:
+summaries) and `scripts/`:
+
+- `extract.py`: every stored run's gates, holdout and evidence checks.
+- `dump.py`: writes `runs.json`.
+- `dsr_all.py`: the deflated Sharpe of every run against all 68 variants (about 10
+  minutes; it simulates every grid point).
+
+Run 11 was made by the autopilot. Runs 12 to 18 were made by hand inside the `scheduler`
+container, because Docker Desktop's port forwarding had stopped answering from the host;
+`docker compose restart backend db` fixed it. The same command from `backend/`, as in
+`runs-2026-11-01/scripts/bt.sh`:
 
 ```
-python -m app.cli backtest --strategy high52        # run 11, by the autopilot
-python -m app.cli backtest --strategy score-swing --strategy breakout-52w \
-  --strategy pullback-trend --strategy score-swing-events \
-  --strategy breakout-52w-events --strategy pullback-trend-events \
-  --strategy trend-breakout                          # runs 12 to 18, by hand
+export JERON_DATABASE_URL=postgresql+psycopg://jeron:jeron@127.0.0.1:5432/jeron
+uv run python -m app.cli backtest --strategy high52              # run 11
+uv run python -m app.cli backtest --strategy score-swing --strategy breakout-52w   --strategy pullback-trend --strategy score-swing-events   --strategy breakout-52w-events --strategy pullback-trend-events   --strategy trend-breakout                                        # runs 12 to 18
+uv run python ../docs/backtests/runs-2026-11-06/scripts/extract.py
+PYTHONPATH=. uv run python ../docs/backtests/runs-2026-11-06/scripts/dsr_all.py
 ```
+
+`extract.py` and `dsr_all.py` were run from `backend/` this way for this report.
 
 Runs 1 to 9 are in `runs-2026-11-01/runs.json`. Run 10 (`low-vol-v1`, 2026-11-03) is in
 the database but was made by code on branch `ccr-a8d19389-i000c5`, which is not merged
-into this branch.
+into this branch, so its grid is not among the 68 variants.

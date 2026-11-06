@@ -1,8 +1,8 @@
-# Run inside the scheduler container (host "db"): docker compose cp this file, then
-# docker compose exec scheduler python /tmp/extract.py
-import json, sys, psycopg
+# Prints every stored run's gates, holdout and evidence checks. From backend/:
+# JERON_DATABASE_URL=... uv run python ../docs/backtests/runs-2026-11-06/scripts/extract.py
+import json, os, psycopg
 
-c = psycopg.connect("postgresql://jeron:jeron@db/jeron")
+c = psycopg.connect(os.environ.get("JERON_DATABASE_URL", "postgresql://jeron:jeron@localhost/jeron").replace("+psycopg", ""))
 rows = c.execute(
     "select id, strategy_version, summary, live_eligible, holdout_start, created_at "
     "from backtest_runs order by id"
