@@ -635,6 +635,54 @@ HIGH52 = Strategy(
     registered_on=date(2026, 11, 6),
 )
 
+# residual-momentum-v1 (docs/plans/residual-momentum-v1.md): the top tenth by market-model
+# residual momentum on rebalance days; out below the top quarter.
+RESMOM_EXIT_BELOW = 0.75
+
+
+def _resmom_rank(m: Market) -> Array:
+    if m.resmom_rank is None:
+        raise ValueError("this strategy needs the market's resmom_rank")
+    return m.resmom_rank
+
+
+def _resmom_condition(m: Market, p: Params) -> Array:
+    rank = np.nan_to_num(_resmom_rank(m), nan=-1.0)
+    return np.asarray((rank >= p["min_rank"]) & rebalance_days(m), dtype=bool)
+
+
+def _resmom_exit(m: Market, p: Params) -> Array:
+    # An unknown rank (left the universe, a gap in the data) is not an exit.
+    rank = np.nan_to_num(_resmom_rank(m), nan=1.0)
+    return np.asarray((rank < RESMOM_EXIT_BELOW) & rebalance_days(m), dtype=bool)
+
+
+RESIDUAL_MOMENTUM = Strategy(
+    key="residual-momentum",
+    version="residual-momentum-v1",
+    name="Residual momentum leaders (invest)",
+    tier=Tier.INVEST,
+    summary="Each month, own the stocks that rose most on their own, not just with the market.",
+    grid_axes={"min_rank": (0.9,), "stop_atr": (4.0,)},
+    default={"min_rank": 0.9, "stop_atr": 4.0},
+    describe=lambda p: [
+        "Enter at the close of the first session of a month when the stock's residual "
+        f"momentum rank is in the top {100 - 100 * p['min_rank']:g}% of the universe. "
+        "Residual momentum: over the daily returns from 251 to 21 sessions ago, the "
+        "stock's return minus beta x Nifty 500's, summed and divided by its standard "
+        "deviation (Blitz, Huij and Martens 2011, on the market model). No trend or "
+        "market-regime filter."
+    ],
+    condition=_resmom_condition,
+    exit_condition=_resmom_exit,
+    exit_reason=f"left the residual momentum leaders (rank below {RESMOM_EXIT_BELOW:g})",
+    exit_rule=(
+        "Sell at the next open after the first session of a month on which the stock's "
+        f"residual momentum rank is below {RESMOM_EXIT_BELOW:g} (out of the top quarter)."
+    ),
+    registered_on=date(2026, 11, 7),
+)
+
 # Bad news keeps a stock out until its score recovers: one -2 results label scores 25,
 # back above 40 after about 26 days.
 MIN_NEWS_SCORE = 40.0
@@ -758,6 +806,7 @@ STRATEGIES = {
         FIP_MOMENTUM,
         LOW_VOL,
         HIGH52,
+        RESIDUAL_MOMENTUM,
     )
 }
 
