@@ -224,3 +224,16 @@ def test_setup_shows_the_kill_switch_and_the_heartbeat(session):
     assert steps[0]["key"] == "halt" and "checking prices" in steps[0]["detail"]
     halt.resume(session)
     assert client.get("/setup").json()["steps"][0]["key"] != "halt"
+
+
+def test_the_results_seed_waits_for_the_price_history(session, tmp_path):
+    # The import keeps only filings of stocks it knows: queued on a fresh install's first
+    # minute it stored nothing and, marked seeded, was never queued again.
+    folder = tmp_path / "imports"
+    assert autopilot.seed_results(session, folder) is False
+    assert "seeded" not in autopilot.load_state()
+    store.save_bars(session, store.NSE_BARS, [_bar("RELIANCE", TODAY, 1200)])
+    session.commit()
+    assert autopilot.seed_results(session, folder) is True
+    assert (folder / autopilot.SEED.name).exists()
+    assert autopilot.seed_results(session, folder) is False  # once

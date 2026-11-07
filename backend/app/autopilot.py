@@ -266,10 +266,19 @@ def resume_interrupted(folder: Path) -> None:
 
 
 def seed_results(session: Session, folder: Path) -> bool:
-    """Queues the bundled results lists once, when no results are loaded."""
+    """Queues the bundled results lists once, when no results are loaded and the price
+    history is in: the import keeps only filings of stocks it knows, so queued before
+    the history it would store nothing and never be queued again."""
+    from app.data.store import NSE_BARS
     from app.fundamentals.job import results_loaded
+    from app.models import DailyBar
 
     if load_state().get("seeded") or not SEED.exists() or results_loaded(session):
+        return False
+    if (
+        session.scalar(select(DailyBar.instrument_id).where(DailyBar.source == NSE_BARS).limit(1))
+        is None
+    ):
         return False
     folder.mkdir(parents=True, exist_ok=True)
     shutil.copy(SEED, folder / SEED.name)

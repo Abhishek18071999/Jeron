@@ -1,6 +1,7 @@
 """Quarterly results on a real Postgres: loading NSE's filings (a fake download of real
 XBRL samples), point-in-time reads and the stock page's endpoint."""
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -9,7 +10,9 @@ from sqlalchemy import func, select, update
 
 from app.data import store
 from app.data.fundamentals import IST, read_results_csv
+from app.data.http import FetchError
 from app.fundamentals.job import (
+    GIVE_UP_AFTER,
     import_results,
     quarters_known,
     reparse_cached,
@@ -72,6 +75,49 @@ def test_loads_consolidated_filings_of_known_liquid_stocks(empty_session):
     assert again.already == 2 and again.stored == 0
     assert len(fetch.urls) == 4  # only the symbol lookup again (the CLI caches files)
     assert s.scalar(select(func.count()).select_from(FinancialResult)) == 2
+
+
+def test_no_stock_known_downloads_nothing(empty_session):
+    # Before history is loaded nothing can match: the renamed-company lookup used to
+    # download one filing per listed company anyway (hours when NSE is unreachable).
+    fetch = FakeArchive()
+    run = import_results(empty_session, _refs(), fetch)
+    assert fetch.urls == [] and run.matched == 0 and run.stored == 0
+
+
+class DeadArchive:
+    def __init__(self):
+        self.urls = []
+
+    def __call__(self, url):
+        self.urls.append(url)
+        raise FetchError(f"{url}: gave up after 8 attempts (ConnectError)")
+
+
+def test_import_stops_when_downloads_keep_failing(empty_session):
+    s = empty_session
+    _setup(s, {"RELIANCE": "Reliance Industries Limited", "UNKNOWNCO": "Placeholder Ltd"})
+    base = _refs()[0]
+    # Many unmatched companies, then many filings of a known stock: each loop gives up
+    # after GIVE_UP_AFTER failures in a row instead of trying every one.
+    others = [
+        replace(base, company=f"Gone Company {i} Limited", xbrl_url=f"https://x/o{i}.xml")
+        for i in range(20)
+    ]
+    mine = [
+        replace(
+            base,
+            company="Reliance Industries Limited",
+            consolidated=True,
+            period_end=date(2020 + i // 4, 3 * (i % 4) + 3, 28),
+            xbrl_url=f"https://x/r{i}.xml",
+        )
+        for i in range(20)
+    ]
+    fetch = DeadArchive()
+    run = import_results(s, others + mine, fetch, all_stocks=True)
+    assert len(fetch.urls) == 2 * GIVE_UP_AFTER
+    assert run.stored == 0 and "is NSE reachable?" in run.failed[-1]
 
 
 def test_point_in_time(empty_session):

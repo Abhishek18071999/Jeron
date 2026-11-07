@@ -84,6 +84,11 @@ def choose(refs: Iterable[FilingRef]) -> list[FilingRef]:
     return sorted(chosen, key=lambda r: (r.period_end, r.company, r.disseminated_at))
 
 
+# Consecutive failed downloads (each already retried by the Fetcher) before an import
+# stops: NSE is unreachable, and every further filing would wait out the same retries.
+GIVE_UP_AFTER = 3
+
+
 def import_results(
     session: Session,
     refs: Sequence[FilingRef],
@@ -103,7 +108,7 @@ def import_results(
     picked: list[tuple[str, FilingRef]] = []
     # A company renamed since it filed matches no current name: one of its filings says
     # its symbol (downloaded once, kept with the others).
-    by_name.update(_symbols_from_filings(refs, by_name, known, fetch))
+    by_name.update(_symbols_from_filings(refs, by_name, known, fetch, log))
     for ref in refs:
         symbol = by_name.get(name_key(ref.company))
         if symbol is None:
@@ -122,7 +127,14 @@ def import_results(
             )
         )
     )
+    fetch_failures = 0
     for n, ref in enumerate(chosen, start=1):
+        if fetch_failures >= GIVE_UP_AFTER:
+            run.failed.append(
+                f"stopped after {GIVE_UP_AFTER} downloads failed in a row (is NSE reachable?);"
+                " run the import again later, stored filings are kept"
+            )
+            break
         if ref.xbrl_url is None:
             run.no_xbrl += 1
             continue
@@ -132,8 +144,10 @@ def import_results(
         try:
             result = parse_xbrl(fetch(ref.xbrl_url), ref.period_end)
         except (FetchError, NotPublishedError, ResultsFormatError) as exc:
+            fetch_failures = fetch_failures + 1 if isinstance(exc, FetchError) else 0
             run.failed.append(f"{ref.company} {ref.period_end}: {exc}")
             continue
+        fetch_failures = 0
         symbol = symbol_of[(ref.company, ref.xbrl_url)]
         if result.symbol and result.symbol != symbol and result.symbol in known:
             symbol = result.symbol  # the filing's own symbol wins over the name match
@@ -209,10 +223,17 @@ def reparse_cached(
 
 
 def _symbols_from_filings(
-    refs: Iterable[FilingRef], by_name: dict[str, str], known: set[str], fetch: Fetch
+    refs: Iterable[FilingRef],
+    by_name: dict[str, str],
+    known: set[str],
+    fetch: Fetch,
+    log: Log = _quiet,
 ) -> dict[str, str]:
     """name_key -> symbol for companies no current name matches, from the newest
-    filing of each that has XBRL."""
+    filing of each that has XBRL. Nothing is downloaded when no stock is known (none
+    could match), and the lookup stops when downloads keep failing."""
+    if not known:
+        return {}
     newest: dict[str, FilingRef] = {}
     for ref in refs:
         k = name_key(ref.company)
@@ -221,11 +242,23 @@ def _symbols_from_filings(
         if k not in newest or ref.disseminated_at > newest[k].disseminated_at:
             newest[k] = ref
     found = {}
+    failures = 0
     for k, ref in newest.items():
+        if failures >= GIVE_UP_AFTER:
+            log(
+                f"Renamed-company lookup stopped after {GIVE_UP_AFTER} downloads failed in a"
+                " row; those companies stay unmatched this run."
+            )
+            break
         try:
             symbol = parse_xbrl(fetch(ref.xbrl_url or "")).symbol
-        except (FetchError, NotPublishedError, ResultsFormatError):
+        except FetchError:
+            failures += 1
             continue
+        except (NotPublishedError, ResultsFormatError):
+            failures = 0
+            continue
+        failures = 0
         if symbol in known:
             found[k] = symbol
     return found
