@@ -8,14 +8,14 @@ So this study asks a different question, one the stored runs can answer: the thr
 strategies that pass section 6 keep more than half their capital idle. Is there a better
 use for that capital, or a better way to hold the three together?
 
-**Verdict: no.** Three ideas were checked. One is rejected, one is too small to tell from
-luck, and one is a risk dial, not an edge. `fip-momentum-v1` on its paper gate is still
+**Verdict: no.** Three ideas were checked. Two are risk dials, not edges, and one is too
+small to tell from luck. `fip-momentum-v1` on its paper gate is still
 the strongest thing Jeron has, and nothing here should change what is paper-traded.
 
 Data: `runs-2026-11-01/equity.json` (runs 1 to 3: each run's daily equity, its cash-sweep
 line and Nifty 500), 2019-10-31 to 2026-10-30, 1,739 sessions, after costs, the holdout
-year included. Script and its output: `allocation-2026-11-10/`. No market data was
-loaded: none is reachable from where this was written. Every number below is descriptive,
+year included. Script and its output: `allocation-2026-11-10/`. The only market data
+added is Yahoo's Nifty 500 closes for section 3. Every number below is descriptive,
 on a period all three strategies were already selected on.
 
 ## 1. How much capital is idle
@@ -44,27 +44,40 @@ rise: this buys return with risk at a fair price, as `app/portfolio/calc.py` alr
 drawdown limit, and that rests on one crash (March 2020). No switching costs or tax are
 counted, so the real figures are a little lower.
 
-## 3. Index only while its trend is up: rejected
+## 3. Index only while its trend is up: a better dial, still not an edge
 
 The idea: hold the idle cash in the index only while Nifty 500 ended the last month above
 its 200-session average (Faber, "A Quantitative Approach to Tactical Asset Allocation",
 2007), to keep the extra return and avoid the index's falls. One rule, no grid, 0.1% of
-the amount moved per switch.
+the amount moved per switch. The stored benchmark starts on 2019-10-31, so the average's
+history comes from Yahoo's Nifty 500 closes since 2016 (`nifty500-yahoo.csv`, fetched
+with `app/data/http.py`). The rule left the index on 2020-02-28, before most of the March
+2020 fall, and switched 13 times in seven years.
 
-| From 2020-08-31 | CAGR | Sharpe | Max drawdown |
+| `fip-momentum-v1`, whole period | CAGR | Sharpe | Max drawdown |
 |---|---|---|---|
-| `fip-momentum-v1` alone | 16.1% | 0.88 | 14.1% |
-| idle cash always in the index | 21.8% | 0.91 | 23.9% |
-| idle cash in the index while the trend is up | 19.9% | 0.87 | 24.0% |
+| alone | 14.1% | 0.73 | 14.1% |
+| idle cash always in the index | 18.3% | 0.66 | 38.5% |
+| half of idle cash always in the index | 16.3% | 0.72 | 23.8% |
+| idle cash in the index while the trend is up | 17.1% | 0.72 | 24.1% |
+| half of idle cash, while the trend is up | 15.6% | 0.74 | 19.4% |
 
-The gate cost about two points of return a year over 11 switches and did not reduce the
-drawdown at all, for any of the three strategies. The worst stretch came when the
-strategy's own stocks and the index fell together, before a month-end reading could act.
-**The one event the gate exists for, March 2020, is not in this test**: the stored
-benchmark starts on 2019-10-31, so the 200-session average first exists in August 2020.
-On the evidence available the gate is all cost and no benefit, so it was not built. If
-it is ever revisited, the test is the same rule on index closes from 2016, written down
-before the run.
+Read with care:
+- The gate cut the cash-sweep line's drawdown from 38.5% to 24.1% and gave up 1.2 points
+  of return a year. At the same drawdown as "half, always" it earned 0.8 points more.
+  That is the whole benefit, and all of it comes from one event, March 2020.
+- From August 2020 on (part a of the output) the gate only cost: about two points a year
+  and no smaller drawdown, because the worst stretch came when the strategy's own stocks
+  and the index fell together inside a month.
+- The Sharpe ratio never rises above the strategy's own (0.72 to 0.74 against 0.73). It
+  is a way to take more risk a little more cheaply, not a source of return.
+- `momentum-v1` looks the same (17.2%, 23.1%); `rs-pullback-v1` gains less (15.8%, 24.1%).
+
+Not built as a setting. If more return for more drawdown is wanted, "half of idle cash,
+only while the index ended last month above its 200-session average" is the only row
+that adds return (about 1.5 points a year) and stays under the spec's 20% drawdown limit
+for all three strategies. That rests on one crash and counts no tax on the switches (each
+exit from the fund within a year is a short-term sale).
 
 ## 4. Capital split equally between the passing strategies: too small to tell
 

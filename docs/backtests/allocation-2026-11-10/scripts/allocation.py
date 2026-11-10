@@ -6,7 +6,8 @@ Nifty 500. Run from this folder: python3 allocation.py
 1. Idle cash is recovered from the cash-sweep line (stats.cash_sweep_curve run backwards).
 2. A fixed share of idle cash in the index: the return/drawdown trade-off.
 3. The same, only while Nifty 500 closed the last month above its 200-session average
-   (Faber 2007), 0.1% of the amount moved per switch.
+   (Faber 2007), 0.1% of the amount moved per switch. Once on the stored benchmark alone,
+   once with the average's history from Yahoo's Nifty 500 closes (../nifty500-yahoo.csv).
 4. An equal split of capital between strategies, rebalanced daily (no costs: an upper bound).
 5. Paired block bootstrap of the Sharpe difference between the split and fip-momentum-v1.
 """
@@ -119,10 +120,10 @@ for v in PASSING:
         print(f"  {v:18s} share {s:4.2f}  {stats(curve)}  holdout "
               f"{100 * (curve[-1] / curve[H] - 1):+5.1f}%")
 
-print("\n3. Trend gate (month-end, 200-session average), from the first session it exists")
+print("\n3. Trend gate (month-end, 200-session average)")
 gate = month_end_trend()
 start = next(i for i, g in enumerate(gate) if g is not None)
-print(f"  from {DATES[start]} (the March 2020 fall is before this: not tested)")
+print(f"  a. stored benchmark only, from {DATES[start]} (after the March 2020 fall)")
 print(f"  Nifty 500          {stats(BENCH[start:])}")
 for v in PASSING:
     always, _ = swept(v, 1.0, None, start)
@@ -130,6 +131,35 @@ for v in PASSING:
     print(f"  {v:18s} alone   {stats(col(v, 'equity')[start:])}")
     print(f"  {'':18s} always  {stats(always)}")
     print(f"  {'':18s} gated   {stats(gated)}  ({n} switches)")
+
+# Yahoo's Nifty 500 closes from 2016 (../nifty500-yahoo.csv) give the average its history,
+# so the whole period, March 2020 included, can be tested.
+rows = [x.split(",") for x in (HERE / "../nifty500-yahoo.csv").read_text().split()[1:]]
+ydates, yclose = [r[0] for r in rows], np.array([float(r[1]) for r in rows])
+known, state = {}, None
+for i, d in enumerate(ydates):
+    last_of_month = i + 1 < len(ydates) and ydates[i + 1][:7] != d[:7]
+    if last_of_month and i >= 199:
+        state = bool(yclose[i] > yclose[i - 199 : i + 1].mean())
+    known[d] = state
+full, prev = [], None
+for d in DATES:
+    prev = known.get(d, prev)
+    full.append(bool(prev))
+flips = [DATES[i] for i in range(1, len(full)) if full[i] != full[i - 1]]
+print(f"  b. average from Yahoo's closes since {ydates[0]}: whole period")
+print(f"  in the index at the start: {full[0]}; switches on {', '.join(flips)}")
+for v in PASSING:
+    always, _ = swept(v, 1.0)
+    half, _ = swept(v, 0.5)
+    gated, n = swept(v, 1.0, full)
+    gated_half, _ = swept(v, 0.5, full)
+    print(f"  {v:18s} alone        {stats(col(v, 'equity'))}")
+    print(f"  {'':18s} always       {stats(always)}")
+    print(f"  {'':18s} half, always {stats(half)}")
+    print(f"  {'':18s} gated        {stats(gated)}  holdout "
+          f"{100 * (gated[-1] / gated[H] - 1):+5.1f}%  ({n} switches)")
+    print(f"  {'':18s} half, gated  {stats(gated_half)}")
 
 print("\n4. Capital split equally between strategies")
 combos = [["fip-momentum-v1"], ["fip-momentum-v1", "rs-pullback-v1"],
