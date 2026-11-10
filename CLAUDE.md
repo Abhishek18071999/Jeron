@@ -1,8 +1,45 @@
-# Jeron: notes for coding agents
+# CLAUDE.md
 
-Read `docs/spec.md` first. It is the brief, including how to work (section 0):
-plan each milestone in `docs/plans/M<n>.md`, one branch and PR per milestone, tests
-are part of done, never commit secrets.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Jeron is a personal research and decision-support tool for Indian equities (NSE), for
+one user on their own computer. Read `docs/spec.md` first. It is the brief, including
+how to work (section 0): plan each milestone in `docs/plans/M<n>.md`, one branch and PR
+per milestone, tests are part of done, never commit secrets. `docs/decisions/` says why
+things are the way they are (numbered, cited below as "decision 00NN");
+`docs/architecture/` is a longer walkthrough of the system and the database.
+
+## How it fits together
+
+Five Docker Compose services: `db` (Postgres 16), `backend` (the FastAPI API),
+`scheduler` (`python -m app.scheduler`, same image), `web` (Next.js) and `backup`. There
+is no job queue: every job is an `app/cli.py` command, and the scheduler and the
+autopilot run those commands.
+
+The `daily` command is the spine, and each step feeds the next:
+
+1. `data/pipeline.py` `daily_update`: prices, corporate actions, the second-source
+   cross-check, then the day's quality report.
+2. `scan/job.py` `run_scan`: universe and technical score; stores a blocked run when
+   the quality report FAILs.
+3. `news/job.py` `run_daily_news`: labels the day's announcements.
+4. `paper/job.py` `run_paper` (only when 1 and 2 were ok): replays every paper account
+   through the backtest engine; new orders become signals.
+5. `alerts/job.py` `run_alerts`: signal alerts and the daily summary, sent even on a
+   blocked day, saying why.
+
+The same engine (`backtest/engine.py`) runs backtests and paper trading, so a rule
+changed there changes both; `exits/rules.py` restates its exit rules for one real
+position and is tested against it. The real account is separate from paper: fills are
+typed or imported into the journal, and the plan, portfolio and exits packages read the
+journal.
+
+Most packages split the same way: a pure module (`calc.py`, `score.py`, `rules.py`,
+`format.py`...) with no database imports, tested without a database, and a
+`service.py` or `job.py` that loads rows, calls it and stores the result. New logic goes
+in the pure module. Stored results are append-only and versioned (score, strategy,
+engine and prompt versions; signals, plans, alerts and proposals stored once): change
+behaviour by adding a version, not by editing what a stored row meant.
 
 ## Layout
 
@@ -276,15 +313,25 @@ are part of done, never commit secrets.
 
 Backend (from `backend/`):
 - `uv sync` install
-- `uv run pytest -q` tests; database tests run when `JERON_TEST_DATABASE_URL` is set
-  (e.g. `postgresql+psycopg://jeron:jeron@localhost:5432/jeron_test`)
-- `uv run ruff check . && uv run ruff format --check . && uv run mypy app`
+- `uv run pytest -q` tests; one file or test: `uv run pytest -q tests/test_score.py`,
+  `uv run pytest -q tests/test_score.py::test_name`, or `-k words`
+- Database tests (`tests/test_*_db.py` and others marked `requires_db`) are skipped
+  unless `JERON_TEST_DATABASE_URL` is set, e.g.
+  `postgresql+psycopg://jeron:jeron@localhost:5432/jeron_test`. CI sets it, so run them
+  before pushing changes to database code. `docker compose up -d db` gives a Postgres
+  on `localhost:5432`; create the empty `jeron_test` database in it once. The tests
+  migrate it and empty every table between tests, so never point it at real data.
+- `uv run ruff check . && uv run ruff format --check . && uv run mypy app` (mypy is
+  strict; `uv run ruff format .` fixes formatting)
+- `uv run python -m app.cli <command>` runs a job (needs `JERON_DATABASE_URL`); in
+  Docker, `docker compose exec backend python -m app.cli <command>`
 - `uv run alembic revision --autogenerate -m "..."`, `uv run alembic upgrade head`
 - `uv run uvicorn app.main:app --reload` (needs `JERON_DATABASE_URL`)
 
 Web (from `web/`):
 - `npm ci`, `npm run dev`, `npm run lint`, `npm run typecheck`, `npm test` (Node's test
   runner on `src/lib/*.test.ts`), `npm run build`
+- One test file: `node --experimental-strip-types --test src/lib/briefing.test.ts`
 
 Everything: `docker compose up --build` from the repo root.
 
