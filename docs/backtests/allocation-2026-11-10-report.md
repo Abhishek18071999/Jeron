@@ -3,7 +3,8 @@
 Asked for by Abhishek ("discover, build and execute the most profitable realistic strategy
 possible"). This is not a new signal and not a new backtest. 68 variants have already been
 tried on these ten years, and `residual-momentum-v1` (pre-registered 2026-11-07 for the
-same request) has not been run yet. Another variant picked today would only add a trial.
+same request) had not been run when this was written (it has since been run on Yahoo data,
+`yahoo-2026-11-10/`). Another variant picked today would only add a trial.
 So this study asks a different question, one the stored runs can answer: the three
 strategies that pass section 6 keep more than half their capital idle. Is there a better
 use for that capital, or a better way to hold the three together?
@@ -111,9 +112,10 @@ not a new strategy version.
 
 ## What would add real evidence (all need the install with its data)
 
-1. Run `residual-momentum-v1` once, as its plan says:
-   `python -m app.cli backtest --strategy residual-momentum`. It is the one registered
-   idea with no result.
+1. Run `residual-momentum-v1` once on NSE data, as its plan says:
+   `python -m app.cli backtest --strategy residual-momentum`. On Yahoo data it passed all
+   seven checks with the best Sharpe of any version (1.27) and a weak holdout
+   (`yahoo-2026-11-10/`); the NSE run decides.
 2. Load the 2025-26 quarterly results (Financial Results CSVs from nseindia.com, on the
    Setup page). `quality-trend-v1` had the best test years of any version (+0.64R, profit
    factor 1.91, positive in all three regimes) and has never traded its holdout because
