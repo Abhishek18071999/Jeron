@@ -89,6 +89,10 @@ behaviour by adding a version, not by editing what a stored row meant.
     Blitz, Huij and Martens 2011, `Market.resmom_rank`, one grid point,
     `docs/plans/residual-momentum-v1.md`; 7 of 7 on NSE data but weak evidence and no better than
     `momentum-v1`, `docs/backtests/residual-momentum-v1-report.md`);
+    `value-trend-v1` (invest, monthly: the cheapest fifth by point-in-time earnings yield
+    with a positive 12-1 return, `Market.earnings_yield` and `Market.value_rank`, one grid
+    point, `docs/plans/value-trend-v1.md`; 7 of 7 with strong evidence on NSE data,
+    `docs/backtests/value-trend-v1-report.md`; needs results kept current);
     `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
     point, `docs/plans/paper-review-v1.md`),
     `reversal-v1` (swing, short-term reversal of no-news losers on `Market.rev_rank`, one

@@ -786,6 +786,57 @@ def with_events(base: Strategy) -> Strategy:
     )
 
 
+# value-trend-v1 (docs/plans/value-trend-v1.md): the cheapest fifth by earnings yield with a
+# positive 12-1 return, monthly; out above the median.
+VALUE_MAX_RANK = 0.20
+VALUE_EXIT_ABOVE = 0.50
+
+
+def _value_rank(m: Market) -> Array:
+    if m.value_rank is None:
+        raise ValueError("this strategy needs the earnings yields (run fundamentals-import)")
+    return m.value_rank
+
+
+def _value_condition(m: Market, p: Params) -> Array:
+    rank = np.nan_to_num(_value_rank(m), nan=np.inf)
+    if m.mom_return is None:
+        raise ValueError("this strategy needs the market's mom_return")
+    rising = np.nan_to_num(m.mom_return, nan=-1.0) > 0
+    return np.asarray((rank <= VALUE_MAX_RANK) & rising & rebalance_days(m), dtype=bool)
+
+
+def _value_exit(m: Market, p: Params) -> Array:
+    # An unknown rank (left the universe, results stale or a loss) is not an exit.
+    rank = np.nan_to_num(_value_rank(m), nan=-1.0)
+    return np.asarray((rank > VALUE_EXIT_ABOVE) & rebalance_days(m), dtype=bool)
+
+
+VALUE_TREND = Strategy(
+    key="value-trend",
+    version="value-trend-v1",
+    name="The cheapest rising stocks, monthly (invest)",
+    tier=Tier.INVEST,
+    summary="Each month, own the stocks cheapest against their earnings that are also rising.",
+    grid_axes={"stop_atr": (4.0,)},
+    default={"stop_atr": 4.0},
+    describe=lambda p: [
+        "Enter at the close of the first session of a month when the stock's earnings "
+        "yield (the last four quarters' profit per share over the price, from filings "
+        f"already published) is in the cheapest {100 * VALUE_MAX_RANK:g}% of the universe "
+        "and its 12-1 return is above 0 (value with a trend condition; Basu 1977, Asness, "
+        "Moskowitz and Pedersen 2013). No market-regime filter."
+    ],
+    condition=_value_condition,
+    exit_condition=_value_exit,
+    exit_reason=f"no longer cheap (value rank above {VALUE_EXIT_ABOVE:g})",
+    exit_rule=(
+        "Sell at the next open after the first session of a month on which the stock's "
+        f"value rank is above {VALUE_EXIT_ABOVE:g} (out of the cheaper half)."
+    ),
+    registered_on=date(2026, 11, 11),
+)
+
 STRATEGIES = {
     s.key: s
     for s in (
@@ -807,6 +858,7 @@ STRATEGIES = {
         LOW_VOL,
         HIGH52,
         RESIDUAL_MOMENTUM,
+        VALUE_TREND,
     )
 }
 
