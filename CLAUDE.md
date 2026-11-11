@@ -182,7 +182,10 @@ behaviour by adding a version, not by editing what a stored row meant.
     a signal as what/when/how much/why; pure) and `service.py`. Served at `/sections`.
     Long-term is the invest tier (`Tier.INVEST`, wider target and trail in `TIERS`) with
     `quality-trend-v1`, the first strategy on `Market.fund_score` (point-in-time fund-v1)
-    and the first with its own exit rule. Intraday is "not running": no intraday data.
+    and the first with its own exit rule (7 of 7 on NSE data, weak evidence: its holdout
+    lost money, `docs/backtests/quality-trend-v1-holdout-report.md`; NSE's Financial
+    Results list ends at the December 2024 quarter, later quarters are under
+    "Integrated Filing - Financials" and no command fetches them yet). Intraday is "not running": no intraday data.
   - `app/explain/` explain a stock (decision 0016, `docs/plans/explain-v1.md`):
     `facts.py` (every line a fact with source, date and kind; the brief: why in the scan,
     for, against, what cancels, level scenarios, checklist, unknowns, the setup check;
