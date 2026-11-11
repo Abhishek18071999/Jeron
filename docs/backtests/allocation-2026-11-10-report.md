@@ -115,7 +115,8 @@ not a new strategy version.
 1. Run `residual-momentum-v1` once on NSE data, as its plan says:
    `python -m app.cli backtest --strategy residual-momentum`. On Yahoo data it passed all
    seven checks with the best Sharpe of any version (1.27) and a weak holdout
-   (`yahoo-2026-11-10/`); the NSE run decides.
+   (`yahoo-2026-11-10/`); the NSE run decides. Done 2026-11-11: 7 of 7, weak evidence,
+   no better than `momentum-v1` (`residual-momentum-v1-report.md`).
 2. Load the 2025-26 quarterly results (Financial Results CSVs from nseindia.com, on the
    Setup page). `quality-trend-v1` had the best test years of any version (+0.64R, profit
    factor 1.91, positive in all three regimes) and has never traded its holdout because

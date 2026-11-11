@@ -87,8 +87,8 @@ behaviour by adding a version, not by editing what a stored row meant.
     on Yahoo and NSE data, research only, `docs/backtests/all-strategies-2026-11-06-report.md`);
     `residual-momentum-v1` (invest, monthly top tenth by market-model residual momentum,
     Blitz, Huij and Martens 2011, `Market.resmom_rank`, one grid point,
-    `docs/plans/residual-momentum-v1.md`; passed on Yahoo data with a weak holdout,
-    `docs/backtests/yahoo-2026-11-10/`; its NSE run decides);
+    `docs/plans/residual-momentum-v1.md`; 7 of 7 on NSE data but weak evidence and no better than
+    `momentum-v1`, `docs/backtests/residual-momentum-v1-report.md`);
     `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
     point, `docs/plans/paper-review-v1.md`),
     `reversal-v1` (swing, short-term reversal of no-news losers on `Market.rev_rank`, one
