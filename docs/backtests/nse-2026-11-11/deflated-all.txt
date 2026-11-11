@@ -1,7 +1,7 @@
-strategies counted: ['score-swing', 'breakout-52w', 'pullback-trend', 'score-swing-events', 'breakout-52w-events', 'pullback-trend-events', 'trend-breakout', 'rs-pullback', 'results-drift', 'sector-rotation', 'momentum', 'top-score', 'reversal', 'fip-momentum', 'low-vol', 'high52', 'residual-momentum']
-trials: 70
-run 1 residual-momentum-v1: deflated Sharpe vs all 70 trials: 0.2334
-run 2 rs-pullback-v1: deflated Sharpe vs all 70 trials: 0.4739
-run 3 fip-momentum-v1: deflated Sharpe vs all 70 trials: 0.2583
-run 4 momentum-v1: deflated Sharpe vs all 70 trials: 0.2108
-DONE
+strategies counted: ['score-swing', 'breakout-52w', 'pullback-trend', 'score-swing-events', 'breakout-52w-events', 'pullback-trend-events', 'trend-breakout', 'rs-pullback', 'results-drift', 'sector-rotation', 'quality-trend', 'momentum', 'top-score', 'reversal', 'fip-momentum', 'low-vol', 'high52', 'residual-momentum']
+trials: 74
+run 1 residual-momentum-v1: deflated Sharpe vs all 74 trials: 0.2157
+run 2 rs-pullback-v1: deflated Sharpe vs all 74 trials: 0.4509
+run 3 fip-momentum-v1: deflated Sharpe vs all 74 trials: 0.2399
+run 4 momentum-v1: deflated Sharpe vs all 74 trials: 0.1945
+run 5 quality-trend-v1: deflated Sharpe vs all 74 trials: 0.4593

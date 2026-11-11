@@ -87,9 +87,13 @@ one of record, and should be close to this.
    honest reading from 2026-11-06 stands: the family is real enough to paper-trade, the
    order inside it is not known, and the paper accounts are what will tell.
 
+`quality-trend-v1` was run on the same database later the same day, once its 2025-26
+results were loaded: `quality-trend-v1-holdout-report.md`. The deflated Sharpe against all
+variants is then counted over 74, not 70.
+
 ## Files
 
-`nse-2026-11-11/`: `runs.json` (the four stored runs without equity), `equity.json`
+`nse-2026-11-11/`: `runs.json` (the stored runs without equity), `equity.json`
 (daily equity, cash-sweep line and Nifty 500 per run), `gates.txt` (every gate and
 evidence check), `deflated-all.txt`, `scripts/export.py`. Gates and deflated Sharpe were
 printed with `runs-2026-11-06/scripts/extract.py` and `dsr_all.py`.

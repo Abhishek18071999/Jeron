@@ -3246,5 +3246,817 @@
    }
   },
   "created_at": "2026-11-11 02:19:08.693318+00:00"
+ },
+ {
+  "id": 5,
+  "strategy_key": "quality-trend",
+  "strategy_version": "quality-trend-v1",
+  "strategy_name": "Strong results in a long-term uptrend (invest)",
+  "tier": "invest",
+  "data_start": "2016-01-01",
+  "data_end": "2026-11-09",
+  "oos_start": "2019-11-11",
+  "holdout_start": "2025-11-10",
+  "live_eligible": true,
+  "fingerprint": "2c8c274f763dacf0",
+  "duration_seconds": "7.507",
+  "summary": {
+   "gates": [
+    {
+     "key": "expectancy",
+     "label": "Expectancy above 0.15R",
+     "value": "0.675R",
+     "passed": true
+    },
+    {
+     "key": "profit_factor",
+     "label": "Profit factor at least 1.3",
+     "value": "2.20",
+     "passed": true
+    },
+    {
+     "key": "drawdown",
+     "label": "Max drawdown at most 20%",
+     "value": "14.7%",
+     "passed": true
+    },
+    {
+     "key": "trades",
+     "label": "At least 100 trades",
+     "value": "224",
+     "passed": true
+    },
+    {
+     "key": "regimes",
+     "label": "Positive in at least 2 of 3 regimes",
+     "value": "bear, bull, sideways",
+     "passed": true
+    },
+    {
+     "key": "benchmark",
+     "label": "Better risk-adjusted return (Sharpe) than buy-and-hold Nifty 500",
+     "value": "0.97 vs 0.58",
+     "passed": true
+    },
+    {
+     "key": "holdout",
+     "label": "Final 12-month holdout has positive expectancy",
+     "value": "0.046R over 63 trades",
+     "passed": true
+    }
+   ],
+   "notes": [
+    "GSM exclusion only applies from the first NSE security list (2020-01-01); before that GSM stocks could be traded.",
+    "ASM exclusion uses the manually imported lists only, so it is not point in time.",
+    "1 trades were in stocks that stopped trading; they are valued at the last close, which can flatter the result.",
+    "Benchmark is the Nifty 500 price index (dividends not included). Idle cash earns 6.5% a year (a liquid fund), taxed at the 30% slab in the tax estimate; Sharpe ratios, for the strategy and the benchmark, count only returns above that rate."
+   ],
+   "rules": [
+    "Enter on the first day the stock's fundamental score (fund-v1, from the results filings published before that day) is at least 60, the close is above the 50-day EMA and the 50-day EMA is above the 200-day EMA. No market-regime filter.",
+    "Stop 3 x ATR(14) below the signal close; skip if that is more than 20% away.",
+    "Universe: the daily scan's (EQ series, close >= \u20b920, 20-day median turnover >= \u20b95 crore, not on GSM/ASM, 200 sessions of history).",
+    "Buy at the next open if it is at or below the signal close + 0.5 x ATR. Skip if it opens above that, opens below the stop, or is locked at the upper circuit.",
+    "No entry in a stock in a 2% or 5% price band that day (it can lock at the lower circuit for days).",
+    "Book half at +3R, stop to breakeven at +1R (closing basis), trail the rest by 4 x ATR(14) on closing basis, exiting at the next open.",
+    "Size: 1% of equity at risk (halved when Nifty 50 is below its 200-day EMA or VIX is in its top decile, halved again in a 10% drawdown), at most 20% of equity and 1% of 20-day average volume; no new entries above 6% total open risk or for 20 sessions after a 15% drawdown.",
+    "Most candidates on a day go to the highest tech-v1 score first.",
+    "Sell at the next open after a new results filing takes fund-v1 below 50 (a qualified audit opinion scores 0).",
+    "Invest: exit if not +1R within 250 sessions."
+   ],
+   "brains": {
+    "news_years": [],
+    "news_labeller": null,
+    "min_news_score": null,
+    "results_blackout": false,
+    "results_calendar_years": [
+     2016,
+     2017,
+     2018,
+     2019,
+     2020,
+     2021,
+     2022,
+     2023,
+     2024,
+     2025,
+     2026
+    ]
+   },
+   "holdout": {
+    "curve": {
+     "cagr": -0.0622,
+     "sharpe": -1.2745,
+     "sessions": 249,
+     "end_value": 2508558.2108,
+     "volatility": 0.0961,
+     "start_value": 2672115.7045,
+     "total_return": -0.0612,
+     "max_drawdown_pct": 12.2159
+    },
+    "trades": {
+     "wins": 20,
+     "avg_r": 0.046,
+     "trades": 63,
+     "net_pnl": -146296.855,
+     "win_rate": 0.3175,
+     "avg_win_r": 1.8495,
+     "avg_loss_r": -0.7928,
+     "avg_sessions": 43.0317,
+     "expectancy_r": 0.046,
+     "profit_factor": 0.6012
+    },
+    "profile": {
+     "sortino": -1.564,
+     "turnover": 2.088,
+     "exposure_pct": 43.3529,
+     "trades_per_year": 64.0161,
+     "max_losing_streak": 20,
+     "recovery_sessions": null,
+     "max_winning_streak": 5,
+     "max_drawdown_sessions": 46,
+     "longest_underwater_sessions": 206
+    },
+    "benchmark": {
+     "cagr": 0.002,
+     "sharpe": -0.3347,
+     "sessions": 249,
+     "end_value": 23567.0,
+     "volatility": 0.1492,
+     "start_value": 23521.5,
+     "total_return": 0.0019,
+     "max_drawdown_pct": 14.8178
+    }
+   },
+   "periods": {
+    "data": [
+     "2016-01-01",
+     "2026-11-09"
+    ],
+    "holdout": [
+     "2025-11-10",
+     "2026-11-09"
+    ],
+    "out_of_sample": [
+     "2019-11-11",
+     "2025-11-07"
+    ],
+    "first_tradable": "2017-01-09"
+   },
+   "schedule": [
+    {
+     "from": "2019-11-11",
+     "params": {
+      "min_fund": 70.0,
+      "stop_atr": 4.0
+     },
+     "variant": "min_fund=70, stop_atr=4"
+    },
+    {
+     "from": "2020-11-10",
+     "params": {
+      "min_fund": 60.0,
+      "stop_atr": 3.0
+     },
+     "variant": "min_fund=60, stop_atr=3"
+    },
+    {
+     "from": "2021-11-10",
+     "params": {
+      "min_fund": 60.0,
+      "stop_atr": 3.0
+     },
+     "variant": "min_fund=60, stop_atr=3"
+    },
+    {
+     "from": "2022-11-10",
+     "params": {
+      "min_fund": 60.0,
+      "stop_atr": 4.0
+     },
+     "variant": "min_fund=60, stop_atr=4"
+    },
+    {
+     "from": "2023-11-10",
+     "params": {
+      "min_fund": 60.0,
+      "stop_atr": 4.0
+     },
+     "variant": "min_fund=60, stop_atr=4"
+    },
+    {
+     "from": "2024-11-11",
+     "params": {
+      "min_fund": 60.0,
+      "stop_atr": 4.0
+     },
+     "variant": "min_fund=60, stop_atr=4"
+    },
+    {
+     "from": "2025-11-10",
+     "params": {
+      "min_fund": 60.0,
+      "stop_atr": 3.0
+     },
+     "variant": "min_fund=60, stop_atr=3"
+    }
+   ],
+   "settings": {
+    "costs": {
+     "name": "zerodha-delivery-2026",
+     "gst_pct": 18.0,
+     "stt_pct": 0.1,
+     "dp_per_sale": 15.34,
+     "exchange_pct": 0.00297,
+     "brokerage_max": 0.0,
+     "brokerage_min": 0.0,
+     "brokerage_pct": 0.0,
+     "stamp_buy_pct": 0.015,
+     "sebi_per_crore": 10.0,
+     "slippage_buckets": [
+      [
+       1000000000.0,
+       0.05
+      ],
+      [
+       200000000.0,
+       0.1
+      ],
+      [
+       50000000.0,
+       0.2
+      ],
+      [
+       0.0,
+       0.5
+      ]
+     ]
+    },
+    "portfolio": {
+     "t1_r": 2.0,
+     "t2_r": 3.0,
+     "capital": 1000000.0,
+     "risk_pct": 1.0,
+     "time_stop": true,
+     "trail_atr": 2.0,
+     "breakeven_r": 1.0,
+     "crash_guard": false,
+     "min_band_pct": 10.0,
+     "min_stop_atr": 1.0,
+     "results_exit": null,
+     "cash_rate_pct": 6.5,
+     "heat_warn_pct": 5.0,
+     "max_positions": null,
+     "entry_zone_atr": 0.5,
+     "heat_block_pct": 6.0,
+     "max_correlated": null,
+     "max_volume_pct": 1.0,
+     "pause_sessions": 20,
+     "sector_cap_pct": null,
+     "correlation_min": 0.7,
+     "zone_touch_fill": false,
+     "max_position_pct": 20.0,
+     "results_blackout": false,
+     "drawdown_halve_pct": 10.0,
+     "drawdown_pause_pct": 15.0,
+     "min_reward_risk_t2": 2.0,
+     "correlation_sessions": 120
+    }
+   },
+   "cash_sweep": {
+    "note": "Idle cash in a Nifty 500 index fund instead of a liquid fund, with no costs or tax on switching. An allocation choice that adds the index's ups and downs: reported beside the strategy, never in its gates.",
+    "holdout": {
+     "cagr": -0.044,
+     "sharpe": -0.5701,
+     "sessions": 249,
+     "end_value": 3036233.4931,
+     "volatility": 0.1655,
+     "start_value": 3173808.0031,
+     "total_return": -0.0433,
+     "max_drawdown_pct": 18.2575
+    },
+    "out_of_sample": {
+     "cagr": 0.2159,
+     "sharpe": 0.8035,
+     "sessions": 1490,
+     "end_value": 3173808.0031,
+     "volatility": 0.187,
+     "start_value": 1000000.0,
+     "total_return": 2.1738,
+     "max_drawdown_pct": 37.4825
+    }
+   },
+   "confidence": {
+    "grid": [
+     {
+      "label": "min_fund=60, stop_atr=3",
+      "chosen": true,
+      "trades": 287,
+      "expectancy_r": 0.7133
+     },
+     {
+      "label": "min_fund=60, stop_atr=4",
+      "chosen": false,
+      "trades": 217,
+      "expectancy_r": 0.6715
+     },
+     {
+      "label": "min_fund=70, stop_atr=3",
+      "chosen": false,
+      "trades": 280,
+      "expectancy_r": 0.6029
+     },
+     {
+      "label": "min_fund=70, stop_atr=4",
+      "chosen": false,
+      "trades": 183,
+      "expectancy_r": 0.7121
+     }
+    ],
+    "curve": {
+     "cagr": {
+      "low": 0.0643,
+      "high": 0.3143,
+      "estimate": 0.181
+     },
+     "block_sessions": 20,
+     "drawdown_95_pct": 25.3448,
+     "max_drawdown_pct": {
+      "low": 9.4093,
+      "high": 29.0674,
+      "estimate": 14.7316
+     }
+    },
+    "level": 0.95,
+    "order": {
+     "drawdown_r_95": 13.6831,
+     "losing_streak_95": 13,
+     "drawdown_r_median": 8.1712,
+     "losing_streak_median": 8
+    },
+    "holdout": {
+     "trades": 63,
+     "win_rate": {
+      "low": 0.2063,
+      "high": 0.4286,
+      "estimate": 0.3175
+     },
+     "expectancy_r": {
+      "low": -0.3414,
+      "high": 0.4512,
+      "estimate": 0.046
+     },
+     "profit_factor": {
+      "low": 0.2185,
+      "high": 1.2176,
+      "estimate": 0.6012
+     },
+     "positive_share": 0.569
+    },
+    "version": "confidence-v1",
+    "evidence": {
+     "notes": [
+      "Evidence strength is separate from the section 6 gates. Passing the gates lets a strategy paper-trade; it never promotes it to real money.",
+      "Sectors are today's, not point in time, and known for 69% of the trades."
+     ],
+     "checks": [
+      {
+       "key": "sample",
+       "label": "At least 100 out-of-sample trades",
+       "value": "224",
+       "passed": true
+      },
+      {
+       "key": "expectancy_ci",
+       "label": "95% interval of expectancy above 0R",
+       "value": "+0.383R to +1.003R",
+       "passed": true
+      },
+      {
+       "key": "profit_factor_ci",
+       "label": "95% interval of profit factor above 1",
+       "value": "1.50 to 3.11",
+       "passed": true
+      },
+      {
+       "key": "holdout",
+       "label": "Holdout: at least 20 trades, expectancy above 0, profit factor above 1",
+       "value": "+0.046R, profit factor 0.60 over 63 trades",
+       "passed": false
+      },
+      {
+       "key": "deflated_sharpe",
+       "label": "Deflated Sharpe at least 0.95 (luck from the variants tried ruled out)",
+       "value": "0.97",
+       "passed": true
+      },
+      {
+       "key": "scenario:slippage",
+       "label": "Still positive with slippage x2",
+       "value": "+0.651R over 229 trades",
+       "passed": true
+      },
+      {
+       "key": "scenario:charges",
+       "label": "Still positive with charges x1.5",
+       "value": "+0.678R over 238 trades",
+       "passed": true
+      },
+      {
+       "key": "scenario:late",
+       "label": "Still positive with entries 1 session late",
+       "value": "+0.708R over 219 trades",
+       "passed": true
+      },
+      {
+       "key": "grid",
+       "label": "At least 67% of the parameter grid positive on its own",
+       "value": "4 of 4",
+       "passed": true
+      },
+      {
+       "key": "without_top",
+       "label": "Still positive without its 5 best trades",
+       "value": "+0.455R",
+       "passed": true
+      },
+      {
+       "key": "without_best_year",
+       "label": "Still positive without its best year",
+       "value": "+0.389R without 2023",
+       "passed": true
+      },
+      {
+       "key": "sector",
+       "label": "No sector more than 50% of the gains",
+       "value": "Capital Goods 24%",
+       "passed": true
+      }
+     ],
+     "rating": "weak",
+     "summary": "1 of 12 checks failed: the evidence does not show an edge that would survive real trading."
+    },
+    "resamples": 2000,
+    "scenarios": [
+     {
+      "key": "slippage",
+      "label": "slippage x2",
+      "trades": 229,
+      "expectancy_r": 0.6513,
+      "profit_factor": 2.1829
+     },
+     {
+      "key": "charges",
+      "label": "charges x1.5",
+      "trades": 238,
+      "expectancy_r": 0.6779,
+      "profit_factor": 2.4307
+     },
+     {
+      "key": "late",
+      "label": "entries 1 session late",
+      "trades": 219,
+      "expectancy_r": 0.7079,
+      "profit_factor": 2.1331
+     }
+    ],
+    "concentration": {
+     "trades": 224,
+     "total_r": 151.0884,
+     "best_year": "2023",
+     "top_share": 0.34,
+     "best_sector": "Capital Goods",
+     "sectors_known": 0.692,
+     "without_top_r": 0.4553,
+     "best_sector_share": 0.2376,
+     "without_best_year_r": 0.3891,
+     "without_best_sector_r": 0.5683
+    },
+    "out_of_sample": {
+     "trades": 224,
+     "win_rate": {
+      "low": 0.3616,
+      "high": 0.4911,
+      "estimate": 0.4241
+     },
+     "expectancy_r": {
+      "low": 0.3826,
+      "high": 1.0028,
+      "estimate": 0.6745
+     },
+     "profit_factor": {
+      "low": 1.5008,
+      "high": 3.1127,
+      "estimate": 2.1989
+     },
+     "positive_share": 1.0
+    }
+   },
+   "provenance": {
+    "git": null,
+    "code": "5660021eee134793",
+    "data": "2c8c274f763dacf0",
+    "data_end": "2026-11-09",
+    "settings": "84031a9f18e34e03"
+   },
+   "brake_events": [
+    {
+     "date": "2026-03-04",
+     "event": "drawdown 15.2%: new entries paused"
+    }
+   ],
+   "exit_reasons": {
+    "stop": 118,
+    "trailing stop": 60,
+    "breakeven stop": 56,
+    "open at the end": 15,
+    "stopped trading": 1,
+    "results weakened": 37
+   },
+   "live_eligible": true,
+   "out_of_sample": {
+    "tax": {
+     "years": [
+      {
+       "fy": "FY2019-20",
+       "tax": 8215.0,
+       "ltcg": 0.0,
+       "stcg": -45071.64,
+       "interest": 21827.72,
+       "dividends": 5555.6,
+       "loss_carried": 45071.64
+      },
+      {
+       "fy": "FY2020-21",
+       "tax": 13357.23,
+       "ltcg": 0.0,
+       "stcg": 27059.95,
+       "interest": 44066.7,
+       "dividends": 457.4,
+       "loss_carried": 18011.69
+      },
+      {
+       "fy": "FY2021-22",
+       "tax": 32534.74,
+       "ltcg": 61186.71,
+       "stcg": 168653.1,
+       "interest": 23300.43,
+       "dividends": 9828.0,
+       "loss_carried": 0.0
+      },
+      {
+       "fy": "FY2022-23",
+       "tax": 37516.96,
+       "ltcg": -208.75,
+       "stcg": 159378.16,
+       "interest": 39127.89,
+       "dividends": 6239.55,
+       "loss_carried": 208.75
+      },
+      {
+       "fy": "FY2023-24",
+       "tax": 51263.8,
+       "ltcg": 0.0,
+       "stcg": 276530.54,
+       "interest": 21484.18,
+       "dividends": 11129.88,
+       "loss_carried": 208.75
+      },
+      {
+       "fy": "FY2024-25",
+       "tax": 100086.5,
+       "ltcg": 247808.35,
+       "stcg": 316931.93,
+       "interest": 52863.83,
+       "dividends": 18386.7,
+       "loss_carried": 0.0
+      },
+      {
+       "fy": "FY2025-26",
+       "tax": 26701.87,
+       "ltcg": -2186.27,
+       "stcg": 28060.32,
+       "interest": 55912.63,
+       "dividends": 14386.72,
+       "loss_carried": 2186.27
+      }
+     ],
+     "interest": 258583.41,
+     "pre_tax_pnl": 1562709.66,
+     "post_tax_pnl": 1293033.57,
+     "estimated_tax": 269676.09
+    },
+    "curve": {
+     "cagr": 0.181,
+     "sharpe": 0.9738,
+     "sessions": 1490,
+     "end_value": 2672115.7045,
+     "volatility": 0.1127,
+     "start_value": 1000000.0,
+     "total_return": 1.6721,
+     "max_drawdown_pct": 14.7316
+    },
+    "trades": {
+     "wins": 95,
+     "avg_r": 0.6745,
+     "trades": 224,
+     "net_pnl": 1304126.2585,
+     "win_rate": 0.4241,
+     "avg_win_r": 2.5638,
+     "avg_loss_r": -0.7168,
+     "avg_sessions": 85.5714,
+     "expectancy_r": 0.6745,
+     "profit_factor": 2.1989
+    },
+    "by_year": {
+     "2020": {
+      "wins": 13,
+      "avg_r": 0.4061,
+      "trades": 31,
+      "net_pnl": 53050.6877,
+      "win_rate": 0.4194,
+      "avg_win_r": 2.1803,
+      "avg_loss_r": -0.8752,
+      "avg_sessions": 99.6774,
+      "expectancy_r": 0.4061,
+      "profit_factor": 1.4715
+     },
+     "2021": {
+      "wins": 17,
+      "avg_r": 0.6733,
+      "trades": 44,
+      "net_pnl": 274139.6465,
+      "win_rate": 0.3864,
+      "avg_win_r": 2.7752,
+      "avg_loss_r": -0.65,
+      "avg_sessions": 62.0455,
+      "expectancy_r": 0.6733,
+      "profit_factor": 2.3676
+     },
+     "2022": {
+      "wins": 17,
+      "avg_r": 0.3008,
+      "trades": 46,
+      "net_pnl": 106310.5476,
+      "win_rate": 0.3696,
+      "avg_win_r": 1.9388,
+      "avg_loss_r": -0.6594,
+      "avg_sessions": 68.6739,
+      "expectancy_r": 0.3008,
+      "profit_factor": 1.6298
+     },
+     "2023": {
+      "wins": 24,
+      "avg_r": 2.2696,
+      "trades": 34,
+      "net_pnl": 693942.4309,
+      "win_rate": 0.7059,
+      "avg_win_r": 3.5628,
+      "avg_loss_r": -0.8339,
+      "avg_sessions": 132.5882,
+      "expectancy_r": 2.2696,
+      "profit_factor": 7.001
+     },
+     "2024": {
+      "wins": 12,
+      "avg_r": 0.3304,
+      "trades": 30,
+      "net_pnl": 177472.3652,
+      "win_rate": 0.4,
+      "avg_win_r": 2.0235,
+      "avg_loss_r": -0.7984,
+      "avg_sessions": 76.4667,
+      "expectancy_r": 0.3304,
+      "profit_factor": 1.621
+     },
+     "2025": {
+      "wins": 12,
+      "avg_r": 0.204,
+      "trades": 39,
+      "net_pnl": -789.4194,
+      "win_rate": 0.3077,
+      "avg_win_r": 2.1074,
+      "avg_loss_r": -0.642,
+      "avg_sessions": 86.8462,
+      "expectancy_r": 0.204,
+      "profit_factor": 0.9961
+     }
+    },
+    "profile": {
+     "sortino": 1.3299,
+     "turnover": 2.0021,
+     "exposure_pct": 56.9637,
+     "trades_per_year": 37.91,
+     "max_losing_streak": 6,
+     "recovery_sessions": null,
+     "max_winning_streak": 11,
+     "max_drawdown_sessions": 110,
+     "longest_underwater_sessions": 279
+    },
+    "benchmark": {
+     "cagr": 0.1618,
+     "sharpe": 0.5788,
+     "sessions": 1490,
+     "end_value": 23521.5,
+     "volatility": 0.1782,
+     "start_value": 9695.85,
+     "total_return": 1.4259,
+     "max_drawdown_pct": 38.3024
+    },
+    "by_regime": {
+     "bear": {
+      "wins": 31,
+      "avg_r": 1.8609,
+      "trades": 50,
+      "net_pnl": 541583.2671,
+      "win_rate": 0.62,
+      "avg_win_r": 3.4324,
+      "avg_loss_r": -0.7031,
+      "avg_sessions": 125.54,
+      "expectancy_r": 1.8609,
+      "profit_factor": 9.0253
+     },
+     "bull": {
+      "wins": 55,
+      "avg_r": 0.3449,
+      "trades": 150,
+      "net_pnl": 674946.6772,
+      "win_rate": 0.3667,
+      "avg_win_r": 2.1871,
+      "avg_loss_r": -0.7217,
+      "avg_sessions": 74.9933,
+      "expectancy_r": 0.3449,
+      "profit_factor": 1.711
+     },
+     "sideways": {
+      "wins": 9,
+      "avg_r": 0.2631,
+      "trades": 24,
+      "net_pnl": 87596.3142,
+      "win_rate": 0.375,
+      "avg_win_r": 1.874,
+      "avg_loss_r": -0.7034,
+      "avg_sessions": 68.4167,
+      "expectancy_r": 0.2631,
+      "profit_factor": 2.2334
+     }
+    },
+    "variants_tried": 4,
+    "yearly_returns": {
+     "2019": 0.008664001892456419,
+     "2020": 0.05787969926685066,
+     "2021": 0.35020254851433275,
+     "2022": 0.14588771895295727,
+     "2023": 0.2632380481366998,
+     "2024": 0.26277824530145577,
+     "2025": 0.014656816038908227
+    },
+    "deflated_sharpe": 0.9746,
+    "benchmark_yearly_returns": {
+     "2019": 0.018224291836197892,
+     "2020": 0.1666995862264562,
+     "2021": 0.3019455996110538,
+     "2022": 0.03018431335938443,
+     "2023": 0.25764377283746054,
+     "2024": 0.15164070481724634,
+     "2025": 0.05122143067833407
+    }
+   },
+   "pnl_breakdown": {
+    "holdout": {
+     "charges": 12537.99,
+     "net_pnl": -146296.86,
+     "slippage": 10680.97,
+     "dividends": 3665.45,
+     "gross_pnl": -137424.31,
+     "before_slippage": -126743.35
+    },
+    "out_of_sample": {
+     "charges": 51116.97,
+     "net_pnl": 1304126.26,
+     "slippage": 52484.02,
+     "dividends": 65983.85,
+     "gross_pnl": 1289259.38,
+     "before_slippage": 1341743.4
+    }
+   },
+   "engine_version": "engine-v3",
+   "missed_entries": {
+    "basis": "after slippage, before charges",
+    "filled": 224,
+    "missed": 7,
+    "filled_avg_r": 0.666,
+    "missed_avg_r": -0.9,
+    "missed_win_rate": 0.0
+   },
+   "skipped_entries": {
+    "not enough cash": 1,
+    "in a 5% price band": 184,
+    "no free position slot": 6646,
+    "portfolio heat above 6%": 1808,
+    "stop more than 20% away": 165,
+    "opened above the entry zone": 14
+   }
+  },
+  "created_at": "2026-11-11 12:26:14.226521+00:00"
  }
 ]
