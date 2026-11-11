@@ -182,10 +182,8 @@ behaviour by adding a version, not by editing what a stored row meant.
     a signal as what/when/how much/why; pure) and `service.py`. Served at `/sections`.
     Long-term is the invest tier (`Tier.INVEST`, wider target and trail in `TIERS`) with
     `quality-trend-v1`, the first strategy on `Market.fund_score` (point-in-time fund-v1)
-    and the first with its own exit rule (7 of 7 on NSE data, weak evidence: its holdout
-    lost money, `docs/backtests/quality-trend-v1-holdout-report.md`; NSE's Financial
-    Results list ends at the December 2024 quarter, later quarters are under
-    "Integrated Filing - Financials" and no command fetches them yet). Intraday is "not running": no intraday data.
+    and the first with its own exit rule (6 of 7 on NSE data: its holdout lost money,
+    research only, `docs/backtests/quality-trend-v1-holdout-report.md`). Intraday is "not running": no intraday data.
   - `app/explain/` explain a stock (decision 0016, `docs/plans/explain-v1.md`):
     `facts.py` (every line a fact with source, date and kind; the brief: why in the scan,
     for, against, what cancels, level scenarios, checklist, unknowns, the setup check;
@@ -262,7 +260,10 @@ behaviour by adding a version, not by editing what a stored row meant.
     trades saved from nseindia.com), `watchdog`, `stop-all --reason` / `resume` (the kill
     switch, `app/halt.py`, `docs/runbook.md`), `research` (the review's options), `news-research` (the news brain test), `api-token` (the web app's token for the API),
     `fundamentals-import FILE...` (quarterly results from
-    Financial Results CSVs saved from nseindia.com), `fundamentals-reparse [--download]`
+    Financial Results CSVs saved from nseindia.com), `fundamentals-fetch [--start DATE]`
+    (quarters from March 2025: NSE's Financial Results list ends at December 2024, later
+    ones are in its Integrated Filing list; `docs/plans/fundamentals-fetch-v1.md`),
+    `fundamentals-reparse [--download]`
     (balance sheets and cash flow of stored filings from the saved XBRL), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
     `strategy-status [VERSION STATUS --reason]` (list, or set a status; decision 0018),

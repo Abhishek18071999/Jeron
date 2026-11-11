@@ -88,7 +88,7 @@ one of record, and should be close to this.
    order inside it is not known, and the paper accounts are what will tell.
 
 `quality-trend-v1` was run on the same database later the same day, once its 2025-26
-results were loaded: `quality-trend-v1-holdout-report.md`. The deflated Sharpe against all
+results were loaded: `quality-trend-v1-holdout-report.md` (6 of 7, its holdout lost money). The deflated Sharpe against all
 variants is then counted over 74, not 70.
 
 ## Files
