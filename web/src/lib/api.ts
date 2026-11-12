@@ -408,6 +408,17 @@ export type PaperAccountSummary = {
   notes?: string[];
 };
 
+// GET /paper/coverage: every registered strategy, with its active paper account or why
+// it has none.
+export type PaperCoverage = {
+  key: string;
+  version: string;
+  name: string;
+  state: "paper" | "research only" | "waiting" | "no_backtest" | "retired";
+  account_id: number | null;
+  note: string;
+};
+
 export type PaperAccount = {
   id: number;
   strategy_key: string;

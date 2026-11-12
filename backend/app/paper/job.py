@@ -630,6 +630,60 @@ def update_account(
     return AccountOutcome(strategy.key, account.id, "ok", new, len(sim.open_trades), equity, notes)
 
 
+@dataclass(frozen=True)
+class Coverage:
+    """Where one registered strategy stands in paper trading."""
+
+    key: str
+    version: str
+    name: str
+    # "paper", "research only" (an active account), "waiting" (backtested, no account
+    # yet), "no_backtest" or "retired".
+    state: str
+    account_id: int | None
+    note: str
+
+
+def coverage(session: Session) -> list[Coverage]:
+    """Every registered strategy, with its active paper account or why it has none, so
+    a strategy that isn't paper trading is never just missing from the pages."""
+    out = []
+    for key, strategy in STRATEGIES.items():
+        account = active_account(session, strategy)
+        retired = None if account is not None else retired_account(session, strategy)
+        if account is not None:
+            state = "paper" if account.live_eligible else "research only"
+            note = f"Paper trading since {account.start_date}."
+        elif retired is not None and not may_resume(session, strategy.version):
+            state = "retired"
+            note = (
+                f"Retired on {retired.retired_on} ({retired.retired_reason}). It paper-trades "
+                "again only as a new version, or after a revalidation recorded with "
+                "strategy-status."
+            )
+        elif latest_backtest(session, strategy) is not None:
+            state = "waiting"
+            note = "Backtested. Its account opens at the next daily run, after the scan."
+        else:
+            state = "no_backtest"
+            note = (
+                f"No backtest yet. Run `python -m app.cli backtest --strategy {key}`: it "
+                "either runs, or says which data is missing (the results calendar from "
+                "`events`, quarterly results from `fundamentals-fetch`)."
+            )
+        out.append(
+            Coverage(
+                key=key,
+                version=strategy.version,
+                name=strategy.name,
+                state=state,
+                account_id=account.id if account is not None else None,
+                note=note,
+            )
+        )
+    return out
+
+
 def latest_backtest_params(session: Session, strategy: Strategy) -> str | None:
     run = latest_backtest(session, strategy)
     if run is None:

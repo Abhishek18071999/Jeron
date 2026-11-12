@@ -12,7 +12,7 @@ from app.config import Settings
 from app.journal.service import add_fill, decide, update_entry
 from app.main import app
 from app.models import Alert, BacktestTrade, PaperAccount, PaperDay
-from app.paper.job import retired_account
+from app.paper.job import coverage, retired_account
 from app.signals.build import IST
 from tests.conftest import requires_db
 from tests.journal_helpers import make_account, make_signal
@@ -114,6 +114,10 @@ def test_revalidation_retires_and_paper_stops(empty_session):
     assert len(channel.sent) == 1  # once per week
     assert s.scalar(select(Alert.kind).where(Alert.key == "weekly:2025-W11")) == "weekly"
     assert s.scalars(select(PaperAccount.status)).all() == ["retired"]
+    # The paper pages still account for it, with the reason.
+    row = next(c for c in coverage(s) if c.key == "score-swing")
+    assert row.state == "retired" and row.account_id is None
+    assert "Retired on 2025-03-14" in row.note
 
 
 def test_weekly_api_is_read_only(empty_session):

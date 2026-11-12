@@ -147,7 +147,9 @@ behaviour by adding a version, not by editing what a stored row meant.
     stored once, the forward split, the backtest check on the history before the
     account opened). Proposals are never applied; a passing one becomes a new strategy
     version by hand. Served at `/paper/accounts/{id}/review`, `/paper/accounts/{id}/audit`
-    and `/paper/proposals`.
+    and `/paper/proposals`. `coverage` (`GET /paper/coverage`) lists every registered
+    strategy with its active account or why it has none (no backtest, waiting, retired);
+    both paper pages show it, so a strategy is never just missing.
   - `app/alerts/` alerts: `format.py` (signal message, daily summary; pure),
     `channels.py` (Telegram Bot API, SMTP email backup), `job.py` (what is due; every
     alert stored once in `alerts`, so re-runs never send twice), `watchdog.py` (the
@@ -278,6 +280,8 @@ behaviour by adding a version, not by editing what a stored row meant.
     November, a missing next year is warned on `/setup` and in the pre-open check, and
     `tests/test_calendar.py` fails from 1 January of a year not in the file.
   - `alembic/versions/` migrations. Generate with autogenerate, then review.
+- `docs/prompts/verify-strategies.md` a read-only prompt that checks every strategy's
+  data, backtest and paper account on an install.
 - `docs/runbook.md` incidents, the kill switch, the heartbeat, the quarterly restore
   drill, a week without Jeron.
 - `backup/backup.sh` the nightly `pg_dump` run by the `backup` service; a dump is kept only if

@@ -91,6 +91,10 @@ def test_every_strategy_backtests_paper_trades_and_shows_in_its_section(session)
     assert session.scalar(select(func.count()).select_from(PaperAccount)) == len(STRATEGIES)
 
     client = TestClient(app)
+    covered = client.get("/paper/coverage").json()
+    assert {c["key"] for c in covered} == set(STRATEGIES)
+    assert all(c["account_id"] is not None for c in covered), covered
+    assert {c["state"] for c in covered} <= {"paper", "research only"}
     sections = client.get("/sections").json()
     shown = {s["key"] for section in sections for s in section["strategies"]}
     assert shown == set(STRATEGIES)

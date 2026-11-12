@@ -1,7 +1,7 @@
 // The paper review page's small decisions (docs/plans/paper-review-v1.md), kept pure so
 // `npm test` checks them: which account opens first, how a proposal's status reads, and
 // how skipped signals compare with the ones traded.
-import type { MissedLine, PaperAccount, Proposal } from "./api.ts";
+import type { MissedLine, PaperAccount, PaperCoverage, Proposal } from "./api.ts";
 
 // The Stocks section's 90+ stocks are paper-traded as this strategy.
 export const TOP_SCORE_KEY = "top-score";
@@ -9,6 +9,28 @@ export const TOP_SCORE_KEY = "top-score";
 export function pickAccount(accounts: PaperAccount[], wanted: string | undefined): PaperAccount | null {
   const byId = accounts.find((a) => String(a.id) === wanted);
   return byId ?? accounts.find((a) => a.strategy_key === TOP_SCORE_KEY) ?? accounts[0] ?? null;
+}
+
+// The strategies with no active paper account, the ones needing the owner first.
+const STATE_ORDER: Record<string, number> = { no_backtest: 0, retired: 1, waiting: 2 };
+const STATE_LABEL: Record<string, string> = {
+  no_backtest: "No backtest yet",
+  retired: "Retired",
+  waiting: "Opens at the next daily run",
+};
+
+export function notTrading(coverage: PaperCoverage[]): (PaperCoverage & { label: string })[] {
+  return coverage
+    .filter((c) => c.account_id === null)
+    .map((c) => ({ ...c, label: STATE_LABEL[c.state] ?? c.state }))
+    .sort((a, b) => (STATE_ORDER[a.state] ?? 9) - (STATE_ORDER[b.state] ?? 9) || a.name.localeCompare(b.name));
+}
+
+export function coverageLine(coverage: PaperCoverage[]): string {
+  const trading = coverage.filter((c) => c.account_id !== null).length;
+  return trading === coverage.length
+    ? `All ${coverage.length} strategies are paper trading.`
+    : `${trading} of ${coverage.length} strategies are paper trading.`;
 }
 
 export type Tone = "neutral" | "good" | "bad" | "accent" | "warn";
