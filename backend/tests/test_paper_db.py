@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.backtest.job import run_backtests
+from app.backtest.strategies import STRATEGIES
 from app.main import app
 from app.models import PaperAccount, PaperDay, PaperTrade, ScanRun, SignalRecord
 from app.paper.job import run_paper
@@ -114,6 +115,14 @@ def test_paper_trading_records_signals_and_updates_daily(session):
     one = client.get(f"/signals/{newest[0]['signal_id']}").json()
     assert one["payload"]["ticker"] == newest[0]["ticker"]
     assert client.get("/paper/accounts/999999").status_code == 404
+    # Every registered strategy is accounted for, not only the ones with an account.
+    rows = {r["key"]: r for r in client.get("/paper/coverage").json()}
+    assert set(rows) == set(STRATEGIES)
+    mine = rows["score-swing"]
+    assert mine["account_id"] == account.id and mine["state"] == listed["stage"]
+    others = [r for key, r in rows.items() if key != "score-swing"]
+    assert all(r["state"] == "no_backtest" and r["account_id"] is None for r in others)
+    assert "backtest --strategy rs-pullback" in rows["rs-pullback"]["note"]
 
 
 def test_paper_refuses_a_day_without_a_scan(session):

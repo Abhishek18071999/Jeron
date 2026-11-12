@@ -23,13 +23,14 @@ import {
   getJson,
   type AuditEvent,
   type PaperAccount,
+  type PaperCoverage,
   type PaperReview,
   type PaperReviewView,
   type ReviewTrade,
 } from "@/lib/api";
 import { TOP_SCORE_KEY, missedRows, pickAccount, proposalNext, proposalTone, versusBenchmark } from "@/lib/paper-review";
 
-import { EquityLine, StageBadge } from "../parts";
+import { EquityLine, StageBadge, StrategyCoverage } from "../parts";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,10 @@ const range = (r: [number, number] | null | undefined) => (r ? `${rMultiple(r[0]
 
 export default async function PaperPerformance({ searchParams }: { searchParams: Promise<{ account?: string }> }) {
   const sp = await searchParams;
-  const accounts = await getJson<PaperAccount[]>("/paper/accounts");
+  const [accounts, coverage] = await Promise.all([
+    getJson<PaperAccount[]>("/paper/accounts"),
+    getJson<PaperCoverage[]>("/paper/coverage"),
+  ]);
   const header = (
     <PageHeader
       title="Paper performance"
@@ -53,6 +57,7 @@ export default async function PaperPerformance({ searchParams }: { searchParams:
         <EmptyState command={cli("paper")}>
           {accounts.ok ? "No paper accounts yet. They open after each strategy's backtest, on the day of the next scan." : accounts.error}
         </EmptyState>
+        {coverage.ok && <StrategyCoverage coverage={coverage.data} />}
       </Page>
     );
   }
@@ -83,6 +88,7 @@ export default async function PaperPerformance({ searchParams }: { searchParams:
           then the daily run paper-trades it from the next scan. No trades are made up to fill it.
         </Notice>
       )}
+      {coverage.ok && <StrategyCoverage coverage={coverage.data} />}
       {!view.ok ? <Notice tone="bad">{view.error}</Notice> : <Review view={view.data} audit={audit.ok ? audit.data : []} />}
     </Page>
   );

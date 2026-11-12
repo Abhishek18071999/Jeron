@@ -1,14 +1,17 @@
 import Link from "next/link";
 
-import { getJson, type PaperAccount } from "@/lib/api";
+import { getJson, type PaperAccount, type PaperCoverage } from "@/lib/api";
 
 import { num, rupees, signClass } from "../backtests/format";
-import { StageBadge } from "./parts";
+import { StageBadge, StrategyCoverage } from "./parts";
 
 export const dynamic = "force-dynamic";
 
 export default async function PaperPage() {
-  const accounts = await getJson<PaperAccount[]>("/paper/accounts");
+  const [accounts, coverage] = await Promise.all([
+    getJson<PaperAccount[]>("/paper/accounts"),
+    getJson<PaperCoverage[]>("/paper/coverage"),
+  ]);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -81,6 +84,7 @@ export default async function PaperPage() {
           </table>
         </div>
       )}
+      {coverage.ok && <StrategyCoverage coverage={coverage.data} />}
     </main>
   );
 }

@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { PaperAccount, Proposal } from "./api.ts";
-import { missedRows, pickAccount, proposalNext, proposalTone, versusBenchmark } from "./paper-review.ts";
+import type { PaperAccount, PaperCoverage, Proposal } from "./api.ts";
+import { coverageLine, missedRows, notTrading, pickAccount, proposalNext, proposalTone, versusBenchmark } from "./paper-review.ts";
 
 const account = (id: number, strategy_key: string) => ({ id, strategy_key }) as PaperAccount;
 
@@ -40,4 +40,27 @@ test("returns against Nifty 500", () => {
   assert.equal(versusBenchmark(0.012, 0.004), "+1.2% vs Nifty 500's +0.4%");
   assert.equal(versusBenchmark(-0.05, null), "-5.0%");
   assert.equal(versusBenchmark(null, 0.1), "-");
+});
+
+test("strategies with no paper account are listed, the ones needing the owner first", () => {
+  const row = (key: string, state: PaperCoverage["state"], account_id: number | null) =>
+    ({ key, version: `${key}-v1`, name: key, state, account_id, note: "" }) as PaperCoverage;
+  const coverage = [
+    row("momentum", "paper", 1),
+    row("zeta", "waiting", null),
+    row("value-trend", "no_backtest", null),
+    row("old", "retired", null),
+    row("top-score", "research only", 2),
+  ];
+  assert.deepEqual(
+    notTrading(coverage).map((c) => [c.key, c.label]),
+    [
+      ["value-trend", "No backtest yet"],
+      ["old", "Retired"],
+      ["zeta", "Opens at the next daily run"],
+    ],
+  );
+  assert.equal(coverageLine(coverage), "2 of 5 strategies are paper trading.");
+  assert.equal(coverageLine(coverage.slice(0, 1)), "All 1 strategies are paper trading.");
+  assert.deepEqual(notTrading(coverage.slice(0, 1)), []);
 });

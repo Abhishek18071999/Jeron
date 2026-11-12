@@ -1,5 +1,6 @@
 """Paper-trading accounts and the signals they issued."""
 
+from dataclasses import asdict
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.backtest.strategies import STRATEGIES
 from app.db import get_session
 from app.models import PaperAccount, PaperDay, PaperTrade, SignalRecord, StrategyProposal
+from app.paper.job import coverage
 from app.paper.optimize import account_review, audit_trail, proposal_view
 
 router = APIRouter(tags=["paper"])
@@ -138,6 +140,21 @@ def paper_accounts(session: SessionDep, include_closed: bool = False) -> list[Ac
     if not include_closed:
         query = query.where(PaperAccount.status == "active")
     return [_account(a) for a in session.scalars(query)]
+
+
+class CoverageRow(BaseModel):
+    key: str
+    version: str
+    name: str
+    state: str
+    account_id: int | None
+    note: str
+
+
+@router.get("/paper/coverage")
+def paper_coverage(session: SessionDep) -> list[CoverageRow]:
+    """Every registered strategy: its active paper account, or why it has none."""
+    return [CoverageRow(**asdict(row)) for row in coverage(session)]
 
 
 @router.get("/paper/accounts/{account_id}")

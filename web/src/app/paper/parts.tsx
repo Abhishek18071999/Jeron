@@ -1,4 +1,5 @@
-import type { PaperDay, PaperTrade, SignalView } from "@/lib/api";
+import type { PaperCoverage, PaperDay, PaperTrade, SignalView } from "@/lib/api";
+import { coverageLine, notTrading } from "@/lib/paper-review";
 
 import { num, rupees, signClass } from "../backtests/format";
 
@@ -182,5 +183,30 @@ export function SignalCard({ signal }: { signal: SignalView }) {
         </Row>
       </dl>
     </details>
+  );
+}
+
+// Every registered strategy is accounted for: the ones with no active paper account are
+// listed with the reason, so a strategy is never just missing from the page.
+export function StrategyCoverage({ coverage }: { coverage: PaperCoverage[] }) {
+  if (coverage.length === 0) return null;
+  const missing = notTrading(coverage);
+  return (
+    <section className="mt-6 rounded-lg border border-line p-4 text-sm" aria-label="Strategy coverage">
+      <p className="font-medium">{coverageLine(coverage)}</p>
+      {missing.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {missing.map((c) => (
+            <li key={c.key}>
+              <span className="font-medium">{c.name}</span>{" "}
+              <span className="text-muted">
+                ({c.version}) · {c.label}
+              </span>
+              <div className="text-muted">{c.note}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
