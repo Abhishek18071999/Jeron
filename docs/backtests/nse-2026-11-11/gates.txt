@@ -1,0 +1,180 @@
+== run 1 residual-momentum-v1 elig=True ho_start=2025-11-10 at=2026-11-11 02:13 fp=None
+   n=203 exp=0.458R pf=1.60 win=0.37 cagr=13.1% dd=15.1% sharpe=0.68
+   HO n=45 exp=0.170R ret=0.0% dd=8.8% bench={"cagr": 0.002, "sharpe": -0.3347, "sessions": 249, "end_value": 23567.0, "volatility": 0.1492, "start_value": 23521.5, "total_return": 0.0019, "max_drawdown_pc
+   [pass] expectancy: 0.458R
+   [pass] profit_factor: 1.60
+   [pass] drawdown: 15.1%
+   [pass] trades: 203
+   [pass] regimes: bear, bull, sideways
+   [pass] benchmark: 0.68 vs 0.58
+   [pass] holdout: 0.170R over 45 trades
+   deflated: 0.9467
+   rating: weak | "2 of 11 checks failed: the evidence does not show an edge that would survive real trading."
+      At least 100 out-of-sample trades | 203 | True
+      95% interval of expectancy above 0R | +0.193R to +0.755R | True
+      95% interval of profit factor above 1 | 1.08 to 2.33 | True
+      Holdout: at least 20 trades, expectancy above 0, profit factor above 1 | +0.170R, profit factor 0.74 over 45 trades | False
+      Deflated Sharpe at least 0.95 (luck from the variants tried ruled out) | 0.95 | False
+      Still positive with slippage x2 | +0.471R over 194 trades | True
+      Still positive with charges x1.5 | +0.469R over 203 trades | True
+      Still positive with entries 1 session late | +0.714R over 204 trades | True
+      Still positive without its 5 best trades | +0.260R | True
+      Still positive without its best year | +0.300R without 2021 | True
+      No sector more than 50% of the gains | Capital Goods 21% | True
+   by_year: {'2019': (0.35, 6), '2020': (0.45, 37), '2021': (1.53, 26), '2022': (0.34, 27), '2023': (1.27, 26), '2024': (-0.33, 36), '2025': (0.09, 45)}
+   by_regime: {"bear": {"wins": 26, "avg_r": 0.8332, "trades": 52, "net_pnl": 261216.962, "win_rate": 0.5, "avg_win_r": 2.4227, "avg_loss_r": -0.7563, "avg_sessions": 110.9231, "expectancy_r": 0.8332, "profit_factor": 3.7274}, "bull": {"wins": 45, "avg_r": 0.3566, "trades": 137, "net_pnl": 377347.7788, "win_rate"
+== run 2 rs-pullback-v1 elig=False ho_start=2025-11-10 at=2026-11-11 02:16 fp=None
+   n=279 exp=0.358R pf=1.65 win=0.43 cagr=17.2% dd=13.4% sharpe=0.96
+   HO n=54 exp=-0.012R ret=0.5% dd=6.3% bench={"cagr": 0.002, "sharpe": -0.3347, "sessions": 249, "end_value": 23567.0, "volatility": 0.1492, "start_value": 23521.5, "total_return": 0.0019, "max_drawdown_pc
+   [pass] expectancy: 0.358R
+   [pass] profit_factor: 1.65
+   [pass] drawdown: 13.4%
+   [pass] trades: 279
+   [pass] regimes: bull, sideways
+   [pass] benchmark: 0.96 vs 0.58
+   [FAIL] holdout: -0.012R over 54 trades
+   deflated: 0.9712
+   rating: weak | "1 of 12 checks failed: the evidence does not show an edge that would survive real trading."
+      At least 100 out-of-sample trades | 279 | True
+      95% interval of expectancy above 0R | +0.134R to +0.617R | True
+      95% interval of profit factor above 1 | 1.19 to 2.25 | True
+      Holdout: at least 20 trades, expectancy above 0, profit factor above 1 | -0.012R, profit factor 0.93 over 54 trades | False
+      Deflated Sharpe at least 0.95 (luck from the variants tried ruled out) | 0.97 | True
+      Still positive with slippage x2 | +0.295R over 269 trades | True
+      Still positive with charges x1.5 | +0.355R over 279 trades | True
+      Still positive with entries 1 session late | +0.386R over 260 trades | True
+      At least 67% of the parameter grid positive on its own | 4 of 4 | True
+      Still positive without its 5 best trades | +0.198R | True
+      Still positive without its best year | +0.241R without 2023 | True
+      No sector more than 50% of the gains | Oil Gas & Consumable Fuels 26% | True
+   by_year: {'2019': (0.22, 16), '2020': (0.74, 54), '2021': (0.21, 37), '2022': (-0.0, 50), '2023': (1.1, 38), '2024': (0.15, 49), '2025': (-0.01, 35)}
+   by_regime: {"bull": {"wins": 91, "avg_r": 0.4151, "trades": 216, "net_pnl": 930354.4167, "win_rate": 0.4213, "avg_win_r": 2.1191, "avg_loss_r": -0.8253, "avg_sessions": 36.5972, "expectancy_r": 0.4151, "profit_factor": 1.6241}, "sideways": {"wins": 28, "avg_r": 0.1627, "trades": 63, "net_pnl": 189061.1064, "wi
+== run 3 fip-momentum-v1 elig=True ho_start=2025-11-10 at=2026-11-11 02:19 fp=None
+   n=202 exp=0.416R pf=1.79 win=0.38 cagr=13.9% dd=13.5% sharpe=0.71
+   HO n=43 exp=0.549R ret=11.5% dd=10.2% bench={"cagr": 0.002, "sharpe": -0.3347, "sessions": 249, "end_value": 23567.0, "volatility": 0.1492, "start_value": 23521.5, "total_return": 0.0019, "max_drawdown_pc
+   [pass] expectancy: 0.416R
+   [pass] profit_factor: 1.79
+   [pass] drawdown: 13.5%
+   [pass] trades: 202
+   [pass] regimes: bear, bull, sideways
+   [pass] benchmark: 0.71 vs 0.58
+   [pass] holdout: 0.549R over 43 trades
+   deflated: 0.9501
+   rating: strong | "Every check passes: the edge holds up under resampling, higher costs, late entries and nearby parameters."
+      At least 100 out-of-sample trades | 202 | True
+      95% interval of expectancy above 0R | +0.186R to +0.681R | True
+      95% interval of profit factor above 1 | 1.21 to 2.58 | True
+      Holdout: at least 20 trades, expectancy above 0, profit factor above 1 | +0.549R, profit factor 2.48 over 43 trades | True
+      Deflated Sharpe at least 0.95 (luck from the variants tried ruled out) | 0.95 | True
+      Still positive with slippage x2 | +0.468R over 201 trades | True
+      Still positive with charges x1.5 | +0.431R over 202 trades | True
+      Still positive with entries 1 session late | +0.574R over 212 trades | True
+      Still positive without its 5 best trades | +0.260R | True
+      Still positive without its best year | +0.283R without 2023 | True
+      No sector more than 50% of the gains | Automobile and Auto Components 18% | True
+   by_year: {'2019': (-0.68, 6), '2020': (0.84, 34), '2021': (0.65, 29), '2022': (0.3, 40), '2023': (1.41, 24), '2024': (-0.26, 33), '2025': (0.1, 36)}
+   by_regime: {"bear": {"wins": 21, "avg_r": 0.5607, "trades": 52, "net_pnl": 105139.7658, "win_rate": 0.4038, "avg_win_r": 2.3803, "avg_loss_r": -0.6719, "avg_sessions": 90.1346, "expectancy_r": 0.5607, "profit_factor": 1.9648}, "bull": {"wins": 47, "avg_r": 0.4239, "trades": 129, "net_pnl": 620231.7183, "win_ra
+== run 4 momentum-v1 elig=True ho_start=2025-11-10 at=2026-11-11 02:19 fp=None
+   n=209 exp=0.685R pf=1.79 win=0.40 cagr=13.0% dd=15.0% sharpe=0.64
+   HO n=40 exp=0.594R ret=24.0% dd=7.8% bench={"cagr": 0.002, "sharpe": -0.3347, "sessions": 249, "end_value": 23567.0, "volatility": 0.1492, "start_value": 23521.5, "total_return": 0.0019, "max_drawdown_pc
+   [pass] expectancy: 0.685R
+   [pass] profit_factor: 1.79
+   [pass] drawdown: 15.0%
+   [pass] trades: 209
+   [pass] regimes: bear, bull, sideways
+   [pass] benchmark: 0.64 vs 0.58
+   [pass] holdout: 0.594R over 40 trades
+   deflated: 0.8894
+   rating: moderate | "The edge is positive with 95% confidence and in the holdout, but 1 check failed."
+      At least 100 out-of-sample trades | 209 | True
+      95% interval of expectancy above 0R | +0.395R to +0.991R | True
+      95% interval of profit factor above 1 | 1.18 to 2.61 | True
+      Holdout: at least 20 trades, expectancy above 0, profit factor above 1 | +0.594R, profit factor 2.36 over 40 trades | True
+      Deflated Sharpe at least 0.95 (luck from the variants tried ruled out) | 0.89 | False
+      Still positive with slippage x2 | +0.594R over 212 trades | True
+      Still positive with charges x1.5 | +0.595R over 214 trades | True
+      Still positive with entries 1 session late | +0.654R over 209 trades | True
+      At least 67% of the parameter grid positive on its own | 4 of 4 | True
+      Still positive without its 5 best trades | +0.491R | True
+      Still positive without its best year | +0.413R without 2023 | True
+      No sector more than 50% of the gains | Capital Goods 31% | True
+   by_year: {'2019': (-0.55, 6), '2020': (1.23, 34), '2021': (1.16, 22), '2022': (0.14, 44), '2023': (2.78, 24), '2024': (-0.14, 42), '2025': (0.33, 37)}
+   by_regime: {"bear": {"wins": 28, "avg_r": 1.5038, "trades": 50, "net_pnl": 238298.3051, "win_rate": 0.56, "avg_win_r": 3.2491, "avg_loss_r": -0.7175, "avg_sessions": 106.8, "expectancy_r": 1.5038, "profit_factor": 4.8299}, "bull": {"wins": 44, "avg_r": 0.3978, "trades": 131, "net_pnl": 478158.8906, "win_rate":
+== run 5 quality-trend-v1 elig=True ho_start=2025-11-10 at=2026-11-11 12:26 fp=None
+   n=224 exp=0.674R pf=2.20 win=0.42 cagr=18.1% dd=14.7% sharpe=0.97
+   HO n=63 exp=0.046R ret=-6.1% dd=12.2% bench={"cagr": 0.002, "sharpe": -0.3347, "sessions": 249, "end_value": 23567.0, "volatility": 0.1492, "start_value": 23521.5, "total_return": 0.0019, "max_drawdown_pc
+   [pass] expectancy: 0.675R
+   [pass] profit_factor: 2.20
+   [pass] drawdown: 14.7%
+   [pass] trades: 224
+   [pass] regimes: bear, bull, sideways
+   [pass] benchmark: 0.97 vs 0.58
+   [pass] holdout: 0.046R over 63 trades
+   deflated: 0.9746
+   rating: weak | "1 of 12 checks failed: the evidence does not show an edge that would survive real trading."
+      At least 100 out-of-sample trades | 224 | True
+      95% interval of expectancy above 0R | +0.383R to +1.003R | True
+      95% interval of profit factor above 1 | 1.50 to 3.11 | True
+      Holdout: at least 20 trades, expectancy above 0, profit factor above 1 | +0.046R, profit factor 0.60 over 63 trades | False
+      Deflated Sharpe at least 0.95 (luck from the variants tried ruled out) | 0.97 | True
+      Still positive with slippage x2 | +0.651R over 229 trades | True
+      Still positive with charges x1.5 | +0.678R over 238 trades | True
+      Still positive with entries 1 session late | +0.708R over 219 trades | True
+      At least 67% of the parameter grid positive on its own | 4 of 4 | True
+      Still positive without its 5 best trades | +0.455R | True
+      Still positive without its best year | +0.389R without 2023 | True
+      No sector more than 50% of the gains | Capital Goods 24% | True
+   by_year: {'2020': (0.41, 31), '2021': (0.67, 44), '2022': (0.3, 46), '2023': (2.27, 34), '2024': (0.33, 30), '2025': (0.2, 39)}
+   by_regime: {"bear": {"wins": 31, "avg_r": 1.8609, "trades": 50, "net_pnl": 541583.2671, "win_rate": 0.62, "avg_win_r": 3.4324, "avg_loss_r": -0.7031, "avg_sessions": 125.54, "expectancy_r": 1.8609, "profit_factor": 9.0253}, "bull": {"wins": 55, "avg_r": 0.3449, "trades": 150, "net_pnl": 674946.6772, "win_rate"
+== run 6 quality-trend-v1 elig=False ho_start=2025-11-10 at=2026-11-11 12:36 fp=None
+   n=224 exp=0.684R pf=2.28 win=0.43 cagr=18.2% dd=14.7% sharpe=0.98
+   HO n=67 exp=-0.059R ret=-4.1% dd=12.3% bench={"cagr": 0.002, "sharpe": -0.3347, "sessions": 249, "end_value": 23567.0, "volatility": 0.1492, "start_value": 23521.5, "total_return": 0.0019, "max_drawdown_pc
+   [pass] expectancy: 0.684R
+   [pass] profit_factor: 2.28
+   [pass] drawdown: 14.7%
+   [pass] trades: 224
+   [pass] regimes: bear, bull, sideways
+   [pass] benchmark: 0.98 vs 0.58
+   [FAIL] holdout: -0.058R over 67 trades
+   deflated: 0.9749
+   rating: weak | "1 of 12 checks failed: the evidence does not show an edge that would survive real trading."
+      At least 100 out-of-sample trades | 224 | True
+      95% interval of expectancy above 0R | +0.390R to +1.015R | True
+      95% interval of profit factor above 1 | 1.57 to 3.22 | True
+      Holdout: at least 20 trades, expectancy above 0, profit factor above 1 | -0.058R, profit factor 0.77 over 67 trades | False
+      Deflated Sharpe at least 0.95 (luck from the variants tried ruled out) | 0.97 | True
+      Still positive with slippage x2 | +0.650R over 229 trades | True
+      Still positive with charges x1.5 | +0.677R over 238 trades | True
+      Still positive with entries 1 session late | +0.708R over 219 trades | True
+      At least 67% of the parameter grid positive on its own | 4 of 4 | True
+      Still positive without its 5 best trades | +0.465R | True
+      Still positive without its best year | +0.401R without 2023 | True
+      No sector more than 50% of the gains | Capital Goods 24% | True
+   by_year: {'2020': (0.41, 31), '2021': (0.67, 44), '2022': (0.3, 46), '2023': (2.27, 34), '2024': (0.33, 30), '2025': (0.26, 39)}
+   by_regime: {"bear": {"wins": 31, "avg_r": 1.8609, "trades": 50, "net_pnl": 541583.2671, "win_rate": 0.62, "avg_win_r": 3.4324, "avg_loss_r": -0.7031, "avg_sessions": 125.54, "expectancy_r": 1.8609, "profit_factor": 9.0253}, "bull": {"wins": 56, "avg_r": 0.3595, "trades": 150, "net_pnl": 713963.1998, "win_rate"
+== run 7 value-trend-v1 elig=True ho_start=2025-11-10 at=2026-11-11 17:06 fp=None
+   n=166 exp=0.834R pf=2.39 win=0.44 cagr=16.2% dd=12.9% sharpe=0.84
+   HO n=39 exp=0.229R ret=12.0% dd=7.0% bench={"cagr": 0.002, "sharpe": -0.3347, "sessions": 249, "end_value": 23567.0, "volatility": 0.1492, "start_value": 23521.5, "total_return": 0.0019, "max_drawdown_pc
+   [pass] expectancy: 0.834R
+   [pass] profit_factor: 2.39
+   [pass] drawdown: 12.9%
+   [pass] trades: 166
+   [pass] regimes: bear, bull
+   [pass] benchmark: 0.84 vs 0.58
+   [pass] holdout: 0.229R over 39 trades
+   deflated: 0.9759
+   rating: strong | "Every check passes: the edge holds up under resampling, higher costs, late entries and nearby parameters."
+      At least 100 out-of-sample trades | 166 | True
+      95% interval of expectancy above 0R | +0.470R to +1.208R | True
+      95% interval of profit factor above 1 | 1.53 to 3.63 | True
+      Holdout: at least 20 trades, expectancy above 0, profit factor above 1 | +0.229R, profit factor 1.61 over 39 trades | True
+      Deflated Sharpe at least 0.95 (luck from the variants tried ruled out) | 0.98 | True
+      Still positive with slippage x2 | +0.771R over 163 trades | True
+      Still positive with charges x1.5 | +0.820R over 167 trades | True
+      Still positive with entries 1 session late | +0.713R over 181 trades | True
+      Still positive without its 5 best trades | +0.566R | True
+      Still positive without its best year | +0.584R without 2023 | True
+      No sector more than 50% of the gains | Financial Services 39% | True
+   by_year: {'2019': (0.18, 6), '2020': (0.96, 27), '2021': (0.81, 23), '2022': (0.55, 37), '2023': (2.89, 18), '2024': (-0.32, 25), '2025': (0.94, 30)}
+   by_regime: {"bear": {"wins": 27, "avg_r": 1.6202, "trades": 46, "net_pnl": 383425.5182, "win_rate": 0.587, "avg_win_r": 3.1485, "avg_loss_r": -0.5516, "avg_sessions": 135.913, "expectancy_r": 1.6202, "profit_factor": 6.736}, "bull": {"wins": 43, "avg_r": 0.6434, "trades": 106, "net_pnl": 825323.204, "win_rate"
+bench (test): {"cagr": 0.1618, "sharpe": 0.5788, "sessions": 1490, "end_value": 23521.5, "volatility": 0.1782, "start_value": 9695.85, "total_return": 1.4259, "max_drawdown_pct": 38.3024}

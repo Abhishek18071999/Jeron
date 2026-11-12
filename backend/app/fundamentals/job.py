@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from app.data.fundamentals import (
     ResultsFormatError,
     name_key,
     parse_xbrl,
+    read_integrated_list,
     symbols_by_name,
 )
 from app.data.http import FetchError, NotPublishedError
@@ -177,6 +178,46 @@ def import_results(
             log(f"  {n} of {len(chosen)} filings read, {run.stored} stored.")
     session.commit()
     return run
+
+
+INTEGRATED_URL = "https://www.nseindia.com/api/integrated-filing-results"
+INTEGRATED_PAGE = 500
+ListFetch = Callable[[str, dict[str, str]], bytes]
+
+
+def fetch_integrated(
+    get: ListFetch, quarter_ends: Sequence[date], log: Log = _quiet
+) -> list[FilingRef]:
+    """Every filing in NSE's "Integrated Filing - Financials" list for these quarter
+    ends, page by page. The list replaced the Financial Results CSV from the March 2025
+    quarter; its rows go through `import_results` like the CSV's."""
+    refs: list[FilingRef] = []
+    for end in quarter_ends:
+        page, found = 1, 0
+        while True:
+            rows, total = read_integrated_list(
+                get(
+                    INTEGRATED_URL,
+                    {
+                        "index": "equities",
+                        "type": "Integrated Filing- Financials",
+                        "period_ended": end.strftime("%d-%b-%Y"),
+                        "page": str(page),
+                        "size": str(INTEGRATED_PAGE),
+                    },
+                )
+            )
+            refs += rows
+            found += len(rows)
+            if len(rows) < INTEGRATED_PAGE or found >= total:
+                break
+            page += 1
+        log(f"  quarter to {end}: {found} filings listed.")
+    return refs
+
+
+def newest_period_end(session: Session) -> date | None:
+    return session.scalar(select(func.max(FinancialResult.period_end)))
 
 
 @dataclass

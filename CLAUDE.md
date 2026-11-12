@@ -87,7 +87,12 @@ behaviour by adding a version, not by editing what a stored row meant.
     on Yahoo and NSE data, research only, `docs/backtests/all-strategies-2026-11-06-report.md`);
     `residual-momentum-v1` (invest, monthly top tenth by market-model residual momentum,
     Blitz, Huij and Martens 2011, `Market.resmom_rank`, one grid point,
-    `docs/plans/residual-momentum-v1.md`);
+    `docs/plans/residual-momentum-v1.md`; 7 of 7 on NSE data but weak evidence and no better than
+    `momentum-v1`, `docs/backtests/residual-momentum-v1-report.md`);
+    `value-trend-v1` (invest, monthly: the cheapest fifth by point-in-time earnings yield
+    with a positive 12-1 return, `Market.earnings_yield` and `Market.value_rank`, one grid
+    point, `docs/plans/value-trend-v1.md`; 7 of 7 with strong evidence on NSE data,
+    `docs/backtests/value-trend-v1-report.md`; needs results kept current);
     `top-score-v1` (the Stocks section's 90+ tech-v1 stocks on the swing plan, one grid
     point, `docs/plans/paper-review-v1.md`),
     `reversal-v1` (swing, short-term reversal of no-news losers on `Market.rev_rank`, one
@@ -181,7 +186,8 @@ behaviour by adding a version, not by editing what a stored row meant.
     a signal as what/when/how much/why; pure) and `service.py`. Served at `/sections`.
     Long-term is the invest tier (`Tier.INVEST`, wider target and trail in `TIERS`) with
     `quality-trend-v1`, the first strategy on `Market.fund_score` (point-in-time fund-v1)
-    and the first with its own exit rule. Intraday is "not running": no intraday data.
+    and the first with its own exit rule (6 of 7 on NSE data: its holdout lost money,
+    research only, `docs/backtests/quality-trend-v1-holdout-report.md`). Intraday is "not running": no intraday data.
   - `app/explain/` explain a stock (decision 0016, `docs/plans/explain-v1.md`):
     `facts.py` (every line a fact with source, date and kind; the brief: why in the scan,
     for, against, what cancels, level scenarios, checklist, unknowns, the setup check;
@@ -258,7 +264,10 @@ behaviour by adding a version, not by editing what a stored row meant.
     trades saved from nseindia.com), `watchdog`, `stop-all --reason` / `resume` (the kill
     switch, `app/halt.py`, `docs/runbook.md`), `research` (the review's options), `news-research` (the news brain test), `api-token` (the web app's token for the API),
     `fundamentals-import FILE...` (quarterly results from
-    Financial Results CSVs saved from nseindia.com), `fundamentals-reparse [--download]`
+    Financial Results CSVs saved from nseindia.com), `fundamentals-fetch [--start DATE]`
+    (quarters from March 2025: NSE's Financial Results list ends at December 2024, later
+    ones are in its Integrated Filing list; `docs/plans/fundamentals-fetch-v1.md`),
+    `fundamentals-reparse [--download]`
     (balance sheets and cash flow of stored filings from the saved XBRL), `news-label`,
     `news-testset`, `news-eval` (news labels, see `app/news/`), `preopen`, `weekly`,
     `strategy-status [VERSION STATUS --reason]` (list, or set a status; decision 0018),

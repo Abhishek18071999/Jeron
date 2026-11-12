@@ -181,9 +181,9 @@ def setup_view(session: SessionDep) -> SetupView:
     ).one()
     busy = imports["running"] or imports["pending"]
     newer = (
-        "The bundled lists end with the December 2024 quarter. For newer quarters, save a "
-        "Financial Results CSV from nseindia.com (Companies Listed > Corporate Filings > "
-        "Financial Results) and upload it below."
+        "The bundled lists end with the December 2024 quarter, and so does NSE's Financial "
+        "Results list: later quarters are in its Integrated Filing list. Load them with "
+        "`python -m app.cli fundamentals-fetch` (about one filing a second)."
     )
     if busy:
         running = imports["running"]

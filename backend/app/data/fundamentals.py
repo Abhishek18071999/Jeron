@@ -16,6 +16,7 @@ Pure module: the database layer stores what this returns.
 
 import csv
 import io
+import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -146,6 +147,74 @@ def read_results_csv(text: str) -> list[FilingRef]:
         except (ValueError, IndexError) as exc:
             raise ResultsFormatError(f"row {n}: {exc}") from exc
     return refs
+
+
+# NSE's Financial Results list ends with the December 2024 quarter. From the March 2025
+# quarter, results are in the "Integrated Filing - Financials" list, read as JSON.
+INTEGRATED_FROM = date(2025, 3, 31)
+
+
+def integrated_standard(xbrl_url: str) -> str:
+    """The Financial Results CSV's "IND AS" value for an integrated filing, from the form
+    named in its XBRL file. `quarter_of` reads it: only "Ind-AS New" is a company whose
+    interest cover is scored; lenders, banks and insurers file the other forms."""
+    form = xbrl_url.rsplit("/", 1)[-1].upper()
+    if form.startswith("INTEGRATED_FILING_INDAS"):
+        return "Ind-AS New"
+    if form.startswith("INTEGRATED_FILING_NBFC"):
+        return "NBFC-IND"
+    return "Non-Ind-AS"
+
+
+def integrated_quarter_ends(start: date, today: date) -> list[date]:
+    """Quarter ends from `start` (not before the first integrated quarter) to the last
+    one that has ended by `today`."""
+    ends: list[date] = []
+    year = max(start, INTEGRATED_FROM).year
+    while True:
+        for month, day in ((3, 31), (6, 30), (9, 30), (12, 31)):
+            end = date(year, month, day)
+            if end >= today:
+                return ends
+            if end >= max(start, INTEGRATED_FROM):
+                ends.append(end)
+        year += 1
+
+
+def read_integrated_list(content: bytes | str) -> tuple[list[FilingRef], int]:
+    """The filings on one page of NSE's "Integrated Filing - Financials" list and the
+    list's total count. A filing is dated by the later of its broadcast and creation
+    times (a revision has only the creation time), so it is never known early."""
+    try:
+        payload = json.loads(content)
+        rows = payload["data"]
+        total = int(payload.get("totalCount") or 0)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ResultsFormatError(f"not the integrated filing list: {exc}") from exc
+    refs = []
+    for n, row in enumerate(rows, start=1):
+        try:
+            times = [
+                _time(row[key].title())
+                for key in ("broadcast_Date", "creation_Date")
+                if row.get(key)
+            ]
+            url = (row.get("xbrl") or "").strip()
+            refs.append(
+                FilingRef(
+                    company=row["cmName"].strip(),
+                    consolidated=row["consolidated"].strip().lower() == "consolidated",
+                    audited=row["audited"].strip().lower() == "audited",
+                    standard=integrated_standard(url),
+                    period_end=_date(row["qe_Date"].title()),
+                    relating_to=(row.get("type_Sub") or "").strip(),
+                    xbrl_url=None if not url.endswith(".xml") else url,
+                    disseminated_at=max(times),
+                )
+            )
+        except (ValueError, KeyError, AttributeError) as exc:
+            raise ResultsFormatError(f"integrated filing row {n}: {exc!r}") from exc
+    return refs, total
 
 
 def _local(tag: str) -> str:

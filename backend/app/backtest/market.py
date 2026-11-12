@@ -21,7 +21,13 @@ import numpy as np
 from app import indicators as ind
 from app.backtest.features import NAN, Array, percentile_ranks, stock_features
 from app.data.events import ResultsDate, blackout_signal_days
-from app.fundamentals.score import STALE_DAYS, Quarter, known_quarters, score_with_history
+from app.fundamentals.score import (
+    STALE_DAYS,
+    Quarter,
+    known_quarters,
+    pe_ratio,
+    score_with_history,
+)
 from app.news.labels import SCORE_HORIZON_HALF_LIVES, SCORE_SCALE, SCORE_WEIGHTS, DatedLabel
 from app.scan.score import MAX_POINTS
 from app.scan.universe import UniverseRules
@@ -204,6 +210,11 @@ class Market:
     # residuals' sum over their standard deviation, and its percentile (1 = strongest)
     # among the universe that day.
     resmom_score: Array | None = None
+    # value-trend-v1 (docs/plans/value-trend-v1.md): trailing profit per share over the
+    # price, point in time, and its percentile (0 = cheapest) among the day's universe
+    # stocks that have one. None = no results loaded.
+    earnings_yield: Array | None = None
+    value_rank: Array | None = None
     resmom_rank: Array | None = None
 
     @property
@@ -432,6 +443,8 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
     high52_ratio, high52_rank = high52_ranks(close, high, eligible)
     resmom_score, resmom_rank = residual_momentum_ranks(close, eligible, nifty500)
     symbols = [s.symbol for s in inputs.stocks]
+    earnings_yield = earnings_yields(days, symbols, inputs.fundamentals, close / factor, close)
+    value_rank = None if earnings_yield is None else value_ranks(earnings_yield, eligible)
     reactions = results_reactions(days, symbols, inputs.results, close, vol_ratio, nifty500)
     sector_closes = [_index_series(days, inputs.sector_indices.get(n, {})) for n in SECTOR_INDICES]
     return Market(
@@ -492,6 +505,8 @@ def build_market(inputs: MarketInputs, rules: UniverseRules | None = None) -> Ma
         resmom_score=resmom_score,
         resmom_rank=resmom_rank,
         fund_score=fund_scores(days, symbols, inputs.fundamentals, close / factor),
+        earnings_yield=earnings_yield,
+        value_rank=value_rank,
     )
 
 
@@ -993,3 +1008,60 @@ def fund_scores(
                     break
                 out[s, t] = value
     return out
+
+
+def earnings_yields(
+    days: Sequence[date],
+    symbols: Sequence[str],
+    fundamentals: Mapping[str, Sequence[Quarter]] | None,
+    raw_close: Array,
+    close: Array,
+) -> Array | None:
+    """value-trend-v1 (docs/plans/value-trend-v1.md): trailing-four-quarter profit per
+    share over the price, point in time. The inverse of `pe_ratio` at the raw close on
+    the day a filing is published, used from the next session and carried forward by the
+    adjusted price change (so a split between filings does not distort it). NaN when the
+    trailing profit is not positive or can't be known, and once the newest quarter ended
+    more than `STALE_DAYS` ago."""
+    if fundamentals is None:
+        return None
+    out = np.full((len(symbols), len(days)), NAN)
+    for s, symbol in enumerate(symbols):
+        rows = fundamentals.get(symbol)
+        if not rows:
+            continue
+        traded = [int(t) for t in np.flatnonzero(~np.isnan(raw_close[s]))]
+        traded_days = [days[t] for t in traded]
+        published = sorted({q.disseminated_at.date() for q in rows})
+        for k, filed in enumerate(published):
+            quarters = known_quarters(
+                rows, datetime.combine(filed + timedelta(days=1), time(0), _IST)
+            )
+            first = bisect_right(days, filed)  # the next session
+            last = bisect_right(days, published[k + 1]) if k + 1 < len(published) else len(days)
+            i = bisect_right(traded_days, filed) - 1  # the raw close on or before the day
+            if first >= last or not quarters or i < 0:
+                continue
+            at = traded[i]
+            pe = pe_ratio(quarters, float(raw_close[s, at]))
+            base = close[s, at]
+            if pe is None or pe <= 0 or np.isnan(base):
+                continue
+            stale_from = quarters[-1].period_end + timedelta(days=STALE_DAYS + 1)
+            for t in range(first, last):
+                if days[t] >= stale_from:
+                    break
+                if not np.isnan(close[s, t]) and close[s, t] > 0:
+                    out[s, t] = base / close[s, t] / pe
+    return out
+
+
+def value_ranks(earnings_yield: Array, universe: Array) -> Array:
+    """Each day's percentile of the earnings yield among the universe stocks that have
+    one, 0 = cheapest (highest yield). NaN outside the universe or with no yield."""
+    rank = np.full(earnings_yield.shape, NAN)
+    for t in range(earnings_yield.shape[1]):
+        members = np.flatnonzero(universe[:, t])
+        if len(members):
+            rank[members, t] = percentile_ranks(-earnings_yield[members, t])
+    return rank

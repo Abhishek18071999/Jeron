@@ -1,6 +1,7 @@
 """Quarterly results: NSE's Financial Results CSV, the XBRL filings (real samples) and the
 fundamental score."""
 
+import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -11,11 +12,14 @@ import pytest
 from app.data.fundamentals import (
     IST,
     ResultsFormatError,
+    integrated_quarter_ends,
     name_key,
     parse_xbrl,
+    read_integrated_list,
     read_results_csv,
     symbols_by_name,
 )
+from app.fundamentals import job
 from app.fundamentals.job import choose
 from app.fundamentals.score import Quarter, fund_score, pe_ratio, ttm
 
@@ -188,3 +192,69 @@ def test_a_filing_in_the_wrong_units_gets_no_pe():
     assert pe_ratio(wrong, 20.0) is None
     s = fund_score(wrong, wrong[-1].period_end + timedelta(days=50), 20.0)
     assert s.valuation == 0 and any("wrong units" in n for n in s.notes)
+
+
+def test_reads_the_integrated_filing_list():
+    # NSE's Financial Results list ends at the December 2024 quarter; later quarters are
+    # in the "Integrated Filing - Financials" list.
+    refs, total = read_integrated_list((FIXTURES / "nse_integrated_filings.json").read_bytes())
+    assert total == 4 and len(refs) == 4
+    gammon, revision, nbfc, bank = refs
+    assert gammon.company == "Gammon India Limited" and gammon.consolidated
+    assert gammon.period_end == date(2025, 9, 30) and not gammon.audited
+    assert gammon.xbrl_url and gammon.xbrl_url.endswith("_WEB.xml")
+    # The later of the broadcast and creation times: never known early.
+    assert gammon.disseminated_at == datetime(2026, 11, 2, 11, 24, 42, tzinfo=IST)
+    # A revision has no broadcast time: it is known from when it was created.
+    assert revision.relating_to == "Revision"
+    assert revision.disseminated_at == datetime(2026, 11, 5, 10, 34, 27, tzinfo=IST)
+    # `quarter_of` scores interest cover only for "Ind-AS New" filers.
+    assert [r.standard for r in refs] == ["Ind-AS New", "NBFC-IND", "NBFC-IND", "Non-Ind-AS"]
+
+
+def test_other_json_is_refused_as_an_integrated_list():
+    with pytest.raises(ResultsFormatError, match="integrated filing"):
+        read_integrated_list(b'{"rows": []}')
+    with pytest.raises(ResultsFormatError, match="integrated filing"):
+        read_integrated_list(b"<html>Access Denied</html>")
+
+
+def test_integrated_quarter_ends():
+    assert integrated_quarter_ends(date(2020, 1, 1), date(2025, 3, 31)) == []
+    assert integrated_quarter_ends(date(2020, 1, 1), date(2025, 10, 5)) == [
+        date(2025, 3, 31),
+        date(2025, 6, 30),
+        date(2025, 9, 30),
+    ]
+    assert integrated_quarter_ends(date(2026, 6, 30), date(2026, 11, 11)) == [
+        date(2026, 6, 30),
+        date(2026, 9, 30),
+    ]
+
+
+def test_integrated_filing_xbrl_parses_like_the_old_form():
+    r = parse_xbrl((FIXTURES / "xbrl_integrated_airolam_2025q2.xml").read_bytes())
+    assert (r.symbol, r.period_start, r.period_end) == (
+        "AIROLAM",
+        date(2025, 7, 1),
+        date(2025, 9, 30),
+    )
+    assert r.numbers["revenue"] == Decimal("625268000")
+    assert r.numbers["net_profit"] == Decimal("26941000")
+
+
+def test_fetch_integrated_pages_through_each_quarter(monkeypatch):
+    page = json.loads((FIXTURES / "nse_integrated_filings.json").read_text())
+    calls = []
+
+    def get(url, params):
+        calls.append(params)
+        rows = page["data"][:2] if params["page"] == "1" else page["data"][2:3]
+        return json.dumps({"data": rows, "totalCount": 3}).encode()
+
+    monkeypatch.setattr(job, "INTEGRATED_PAGE", 2)
+    refs = job.fetch_integrated(get, [date(2025, 9, 30)])
+    assert len(refs) == 3
+    assert [c["page"] for c in calls] == ["1", "2"]
+    assert calls[0]["period_ended"] == "30-Sep-2025"
+    assert calls[0]["type"] == "Integrated Filing- Financials"

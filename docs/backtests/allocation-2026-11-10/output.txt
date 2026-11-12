@@ -1,0 +1,72 @@
+Period 2019-10-31 to 2026-10-30, 1739 sessions; holdout from 2025-10-31
+Nifty 500            CAGR  12.4%  Sharpe 0.39  max DD 38.3%
+
+1. Idle cash (share of equity, mean)
+  fip-momentum-v1    0.54
+  momentum-v1        0.56
+  rs-pullback-v1     0.59
+
+2. A fixed share of idle cash in Nifty 500, whole period
+  fip-momentum-v1    share 0.00  CAGR  14.1%  Sharpe 0.73  max DD 14.1%  holdout  +8.3%
+  fip-momentum-v1    share 0.25  CAGR  15.2%  Sharpe 0.74  max DD 16.9%  holdout  +5.8%
+  fip-momentum-v1    share 0.50  CAGR  16.3%  Sharpe 0.72  max DD 23.8%  holdout  +3.7%
+  fip-momentum-v1    share 0.75  CAGR  17.4%  Sharpe 0.69  max DD 31.2%  holdout  +1.9%
+  fip-momentum-v1    share 1.00  CAGR  18.3%  Sharpe 0.66  max DD 38.5%  holdout  +0.4%
+  momentum-v1        share 0.00  CAGR  13.6%  Sharpe 0.68  max DD 15.3%  holdout +20.9%
+  momentum-v1        share 0.25  CAGR  14.9%  Sharpe 0.70  max DD 17.5%  holdout +16.1%
+  momentum-v1        share 0.50  CAGR  16.0%  Sharpe 0.70  max DD 24.4%  holdout +12.3%
+  momentum-v1        share 0.75  CAGR  17.1%  Sharpe 0.68  max DD 31.4%  holdout  +9.2%
+  momentum-v1        share 1.00  CAGR  18.2%  Sharpe 0.65  max DD 38.4%  holdout  +6.6%
+  rs-pullback-v1     share 0.00  CAGR  13.5%  Sharpe 0.66  max DD 13.5%  holdout  +2.1%
+  rs-pullback-v1     share 0.25  CAGR  14.6%  Sharpe 0.67  max DD 18.1%  holdout  +0.2%
+  rs-pullback-v1     share 0.50  CAGR  15.6%  Sharpe 0.65  max DD 25.0%  holdout  -1.5%
+  rs-pullback-v1     share 0.75  CAGR  16.5%  Sharpe 0.63  max DD 31.9%  holdout  -2.9%
+  rs-pullback-v1     share 1.00  CAGR  17.4%  Sharpe 0.60  max DD 38.9%  holdout  -4.1%
+
+3. Trend gate (month-end, 200-session average)
+  a. stored benchmark only, from 2020-08-31 (after the March 2020 fall)
+  Nifty 500          CAGR  14.9%  Sharpe 0.58  max DD 18.8%
+  fip-momentum-v1    alone   CAGR  16.1%  Sharpe 0.88  max DD 14.1%
+                     always  CAGR  21.8%  Sharpe 0.91  max DD 23.9%
+                     gated   CAGR  19.9%  Sharpe 0.87  max DD 24.0%  (11 switches)
+  momentum-v1        alone   CAGR  15.1%  Sharpe 0.78  max DD 15.3%
+                     always  CAGR  21.0%  Sharpe 0.87  max DD 24.0%
+                     gated   CAGR  19.5%  Sharpe 0.85  max DD 23.0%  (11 switches)
+  rs-pullback-v1     alone   CAGR  16.0%  Sharpe 0.87  max DD 13.5%
+                     always  CAGR  20.7%  Sharpe 0.83  max DD 24.0%
+                     gated   CAGR  18.7%  Sharpe 0.80  max DD 24.0%  (11 switches)
+  b. average from Yahoo's closes since 2016-01-01: whole period
+  in the index at the start: True; switches on 2020-02-28, 2020-07-31, 2022-02-28, 2022-03-31, 2022-05-31, 2022-07-29, 2023-02-28, 2023-04-28, 2025-01-31, 2025-05-30, 2026-01-30, 2026-07-31, 2026-09-30
+  fip-momentum-v1    alone        CAGR  14.1%  Sharpe 0.73  max DD 14.1%
+                     always       CAGR  18.3%  Sharpe 0.66  max DD 38.5%
+                     half, always CAGR  16.3%  Sharpe 0.72  max DD 23.8%
+                     gated        CAGR  17.1%  Sharpe 0.72  max DD 24.1%  holdout  +1.9%  (13 switches)
+                     half, gated  CAGR  15.6%  Sharpe 0.74  max DD 19.4%
+  momentum-v1        alone        CAGR  13.6%  Sharpe 0.68  max DD 15.3%
+                     always       CAGR  18.2%  Sharpe 0.65  max DD 38.4%
+                     half, always CAGR  16.0%  Sharpe 0.70  max DD 24.4%
+                     gated        CAGR  17.2%  Sharpe 0.74  max DD 23.1%  holdout  +9.6%  (13 switches)
+                     half, gated  CAGR  15.5%  Sharpe 0.73  max DD 19.4%
+  rs-pullback-v1     alone        CAGR  13.5%  Sharpe 0.66  max DD 13.5%
+                     always       CAGR  17.4%  Sharpe 0.60  max DD 38.9%
+                     half, always CAGR  15.6%  Sharpe 0.65  max DD 25.0%
+                     gated        CAGR  15.8%  Sharpe 0.64  max DD 24.1%  holdout  -4.0%  (13 switches)
+                     half, gated  CAGR  14.7%  Sharpe 0.66  max DD 18.8%
+
+4. Capital split equally between strategies
+  fip-momentum-v1                                      CAGR  14.1%  Sharpe 0.73  max DD 14.1%  holdout  +8.3%
+      2019 +0.2%  2020 +15.5%  2021 +48.3%  2022 -1.3%  2023 +31.5%  2024 +0.5%  2025 +11.8%  2026 -0.1%
+  fip-momentum-v1 + rs-pullback-v1                     CAGR  13.9%  Sharpe 0.79  max DD 12.9%  holdout  +5.3%
+      2019 -0.4%  2020 +11.1%  2021 +44.6%  2022 +0.6%  2023 +34.5%  2024 +3.9%  2025 +7.4%  2026 +2.5%
+  fip-momentum-v1 + momentum-v1                        CAGR  14.0%  Sharpe 0.76  max DD 13.0%  holdout +14.6%
+      2019 +0.7%  2020 +13.5%  2021 +48.7%  2022 -3.1%  2023 +27.5%  2024 +0.8%  2025 +9.1%  2026 +7.3%
+  fip-momentum-v1 + momentum-v1 + rs-pullback-v1       CAGR  13.9%  Sharpe 0.80  max DD 12.3%  holdout +10.3%
+      2019 +0.1%  2020 +11.3%  2021 +46.1%  2022 -1.3%  2023 +30.8%  2024 +2.9%  2025 +7.1%  2026 +6.6%
+  Nifty 500 by year: 2019 +1.9%  2020 +16.7%  2021 +30.2%  2022 +3.0%  2023 +25.8%  2024 +15.2%  2025 +6.7%  2026 -8.3%
+  daily-return correlation ['fip-momentum-v1', 'momentum-v1', 'rs-pullback-v1']
+[[1.   0.7  0.58]
+ [0.7  1.   0.58]
+ [0.58 0.58 1.  ]]
+
+5. Is the split's Sharpe really above fip-momentum-v1's? Paired block bootstrap
+  Sharpe difference +0.07; 95% range -0.29 to +0.50; above zero in 69% of resamples

@@ -163,6 +163,17 @@ export const GUIDES: StrategyGuide[] = [
     lesson: "strategy-momentum",
   },
   {
+    key: "value-trend",
+    name: "The cheapest rising stocks",
+    section: "invest",
+    lookFor:
+      "On the first session of each month, a stock in the cheapest fifth of the universe by earnings yield (the last four quarters' profit per share over the price) whose return from a year ago to a month ago is positive.",
+    works: "Markets where out-of-favour companies with real profits are re-rated. Value can lag for years while expensive growth stocks lead, and cheap stocks are often cheap for a reason; the rising-price condition is there to avoid the ones still falling.",
+    watch: "The value rank on the first session of each month, and each new quarterly result: a fall in profit makes the stock dearer overnight.",
+    exit: "Sold at the next open after the first session of a month on which its value rank is above 0.5 (out of the cheaper half).",
+    lesson: "strategy-quality-trend",
+  },
+  {
     key: "residual-momentum",
     name: "Residual momentum leaders",
     section: "invest",

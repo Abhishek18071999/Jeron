@@ -12,6 +12,8 @@ python -m app.cli deals                         # today's bulk and block deals
 python -m app.cli deals-import deals.csv        # bulk/block deals or insider trades saved
                                                 # from nseindia.com
 python -m app.cli fundamentals-import CF-FR*.csv # quarterly results (CSV from nseindia.com)
+python -m app.cli fundamentals-fetch            # quarterly results from March 2025 on
+                                                # (NSE's Integrated Filing list)
 python -m app.cli fundamentals-reparse          # balance sheets and cash flow from saved XBRL
                                                 # (--download: fetch the files not saved)
 python -m app.cli news-label --limit 100        # label news (JERON_NEWS_PROVIDER; needs a key)
@@ -65,14 +67,25 @@ from app.config import get_settings
 from app.data import pipeline, store
 from app.data.deals import BLOCK, BULK, DealFormatError, read_file
 from app.data.events import parse_board_meetings, parse_board_meetings_json
-from app.data.fundamentals import ResultsFormatError, read_results_csv
-from app.data.http import Fetcher
+from app.data.fundamentals import (
+    INTEGRATED_FROM,
+    ResultsFormatError,
+    integrated_quarter_ends,
+    read_results_csv,
+)
+from app.data.http import Fetcher, FetchError, NotPublishedError
 from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
 from app.exits.job import run_preopen
-from app.fundamentals.job import cached_fetch, import_results, reparse_cached
+from app.fundamentals.job import (
+    cached_fetch,
+    fetch_integrated,
+    import_results,
+    newest_period_end,
+    reparse_cached,
+)
 from app.journal.importer import import_tradebook
 from app.models import Alert, StrategyProposal
 from app.news.deepseek import LabellerError
@@ -349,6 +362,20 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     p = sub.add_parser(
+        "fundamentals-fetch",
+        help="quarterly results from March 2025 on, from NSE's Integrated Filing list",
+    )
+    p.add_argument(
+        "--start",
+        type=_date,
+        help="first quarter end to list (default: the newest stored quarter, so late "
+        "filers and revisions are picked up; never before 2025-03-31)",
+    )
+    p.add_argument(
+        "--all", action="store_true", help="every listed company, not only liquid stocks"
+    )
+
+    p = sub.add_parser(
         "fundamentals-reparse",
         help="fill stored results' balance sheets and cash flow from the saved XBRL files",
     )
@@ -556,6 +583,31 @@ def main(argv: list[str] | None = None) -> int:
                     f"{len(run.unmatched)} companies matched no NSE stock by name (often "
                     "SME or debt-only listings), e.g. " + ", ".join(sorted(run.unmatched)[:5])
                 )
+            return 0 if not run.failed else 1
+
+        if args.command == "fundamentals-fetch":
+            settings = get_settings()
+            fetcher = Fetcher(min_interval=settings.nse_request_interval)
+            start = args.start or newest_period_end(session) or INTEGRATED_FROM
+            ends = integrated_quarter_ends(start, today)
+            try:
+                refs = fetch_integrated(fetcher.get, ends, log=_log)
+            except (FetchError, NotPublishedError, ResultsFormatError) as exc:
+                _log(f"The integrated filing list could not be read: {exc}")
+                return 1
+            run = import_results(
+                session,
+                refs,
+                cached_fetch(fetcher.get, Path(settings.data_dir) / "xbrl"),
+                all_stocks=args.all,
+                log=_log,
+            )
+            _log(
+                f"{run.filings} filings listed for {len(ends)} quarters, {run.chosen} chosen; "
+                f"{run.stored} stored, {run.already} already there, {len(run.failed)} failed."
+            )
+            for problem in run.failed[:20]:
+                _log(f"  {problem}")
             return 0 if not run.failed else 1
 
         if args.command == "backtest":

@@ -140,6 +140,17 @@ def reasons(m: Market, s: int, t: int, strategy: Strategy, params: Params) -> li
             f"{params['min_rank']:g}), checked on the first session of the month"
         )
     elif (
+        strategy.key == "value-trend" and m.value_rank is not None and m.earnings_yield is not None
+    ):
+        out.append(
+            "Cheap against its earnings: earnings yield "
+            f"{_value(m.earnings_yield, s, t) * 100:.1f}%, value rank "
+            f"{_value(m.value_rank, s, t):.2f} in the universe (needs 0.20 or "
+            "less), checked on the first session of the month"
+        )
+        if m.mom_return is not None:
+            out.append(f"Rising: 12-1 return {_value(m.mom_return, s, t) * 100:+.0f}%")
+    elif (
         strategy.key == "residual-momentum"
         and m.resmom_rank is not None
         and m.resmom_score is not None

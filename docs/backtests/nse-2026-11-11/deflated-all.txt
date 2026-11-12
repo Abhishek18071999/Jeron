@@ -1,0 +1,9 @@
+strategies counted: ['score-swing', 'breakout-52w', 'pullback-trend', 'score-swing-events', 'breakout-52w-events', 'pullback-trend-events', 'trend-breakout', 'rs-pullback', 'results-drift', 'sector-rotation', 'quality-trend', 'momentum', 'top-score', 'reversal', 'fip-momentum', 'low-vol', 'high52', 'residual-momentum', 'value-trend']
+trials: 75
+run 1 residual-momentum-v1: deflated Sharpe vs all 75 trials: 0.2155
+run 2 rs-pullback-v1: deflated Sharpe vs all 75 trials: 0.4506
+run 3 fip-momentum-v1: deflated Sharpe vs all 75 trials: 0.2397
+run 4 momentum-v1: deflated Sharpe vs all 75 trials: 0.1943
+run 5 quality-trend-v1: deflated Sharpe vs all 75 trials: 0.459
+run 6 quality-trend-v1: deflated Sharpe vs all 75 trials: 0.4655
+run 7 value-trend-v1: deflated Sharpe vs all 75 trials: 0.3425
