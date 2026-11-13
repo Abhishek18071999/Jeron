@@ -167,3 +167,14 @@ def test_retry_only_when_the_scan_is_missing():
     assert ran == []
     assert retry_job(run, evening, lambda: date(2026, 10, 22)) == 0  # Friday's data was late
     assert ran == [["daily", "--date", "2026-10-23"]]
+
+
+def test_request_urls_are_not_logged():
+    """The Telegram Bot API puts the bot token in the URL, and httpx logs each URL at
+    INFO: the scheduler's logs must not carry it."""
+    import logging
+
+    from app.scheduler import configure_logging
+
+    configure_logging()
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)

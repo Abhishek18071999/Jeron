@@ -267,8 +267,15 @@ def _telegram_tick() -> None:
         poll(session, log=log.info)
 
 
-def main() -> None:
+def configure_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    # httpx logs each request's URL at INFO, and the Telegram Bot API puts the bot token
+    # in the URL: the token would be in `docker compose logs` every minute.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+def main() -> None:
+    configure_logging()
     scheduler = build(BlockingScheduler(timezone=IST))
     autopilot.start()
     _safe(lambda: len(catch_up()), "catch-up")()
