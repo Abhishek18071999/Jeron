@@ -235,7 +235,9 @@ behaviour by adding a version, not by editing what a stored row meant.
   - `app/scheduler.py` APScheduler: `preopen` 08:30 IST, `daily` 19:00 IST on trading
     days, `watchdog` 19:45 IST, `daily-retry` 21:30 IST (only when the session has no scan yet), `weekly` after
     the last session of the week; `catch_up` on start runs what was
-    missed while the computer was off; the autopilot every minute. Runs as the
+    missed while the computer was off; every daily run names its session (`daily --date`,
+    default the newest session whose market has closed), so a run that fires late after
+    the computer wakes is for the evening it missed, never for a day not yet traded; the autopilot every minute. Runs as the
     `scheduler` service. After `weekly`: `paper-review` and `proposal-validate --limit 2`.
   - `app/autopilot.py` sets an install up without commands (`docs/plans/autopilot-v1.md`):
     history, the first daily run, announcements from stored PR bundles, the news

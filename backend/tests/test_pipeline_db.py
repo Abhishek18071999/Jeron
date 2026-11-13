@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.calendar.nse import TradingCalendar
@@ -18,6 +19,7 @@ from app.data.yahoo import YahooHistory
 from app.db import get_engine
 from app.enums import CorporateActionType, QualityStatus
 from app.main import app
+from app.models import DataQualityReport
 from tests.conftest import TEST_DATABASE_URL, requires_db, reset_database
 from tests.helpers import bar, pr_zip, udiff_row, udiff_zip
 
@@ -283,6 +285,25 @@ def test_daily_update(session):
     )
     assert report is not None
     assert report.trade_date == DAYS[-1]
+
+
+@requires_db
+def test_daily_update_stops_at_the_session_asked_for(session):
+    """A run before a session has closed is for the one before: nothing is loaded or
+    reported after `end`, however late `today` is."""
+    report = pipeline.daily_update(
+        session,
+        FakeArchive(),
+        FakeYahoo(),
+        TradingCalendar.default(),
+        DAYS[-1] + timedelta(days=1),
+        end=DAYS[-2],
+    )
+    assert report is not None
+    assert report.trade_date == DAYS[-2]
+    assert store.ok_dates(session, store.NSE_BARS)[-1] == DAYS[-2]
+    reported = session.scalars(select(DataQualityReport.trade_date)).all()
+    assert max(reported) == DAYS[-2]
 
 
 class ListArchive(FakeArchive):

@@ -38,23 +38,64 @@ def test_holidays_skip_and_weekly_after_the_last_session():
         ran.append(args)
         return 0
 
+    def seven(day):
+        return lambda: datetime(day.year, day.month, day.day, 19, 0, tzinfo=IST)
+
     holi = date(2025, 3, 14)  # Holi, a Friday holiday in 2025
-    assert daily_job(run, lambda: holi) is None and preopen_job(run, lambda: holi) is None
+    thursday = date(2025, 3, 13)
+    # Holi evening: Thursday, the newest session, was scanned on Thursday evening.
+    assert daily_job(run, seven(holi), lambda: thursday) is None
+    assert preopen_job(run, lambda: holi) is None
     assert ran == []
     calendar = TradingCalendar.default()
-    assert last_session_of_week(calendar, date(2025, 3, 13))  # Thursday before Holi
-    assert daily_job(run, lambda: date(2025, 3, 13)) == 0
+    assert last_session_of_week(calendar, thursday)  # Thursday before Holi
+    assert daily_job(run, seven(thursday), lambda: date(2025, 3, 12)) == 0
     assert ran == [
-        ["daily"],
+        ["daily", "--date", "2025-03-13"],
         ["weekly", "--date", "2025-03-13"],
         ["paper-review"],
         ["proposal-validate", "--limit", "2"],
     ]
     ran.clear()
-    daily_job(run, lambda: date(2025, 3, 12))
-    assert ran == [["daily"]]
+    daily_job(run, seven(date(2025, 3, 12)), lambda: date(2025, 3, 11))
+    assert ran == [["daily", "--date", "2025-03-12"]]
     preopen_job(run, lambda: date(2025, 3, 12))
     assert ran[-1] == ["preopen", "--date", "2025-03-12"]
+
+
+def test_a_late_daily_run_is_for_the_evening_it_missed():
+    """13 Nov 2026: the computer slept through Thursday's 19:00 run and woke at 03:25 on
+    Friday, inside the job's grace. The run is Thursday's: Friday hasn't traded, and a
+    run for it stored a FAIL report, a blocked scan and a summary before the open, and
+    sent the weekly summary a session early."""
+    ran: list[list[str]] = []
+
+    def run(args):
+        ran.append(args)
+        return 0
+
+    woke = lambda: datetime(2026, 11, 13, 3, 25, tzinfo=IST)  # noqa: E731 - a Friday
+    assert daily_job(run, woke, lambda: date(2026, 11, 11)) == 0
+    assert ran == [["daily", "--date", "2026-11-12"]]  # Thursday, and no weekly yet
+
+    # Friday evening on time: Friday's run, then the weekly one.
+    ran.clear()
+    friday = lambda: datetime(2026, 11, 13, 19, 0, tzinfo=IST)  # noqa: E731
+    assert daily_job(run, friday, lambda: date(2026, 11, 12)) == 0
+    assert ran[0] == ["daily", "--date", "2026-11-13"]
+    assert ran[1] == ["weekly", "--date", "2026-11-13"]
+
+    # Friday already scanned by hand before 19:00: no second run, but still the weekly.
+    ran.clear()
+    assert daily_job(run, friday, lambda: date(2026, 11, 13)) is None
+    assert ran[0] == ["weekly", "--date", "2026-11-13"]
+
+    # Slept through Friday evening, woke on Saturday morning: still Friday's run.
+    ran.clear()
+    saturday = lambda: datetime(2026, 11, 14, 6, 0, tzinfo=IST)  # noqa: E731
+    assert daily_job(run, saturday, lambda: date(2026, 11, 12)) == 0
+    assert ran[0] == ["daily", "--date", "2026-11-13"]
+    assert ran[1] == ["weekly", "--date", "2026-11-13"]
 
 
 def test_catch_up_after_the_computer_was_off():
@@ -71,7 +112,12 @@ def test_catch_up_after_the_computer_was_off():
     wed = date(2026, 10, 21)
     done = catch_up(run, at(wed, 8, 45), lambda: date(2026, 10, 16))
     assert done == ["daily", "preopen"]
-    assert ran == [["daily"], ["preopen", "--date", "2026-10-21"]]
+    assert ran == [["daily", "--date", "2026-10-19"], ["preopen", "--date", "2026-10-21"]]
+
+    # On at 03:25 on a Friday with Thursday unscanned: Thursday's run, not Friday's.
+    ran.clear()
+    assert catch_up(run, at(date(2026, 11, 13), 3, 25), lambda: date(2026, 11, 11)) == ["daily"]
+    assert ran == [["daily", "--date", "2026-11-12"]]
 
     # Monday's scan exists, and it is evening before the daily time: nothing to do.
     ran.clear()
@@ -120,4 +166,4 @@ def test_retry_only_when_the_scan_is_missing():
     assert retry_job(run, evening, lambda: None) is None  # a new install: the autopilot
     assert ran == []
     assert retry_job(run, evening, lambda: date(2026, 10, 22)) == 0  # Friday's data was late
-    assert ran == [["daily"]]
+    assert ran == [["daily", "--date", "2026-10-23"]]
