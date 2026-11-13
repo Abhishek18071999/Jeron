@@ -78,7 +78,7 @@ from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
 from app.db import get_engine
 from app.enums import QualityStatus
-from app.exits.job import run_preopen
+from app.exits.job import due_session, run_preopen
 from app.fundamentals.job import (
     cached_fetch,
     fetch_integrated,
@@ -104,7 +104,7 @@ from app.paper.optimize import record_proposals, refresh_forward, validate, vali
 from app.scan.job import ASM, run_scan
 from app.scan.surveillance import read_asm_csv
 from app.settings_store import effective_settings
-from app.signals.build import IST
+from app.signals.build import IST, MARKET_CLOSE
 
 
 def _log(message: str) -> None:
@@ -314,10 +314,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     group.add_argument("--test", action="store_true", help="send a test message")
 
-    sub.add_parser(
+    p = sub.add_parser(
         "daily",
         help="update everything since the last run, scan, paper-trade, send alerts "
         "(run after 7 pm IST)",
+    )
+    p.add_argument(
+        "--date",
+        type=_date,
+        help="the session to bring everything up to (default: the newest session whose "
+        "market has closed, so a run before 15:30 IST never scans a day not yet traded)",
     )
 
     p = sub.add_parser(
@@ -713,7 +719,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if alert.status == "sent" else 1
 
         if args.command == "daily":
-            report = pipeline.daily_update(session, _archive(), _yahoo(), calendar, today, log=_log)
+            closed = due_session(calendar, datetime.now(IST), MARKET_CLOSE)
+            report = pipeline.daily_update(
+                session, _archive(), _yahoo(), calendar, today, end=args.date or closed, log=_log
+            )
             late = data_late(session, calendar, log=_log)
             if report is None:
                 return 1

@@ -89,13 +89,26 @@ def end_of_week(run: Runner, day: date) -> None:
     run(["proposal-validate", "--limit", "2"])
 
 
-def daily_job(run: Runner = cli.main, today: Callable[[], date] = _today) -> int | None:
-    day = today()
+def daily_job(
+    run: Runner = cli.main,
+    now: Callable[[], datetime] = lambda: datetime.now(IST),
+    latest_scan: Callable[[], date | None] = lambda: _latest_scan(),
+) -> int | None:
+    """The daily run for the newest session whose daily time has passed. A run that
+    fires late (the computer slept through 19:00 and woke before the grace ran out) is
+    for the evening it missed, not for the day it wakes on: that day hasn't traded yet.
+    Nothing when that session is already scanned (a holiday evening), except the
+    weekly job on the week's last session when the scan was run by hand before 19:00."""
     calendar = TradingCalendar.default()
-    if not is_session(calendar, day):
-        log.info("%s is not a trading day: no daily run", day)
+    at = now().astimezone(IST)
+    day = due_session(calendar, at, time(*_hm(get_settings().schedule_daily)))
+    scanned = latest_scan()
+    if scanned is not None and scanned >= day:
+        log.info("%s is already scanned: no daily run", day)
+        if day == at.date() and last_session_of_week(calendar, day):
+            end_of_week(run, day)
         return None
-    code = run(["daily"])
+    code = run(["daily", "--date", day.isoformat()])
     if last_session_of_week(calendar, day):
         end_of_week(run, day)
     return code
@@ -153,7 +166,7 @@ def catch_up(
         log.info("No scan yet: nothing to catch up")
     elif scanned < last:
         log.info("Catching up: no scan for %s yet", last)
-        run(["daily"])
+        run(["daily", "--date", last.isoformat()])
         ran.append("daily")
         if last_session_of_week(calendar, last):
             end_of_week(run, last)
@@ -177,7 +190,7 @@ def retry_job(
     if scanned is None or scanned >= due:
         return None
     log.info("No scan for %s yet: running the daily job again", due)
-    return run(["daily"])
+    return run(["daily", "--date", due.isoformat()])
 
 
 def _safe(job: Callable[[], int | None], name: str, lock: bool = True) -> Callable[[], None]:

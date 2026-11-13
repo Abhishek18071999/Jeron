@@ -539,25 +539,29 @@ def daily_update(
     calendar: TradingCalendar,
     today: date,
     *,
+    end: date | None = None,
     lookback_days: int = 10,
     log: Log = _quiet,
 ) -> QualityReportData | None:
     """Bring prices, corporate actions, the cross-check and the quality report up to
-    date. Returns the report for the newest trading day."""
-    start = today - timedelta(days=lookback_days)
+    `end` (default `today`), the newest session to load: a session that has not closed
+    yet has no bhavcopy, and a report for it would only say so. Returns the report for
+    the newest trading day."""
+    end = min(end or today, today)
+    start = end - timedelta(days=lookback_days)
     known = store.ok_dates(session, store.NSE_BARS)
     if known and known[-1] + timedelta(days=1) < start:
         start = known[-1] + timedelta(days=1)
-    ingest_range(session, archive, calendar, start, today, today, log=log)
-    new_days = store.ok_dates(session, store.NSE_BARS, start, today)
+    ingest_range(session, archive, calendar, start, end, today, log=log)
+    new_days = store.ok_dates(session, store.NSE_BARS, start, end)
     if not new_days:
         log("No trading days found in the last few days")
         return None
-    ingest_lists_range(session, archive, new_days[0] - timedelta(days=7), today, today, log=log)
+    ingest_lists_range(session, archive, new_days[0] - timedelta(days=7), end, today, log=log)
     refresh_reference_lists(session, archive, today, log=log)
     collect_deals(session, archive, today, log=log)
-    crosscheck_range(session, yahoo, new_days[0] - timedelta(days=7), today, log=log)
-    reports = quality_range(session, calendar, new_days[0], today, log=log)
+    crosscheck_range(session, yahoo, new_days[0] - timedelta(days=7), end, log=log)
+    reports = quality_range(session, calendar, new_days[0], end, log=log)
     return reports[-1] if reports else None
 
 
