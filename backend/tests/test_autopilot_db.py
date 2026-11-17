@@ -18,7 +18,7 @@ from app.data.pipeline import ANNOUNCEMENTS_SOURCE
 from app.db import get_engine
 from app.exits.job import backup_note
 from app.main import app
-from app.models import BacktestRun, JournalEntry, ScanRun
+from app.models import BacktestRun, FinancialResult, JournalEntry, ScanRun
 from app.scan.score import SCORE_VERSION
 from app.signals.build import IST
 from tests.conftest import requires_db
@@ -111,6 +111,34 @@ def test_news_backlog_runs_once_a_day_when_a_key_is_set(session, monkeypatch):
     assert _run(session, ran) == "news"
     assert ran[-1] == ["news-label", "--start", str(TODAY - timedelta(days=30))]
     assert _run(session, ran) == "backtest"
+
+
+def test_new_results_are_fetched_once_a_day_once_results_are_loaded(session):
+    store.save_bars(session, store.NSE_BARS, [_bar("AAA", date(2025, 3, 3), 100)])
+    session.add(ScanRun(trade_date=date(2025, 3, 3), score_version=SCORE_VERSION, status="ok"))
+    session.commit()
+    ran: list[list[str]] = []
+    # No results yet: the seed in seed/ loads them first, so nothing is fetched.
+    assert _run(session, ran) == "backtest"
+    session.add(
+        FinancialResult(
+            symbol="AAA",
+            company="AAA Limited",
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 3, 31),
+            consolidated=True,
+            audited=True,
+            standard="Ind-AS New",
+            disseminated_at=datetime(2026, 5, 10, 18, 0, tzinfo=IST),
+            xbrl_url="https://example.invalid/a.xml",
+            facts={},
+        )
+    )
+    session.commit()
+    assert _run(session, ran) == "results"
+    assert ran[-1] == ["fundamentals-fetch", "--start", str(TODAY - timedelta(days=200))]
+    assert autopilot.load_state()["results_fetched"] == TODAY.isoformat()
+    assert _run(session, ran) != "results"  # once a day
 
 
 def test_the_market_lane_waits_for_a_running_job(session):

@@ -6,7 +6,9 @@ Two lanes, so a long import never holds up the daily run:
 - the market lane (shared with the scheduler's daily, pre-open and weekly jobs): the
   price history when there is none (`backfill`), the first `daily`, announcements for
   days whose PR bundle is stored but whose `an` file was never read (`events`, from the
-  cache), the news labeller's last 30 days once a day when its key is set, a backtest of
+  cache), the news labeller's last 30 days once a day when its key is set, the newest
+  quarterly results once a day (`fundamentals-fetch` over the last two quarters, so the
+  strategies that read fund-v1 or earnings yield never run on expired scores), a backtest of
   every strategy version that has none (and of quality-trend after new results, and once
   more of a paper-traded version whose newest run has no evidence rating), then
   `paper`;
@@ -52,6 +54,9 @@ log = logging.getLogger("jeron.autopilot")
 SEED = Path(__file__).resolve().parent.parent / "seed" / "nse-results-2016-2026.zip"
 IMPORTABLE = (".csv", ".json", ".zip")
 NEWS_BACKLOG_DAYS = 30
+# The daily results fetch looks back far enough to cover the newest quarter and the one
+# before it, so a late filer of the previous quarter is still picked up.
+RESULTS_LOOKBACK_DAYS = 200
 LOG_TAIL = 12
 
 # The market lane. The scheduler's jobs take it too, so nothing writes prices twice.
@@ -366,6 +371,12 @@ def _inputs_signature(session: Session) -> str:
     return f"results={results_loaded(session)} meetings={store.board_meetings_loaded(session)}"
 
 
+def _results_loaded(session: Session) -> bool:
+    from app.fundamentals.job import results_loaded
+
+    return results_loaded(session)
+
+
 def next_step(session: Session, today: date, news_on: bool) -> Step | None:
     state = load_state()
     if session.scalar(select(DailyBar.trade_date).limit(1)) is None:
@@ -387,6 +398,13 @@ def next_step(session: Session, today: date, news_on: bool) -> Step | None:
             "news",
             f"Labelling the last {NEWS_BACKLOG_DAYS} days' announcements.",
             ["news-label", "--start", start.isoformat()],
+        )
+    if state.get("results_fetched") != today.isoformat() and _results_loaded(session):
+        start = today - timedelta(days=RESULTS_LOOKBACK_DAYS)
+        return Step(
+            "results",
+            "Fetching the newest quarterly results from NSE's Integrated Filing list.",
+            ["fundamentals-fetch", "--start", start.isoformat()],
         )
     tried = state.get("backtests_tried", {})
     signature = _inputs_signature(session)
@@ -414,6 +432,9 @@ def _finish(step: Step, session: Session, code: int, today: date) -> None:
         _update(announcements_checked_to=last)
     elif step.name == "news":
         _update(news_backlog=today.isoformat())
+    elif step.name == "results":
+        # Once a day even when NSE refused: the next day's run tries again.
+        _update(results_fetched=today.isoformat())
     elif step.name == "backtest":
         keys = [step.args[i + 1] for i, a in enumerate(step.args) if a == "--strategy"]
         tried = load_state().get("backtests_tried", {})
