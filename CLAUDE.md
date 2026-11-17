@@ -241,7 +241,9 @@ behaviour by adding a version, not by editing what a stored row meant.
     `scheduler` service. After `weekly`: `paper-review` and `proposal-validate --limit 2`.
   - `app/autopilot.py` sets an install up without commands (`docs/plans/autopilot-v1.md`):
     history, the first daily run, announcements from stored PR bundles, the news
-    backlog, a backtest of every untested strategy version, then `paper` (the market
+    backlog, the newest quarterly results once a day (`fundamentals-fetch` over the last
+    200 days: fund-v1 expires 200 days after a quarter ends, so without it quality-trend
+    and value-trend stop buying), a backtest of every untested strategy version, then `paper` (the market
     lane, shared with the scheduler's jobs through `market_lock`); and imports files
     dropped in `imports/` or uploaded (`PUT /imports/{name}`), recognised by their
     columns, filed under `imports/done` or `imports/failed` with a log. Queues
