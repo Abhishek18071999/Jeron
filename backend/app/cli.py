@@ -42,6 +42,7 @@ import csv
 import getpass
 import io
 import sys
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -122,6 +123,24 @@ def _archive() -> NseArchive:
 
 def _yahoo() -> YahooClient:
     return YahooClient(Fetcher(min_interval=get_settings().yahoo_request_interval))
+
+
+def duration(seconds: float) -> str:
+    """'8s', '3m 05s', '1h 02m': how long a step took, for the log."""
+    s = round(seconds)
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m {s % 60:02d}s"
+    return f"{s // 3600}h {s % 3600 // 60:02d}m"
+
+
+def timings_line(steps: list[tuple[str, float]]) -> str:
+    """The daily run's closing line: the total, then each step, so a slow evening says
+    where its time went (the second source reads a few seconds per stock from Yahoo)."""
+    total = sum(seconds for _, seconds in steps)
+    parts = ", ".join(f"{name} {duration(seconds)}" for name, seconds in steps)
+    return f"Took {duration(total)}: {parts}." if parts else f"Took {duration(total)}."
 
 
 def _span(years: list[int]) -> str:
@@ -719,26 +738,42 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if alert.status == "sent" else 1
 
         if args.command == "daily":
+            steps: list[tuple[str, float]] = []
+            mark = time.perf_counter()
+
+            def step_done(name: str) -> None:
+                nonlocal mark
+                now = time.perf_counter()
+                steps.append((name, now - mark))
+                mark = now
+
             closed = due_session(calendar, datetime.now(IST), MARKET_CLOSE)
             report = pipeline.daily_update(
                 session, _archive(), _yahoo(), calendar, today, end=args.date or closed, log=_log
             )
             late = data_late(session, calendar, log=_log)
+            step_done("prices, cross-check and quality")
             if report is None:
+                _log(timings_line(steps))
                 return 1
             _log(f"{report.trade_date}: data quality {report.status.value.upper()}")
             for reason in report.reasons:
                 _log(f"  - {reason}")
             outcome = run_scan(session, report.trade_date, log=_log)
+            step_done("scan")
             ok = report.status != QualityStatus.FAIL and outcome.status == "ok"
             settings = get_settings()
             run_daily_news(session, settings, report.trade_date, _log)
+            step_done("news")
             if ok:
                 ok = run_paper(session, report.trade_date, log=_log).status == "ok"
+                step_done("paper")
             # The summary goes out even when the day was blocked, saying why.
             sent = run_alerts(session, report.trade_date, log=_log)
+            step_done("alerts")
             if not late:
                 ping_heartbeat(settings.heartbeat_url, log=_log)
+            _log(timings_line(steps))
             return 0 if ok and not late and not sent.failed else 1
 
         if args.command in ("stop-all", "resume"):

@@ -95,6 +95,22 @@ jobs:
           curl -sf localhost:8000/health | tee /dev/stderr | grep -q '"database":"ok"'
           curl -sf localhost:3000 | grep -q 'data-database="connected"'
           curl -sf localhost:3000/settings | grep -q 'Risk and alerts'
+      - name: Every page renders on a fresh install, and what doesn't exist is a 404
+        run: |
+          fail=0
+          # Every page without a [parameter] in its path, found from the source tree, so a
+          # new page is checked without listing it here. Login is off in this step.
+          for page in "" $(cd web/src/app && find . -name page.tsx | sed 's#^\./##; s#/\{0,1\}page\.tsx$##' | grep -v '\[' | grep -vx login | sort); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "localhost:3000/$page")
+            echo "$code /$page"
+            [ "$code" = 200 ] || fail=1
+          done
+          for page in no-such-page backtests/999999 paper/999999 stocks/NOSUCHSTOCK; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "localhost:3000/$page")
+            echo "$code /$page"
+            [ "$code" = 404 ] || fail=1
+          done
+          exit $fail
       - name: API token (backend refuses calls without it, web sends it)
         run: |
           sed -i "s/^JERON_API_TOKEN=.*/JERON_API_TOKEN=ci-token/" .env

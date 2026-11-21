@@ -246,7 +246,9 @@ behaviour by adding a version, not by editing what a stored row meant.
     backlog, a backtest of every untested strategy version, then `paper` (the market
     lane, shared with the scheduler's jobs through `market_lock`); and imports files
     dropped in `imports/` or uploaded (`PUT /imports/{name}`), recognised by their
-    columns, filed under `imports/done` or `imports/failed` with a log. Queues
+    columns, filed under `imports/done` or `imports/failed` with a log; a zip may unpack to
+    at most `MAX_UNPACKED`. Once a week it runs `fundamentals-fetch` (`results_due`), and
+    new filings send both results strategies (`RESULTS_STRATEGIES`) back to backtest. Queues
     `backend/seed/nse-results-2016-2026.zip` once when no results are loaded. Each step
     is a CLI command in its own process. `GET /setup` (`app/api/setup.py`) says what is
     done, running, or needs the owner.
@@ -319,7 +321,9 @@ behaviour by adding a version, not by editing what a stored row meant.
   `text-bad`, `bg-accent`...); shared parts in `src/components/ui.tsx` (Card, Stat, Badge,
   Button, Table, EmptyState with the command that fills it). Server components call the
   backend at `JERON_API_URL`; journal writes go through server actions
-  (`src/app/journal/actions.ts`), so the browser never calls the API. The stock chart
+  (`src/app/journal/actions.ts`), so the browser never calls the API. A detail page whose
+  row the backend answers 404 for calls `notFound()` (`isNotFound` in `src/lib/api.ts`),
+  which shows `src/app/not-found.tsx` and answers 404. The stock chart
   uses TradingView Lightweight Charts (client component: ranges, volume, the line against
   the Nifty 500, signal and fill markers; helpers in `src/lib/chart.ts`). Installable PWA
   (`src/app/manifest.ts`).
@@ -374,5 +378,6 @@ Everything: `docker compose up --build` from the repo root.
 - The trade plan is where the real account's risk rules live: a new limit goes in
   `app/plan/calc.py` `guardrails` with a row in `tests/test_risk_rules.py`.
 - CI (`.github/workflows/ci.yml`) runs backend checks, web checks, a dependency audit
-  (`pip-audit`, `npm audit`), and a Docker Compose
-  smoke test. Keep it green.
+  (`pip-audit`, `npm audit`), and a Docker Compose smoke test that also opens every page
+  without a `[parameter]` on a fresh install (found from `web/src/app`, so a new page is
+  checked without listing it) and expects 404 for things that don't exist. Keep it green.

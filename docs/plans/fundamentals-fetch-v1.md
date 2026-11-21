@@ -25,10 +25,16 @@ sat in cash.
   revision has only a creation time and is known from then.
 - `parse_xbrl` needed no change: the integrated XBRL uses the same contexts.
 
+## Scheduled (2026-11-21)
+- The autopilot runs it in the market lane once a week, once the bundled lists are in
+  (`autopilot.results_due`, `RESULTS_EVERY_DAYS`). A check that fails (NSE down) is
+  tried again the next day, not the same day. When it stores new filings, both
+  strategies that read them (`RESULTS_STRATEGIES`: quality-trend and value-trend) are
+  backtested again. Setup shows the last check, and asks the owner only when the check
+  keeps failing while the results are stale. The first check on an install loads about
+  18 months of filings (some hours); later weeks take minutes.
+
 ## Not built
-- It is not scheduled. Run it by hand in results season (mid-month after each quarter
-  end, and again a fortnight later). Adding it to `weekly` is a small follow-up once it
-  has run cleanly on the install a few times.
 - Half-yearly balance sheets and cash flow for fundamentals-v2 come with the same files
   (`OneI`, `FourD`) and are stored; `health.py` is untouched and unverified on them.
 - No new score version: fund-v1 is unchanged, it only has data again.
