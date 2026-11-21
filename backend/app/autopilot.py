@@ -7,9 +7,11 @@ Two lanes, so a long import never holds up the daily run:
   price history when there is none (`backfill`), the first `daily`, announcements for
   days whose PR bundle is stored but whose `an` file was never read (`events`, from the
   cache), the news labeller's last 30 days once a day when its key is set, a backtest of
-  every strategy version that has none (and of quality-trend after new results, and once
-  more of a paper-traded version whose newest run has no evidence rating), then
-  `paper`;
+  every strategy version that has none (and of the strategies that read quarterly
+  results after new results, and once more of a paper-traded version whose newest run
+  has no evidence rating), then `paper`; and once a week, the quarterly results
+  published since the newest one stored (`fundamentals-fetch`), so the strategies that
+  read them never go stale (docs/plans/fundamentals-fetch-v1.md);
 - the imports lane: each file in the imports folder (the `imports` folder next to
   docker-compose.yml, or uploaded on the Setup page) is recognised by its columns and
   imported with its CLI command, then moved to `imports/done` or `imports/failed` with
@@ -51,7 +53,15 @@ log = logging.getLogger("jeron.autopilot")
 
 SEED = Path(__file__).resolve().parent.parent / "seed" / "nse-results-2016-2026.zip"
 IMPORTABLE = (".csv", ".json", ".zip")
+# The most a zip may unpack to. The bundled results lists, the largest zip Jeron reads,
+# unpack to about 50 MB; a tiny "zip bomb" could otherwise fill the disk.
+MAX_UNPACKED = 2 * 2**30
 NEWS_BACKLOG_DAYS = 30
+# The strategies that read quarterly results: backtested again when new results arrive.
+RESULTS_STRATEGIES = ("quality-trend", "value-trend")
+# How often NSE's results list is checked for new filings. Off season a check is a few
+# list requests; in results season it stores that week's filings at about one a second.
+RESULTS_EVERY_DAYS = 7
 LOG_TAIL = 12
 
 # The market lane. The scheduler's jobs take it too, so nothing writes prices twice.
@@ -182,20 +192,40 @@ def classify(path: Path) -> tuple[str, list[str]]:
     )
 
 
-def _unpack(path: Path) -> list[str]:
-    """Moves a zip's CSV and JSON files into its folder; returns their names."""
-    out = []
-    with zipfile.ZipFile(path) as z:
-        for info in z.infolist():
-            name = Path(info.filename).name  # never a path outside the folder
-            if info.is_dir() or not name or name.startswith(".") or "__MACOSX" in info.filename:
-                continue
-            if Path(name).suffix.lower() not in (".csv", ".json"):
-                continue
-            target = path.parent / name
-            with z.open(info) as src, target.open("wb") as dst:
-                shutil.copyfileobj(src, dst)
-            out.append(name)
+class ZipTooLargeError(ValueError):
+    pass
+
+
+def _unpack(path: Path, limit: int | None = None) -> list[str]:
+    """Moves a zip's CSV and JSON files into its folder; returns their names. Stops, and
+    removes what it wrote, when the files unpack to more than `limit` bytes: counted as
+    they are written, since the sizes a zip declares can lie."""
+    limit = MAX_UNPACKED if limit is None else limit
+    out: list[str] = []
+    written = 0
+    try:
+        with zipfile.ZipFile(path) as z:
+            for info in z.infolist():
+                name = Path(info.filename).name  # never a path outside the folder
+                if info.is_dir() or not name or name.startswith(".") or "__MACOSX" in info.filename:
+                    continue
+                if Path(name).suffix.lower() not in (".csv", ".json"):
+                    continue
+                target = path.parent / name
+                out.append(name)
+                with z.open(info) as src, target.open("wb") as dst:
+                    while chunk := src.read(2**20):
+                        written += len(chunk)
+                        if written > limit:
+                            raise ZipTooLargeError(
+                                f"it unpacks to more than {limit // 2**20} MB; unpack it "
+                                "yourself and add the files one at a time"
+                            )
+                        dst.write(chunk)
+    except ZipTooLargeError:
+        for name in out:
+            (path.parent / name).unlink(missing_ok=True)
+        raise
     return out
 
 
@@ -222,7 +252,7 @@ def import_one(path: Path, run: Runner = run_cli) -> str:
     if path.suffix.lower() == ".zip":
         try:
             names = _unpack(path)
-        except zipfile.BadZipFile as exc:
+        except (zipfile.BadZipFile, ZipTooLargeError) as exc:
             log_file.write_text(f"Not a readable zip file: {exc}\n")
             _settle(path, "failed", log_file)
             return "failed"
@@ -308,6 +338,9 @@ class Step:
     name: str
     why: str
     args: list[str]
+    # The quarterly results stored when the step started (the results step only), so
+    # finishing it can tell whether anything new arrived.
+    results_before: int | None = None
 
 
 def announcement_gap(session: Session, after: date | None) -> tuple[date, date] | None:
@@ -360,6 +393,22 @@ def unrated(session: Session) -> list[str]:
     return out
 
 
+def results_due(state: dict[str, Any], today: date, loaded: bool, busy: bool) -> bool:
+    """Whether to check NSE for new quarterly results: once the bundled lists are in and
+    no import is running, at most once a day, and only when the last check that worked
+    is a week old."""
+    if not loaded or busy or state.get("results_tried") == today.isoformat():
+        return False
+    last = state.get("results_fetched")
+    return last is None or date.fromisoformat(last) <= today - timedelta(days=RESULTS_EVERY_DAYS)
+
+
+def _results_rows(session: Session) -> int:
+    from app.models import FinancialResult
+
+    return int(session.scalar(select(func.count(FinancialResult.id))) or 0)
+
+
 def _inputs_signature(session: Session) -> str:
     from app.fundamentals.job import results_loaded
 
@@ -388,16 +437,27 @@ def next_step(session: Session, today: date, news_on: bool) -> Step | None:
             f"Labelling the last {NEWS_BACKLOG_DAYS} days' announcements.",
             ["news-label", "--start", start.isoformat()],
         )
+    from app.fundamentals.job import newest_period_end, results_loaded
+
+    importing = bool(state.get("importing") or pending(imports_dir()))
+    if results_due(state, today, results_loaded(session), importing):
+        newest = newest_period_end(session)
+        return Step(
+            "results",
+            f"Checking NSE for quarterly results published since the quarter to {newest}.",
+            ["fundamentals-fetch"],
+            results_before=_results_rows(session),
+        )
     tried = state.get("backtests_tried", {})
     signature = _inputs_signature(session)
     keys = [k for k in untested(session) if tried.get(k) != signature]
     rated = state.get("rated", {})
     keys += [k for k in unrated(session) if rated.get(k) != CONFIDENCE_VERSION and k not in keys]
-    if state.get("results_changed") and "quality-trend" not in keys:
-        keys.append("quality-trend")
-    if state.get("importing") or pending(imports_dir()):
-        # Results are still coming in: test the strategy that reads them once they're all in.
-        keys = [k for k in keys if k != "quality-trend"]
+    if state.get("results_changed"):
+        keys += [k for k in RESULTS_STRATEGIES if k not in keys]
+    if importing:
+        # Results are still coming in: test the strategies that read them once they're all in.
+        keys = [k for k in keys if k not in RESULTS_STRATEGIES]
     if keys:
         args = ["backtest"]
         for k in keys:
@@ -414,6 +474,17 @@ def _finish(step: Step, session: Session, code: int, today: date) -> None:
         _update(announcements_checked_to=last)
     elif step.name == "news":
         _update(news_backlog=today.isoformat())
+    elif step.name == "results":
+        grew = step.results_before is not None and _results_rows(session) > step.results_before
+        # A check that stored filings, or found nothing to fail on, lasts a week; one that
+        # failed (NSE down) is tried again tomorrow. Keys are only ever set here: `None`
+        # would delete them, losing the last good check or a change not yet backtested.
+        changes: dict[str, Any] = {"results_tried": today.isoformat()}
+        if code == 0 or grew:
+            changes["results_fetched"] = today.isoformat()
+        if grew:
+            changes["results_changed"] = True
+        _update(**changes)
     elif step.name == "backtest":
         keys = [step.args[i + 1] for i, a in enumerate(step.args) if a == "--strategy"]
         tried = load_state().get("backtests_tried", {})

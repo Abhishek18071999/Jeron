@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app import autopilot
+from app.api import setup as setup_api
 from app.backtest.strategies import COMBINED, STRATEGIES
 from app.config import get_settings
 from app.data import store
@@ -18,7 +19,7 @@ from app.data.pipeline import ANNOUNCEMENTS_SOURCE
 from app.db import get_engine
 from app.exits.job import backup_note
 from app.main import app
-from app.models import BacktestRun, JournalEntry, ScanRun
+from app.models import BacktestRun, FinancialResult, JournalEntry, ScanRun
 from app.scan.score import SCORE_VERSION
 from app.signals.build import IST
 from tests.conftest import requires_db
@@ -95,7 +96,7 @@ def test_setup_steps_run_in_order_and_once(session):
     session.commit()
     autopilot._update(results_changed=True)
     assert _run(session, ran) == "backtest"
-    assert ran[-1] == ["backtest", "--strategy", "quality-trend"]
+    assert ran[-1] == ["backtest", "--strategy", "quality-trend", "--strategy", "value-trend"]
     state = autopilot.load_state()
     assert state["last"]["step"] == "backtest" and "now" not in state
 
@@ -135,6 +136,9 @@ def test_setup_page_uploads_and_news(session):
     assert client.put("/imports/../../etc.csv", content=b"x").status_code in (200, 404)
     assert client.put("/imports/run.sh", content=b"x").status_code == 422
     assert client.put("/imports/empty.csv", content=b"").status_code == 422
+    # Too large by its declared length: refused before the body is read.
+    big = {"content-length": str(setup_api.MAX_UPLOAD + 1)}
+    assert client.put("/imports/big.csv", content=b"x", headers=big).status_code == 413
     steps = {s["key"]: s for s in client.get("/setup").json()["steps"]}
     assert steps["results"]["state"] == "working"
 
@@ -237,3 +241,79 @@ def test_the_results_seed_waits_for_the_price_history(session, tmp_path):
     assert autopilot.seed_results(session, folder) is True
     assert (folder / autopilot.SEED.name).exists()
     assert autopilot.seed_results(session, folder) is False  # once
+
+
+def _filing(session: Session, period_end: date, url: str) -> None:
+    session.add(
+        FinancialResult(
+            symbol="AAA",
+            company="AAA Limited",
+            period_start=period_end - timedelta(days=90),
+            period_end=period_end,
+            consolidated=True,
+            audited=False,
+            standard="Ind-AS New",
+            disseminated_at=datetime(period_end.year, period_end.month, 28, tzinfo=UTC)
+            + timedelta(days=30),
+            xbrl_url=url,
+            facts={},
+        )
+    )
+
+
+def test_new_results_are_fetched_weekly_and_retested(session, monkeypatch):
+    # Everything else is set up: only the results check can be due.
+    store.save_bars(session, store.NSE_BARS, [_bar("AAA", date(2025, 3, 3), 100)])
+    session.add(ScanRun(trade_date=date(2025, 3, 3), score_version=SCORE_VERSION, status="ok"))
+    for key, s in STRATEGIES.items():
+        _save_run(session, s.version, key)
+    for key, c in COMBINED.items():
+        _save_run(session, c.version, key)
+    session.commit()
+    ran: list[list[str]] = []
+    assert _run(session, ran) is None  # no results loaded: nothing to bring up to date
+
+    _filing(session, date(2024, 12, 31), "https://example.test/old.xml")
+    session.commit()
+
+    def fetch_one(args, log_file):
+        ran.append(list(args))
+        with Session(get_engine()) as s:
+            _filing(s, date(2025, 3, 31), "https://example.test/new.xml")
+            s.commit()
+        return 0
+
+    assert autopilot.run_market_step(lambda: Session(get_engine()), fetch_one, today=TODAY) == (
+        "results"
+    )
+    assert ran[-1] == ["fundamentals-fetch"]
+    state = autopilot.load_state()
+    assert state["results_fetched"] == state["results_tried"] == str(TODAY)
+    # New filings: both strategies that read them are backtested again, then paper.
+    assert _run(session, ran) == "backtest"
+    assert ran[-1] == ["backtest", "--strategy", "quality-trend", "--strategy", "value-trend"]
+    assert _run(session, ran) == "paper"
+    assert _run(session, ran) is None  # checked this week
+
+    # A week later NSE is down: the check fails and is tried again the next day, not
+    # the same day, and the last good check is kept.
+    later = TODAY + timedelta(days=autopilot.RESULTS_EVERY_DAYS)
+
+    def nse_down(args, log_file):
+        ran.append(list(args))
+        return 1
+
+    assert autopilot.run_market_step(lambda: Session(get_engine()), nse_down, today=later) == (
+        "results"
+    )
+    state = autopilot.load_state()
+    assert state["results_fetched"] == str(TODAY) and state["results_tried"] == str(later)
+    assert "results_changed" not in state
+    assert autopilot.run_market_step(lambda: Session(get_engine()), nse_down, today=later) is None
+    view = TestClient(app).get("/setup").json()
+    results = next(s for s in view["steps"] if s["key"] == "results")
+    assert "Checked NSE for new results on" in results["detail"]
+    next_day = later + timedelta(days=1)
+    assert autopilot.run_market_step(lambda: Session(get_engine()), nse_down, today=next_day) == (
+        "results"
+    )

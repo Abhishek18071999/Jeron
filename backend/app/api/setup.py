@@ -181,9 +181,9 @@ def setup_view(session: SessionDep) -> SetupView:
     ).one()
     busy = imports["running"] or imports["pending"]
     newer = (
-        "The bundled lists end with the December 2024 quarter, and so does NSE's Financial "
-        "Results list: later quarters are in its Integrated Filing list. Load them with "
-        "`python -m app.cli fundamentals-fetch` (about one filing a second)."
+        "Jeron's weekly check of NSE for new results has not worked. Run "
+        "`python -m app.cli fundamentals-fetch` to see why (it reads NSE's Integrated "
+        "Filing list, at about one filing a second)."
     )
     if busy:
         running = imports["running"]
@@ -198,15 +198,37 @@ def setup_view(session: SessionDep) -> SetupView:
                 "carries on after a restart.",
             )
         )
-    elif filings:
-        stale = newest is not None and (date.today() - newest).days > 200
+    elif now and now["step"] == "results":
         steps.append(
             Step(
                 key="results",
                 title="Quarterly results",
-                state="you" if stale else "done",
-                detail=f"{filings:,} quarters stored, newest ending {newest}.",
-                todo=[newer] if stale else [],
+                state="working",
+                detail=f"{now['why']} {filings:,} quarters stored, newest ending {newest}. "
+                "The first check after the bundled lists loads about 18 months of filings "
+                "and takes some hours; later weeks take minutes.",
+            )
+        )
+    elif filings:
+        stale = newest is not None and (date.today() - newest).days > 200
+        ap = autopilot.load_state()
+        fetched, tried = ap.get("results_fetched"), ap.get("results_tried")
+        checked = f" Checked NSE for new results on {fetched}." if fetched else ""
+        # Stale results are the owner's to fix only once the weekly check has failed.
+        failing = stale and tried is not None and tried != fetched
+        steps.append(
+            Step(
+                key="results",
+                title="Quarterly results",
+                state="you" if failing else "working" if stale else "done",
+                detail=f"{filings:,} quarters stored, newest ending {newest}.{checked}"
+                + (
+                    " Jeron fetches the newer quarters from NSE by itself, in the market lane "
+                    "after the daily run."
+                    if stale and not failing
+                    else " New results are fetched once a week."
+                ),
+                todo=[newer] if failing else [],
             )
         )
     else:
@@ -375,6 +397,10 @@ async def upload(name: str, request: Request) -> dict[str, Any]:
     clean = Path(name).name
     if not clean or clean.startswith(".") or Path(clean).suffix.lower() not in autopilot.IMPORTABLE:
         raise HTTPException(422, "Upload a .csv, .json or .zip file.")
+    # Refused from its declared length before anything is read into memory.
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_UPLOAD:
+        raise HTTPException(413, f"{clean} is over {MAX_UPLOAD // 2**20} MB.")
     body = await request.body()
     if not body:
         raise HTTPException(422, f"{clean} is empty.")

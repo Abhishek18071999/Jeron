@@ -135,3 +135,37 @@ def test_strategies_missing_inputs_are_named_not_crashed():
     market = one_stock_market([(100.0, 101.0, 99.0, 100.0)] * 5)
     assert missing_inputs(market, SCORE_SWING) is None
     assert "fundamentals-import" in (missing_inputs(market, QUALITY_TREND) or "")
+
+
+def test_new_results_are_checked_weekly_and_a_failure_tomorrow():
+    day = autopilot.date(2026, 11, 20)
+    due = autopilot.results_due
+    # Not before the bundled lists are in, nor while an import runs.
+    assert not due({}, day, loaded=False, busy=False)
+    assert not due({}, day, loaded=True, busy=True)
+    assert due({}, day, loaded=True, busy=False)
+    week = autopilot.RESULTS_EVERY_DAYS
+    last = day - autopilot.timedelta(days=week)
+    assert due({"results_fetched": str(last)}, day, loaded=True, busy=False)
+    recent = str(day - autopilot.timedelta(days=week - 1))
+    assert not due({"results_fetched": recent}, day, loaded=True, busy=False)
+    # A check tried today, worked or not, isn't tried again today.
+    assert not due({"results_tried": str(day)}, day, loaded=True, busy=False)
+    assert set(autopilot.RESULTS_STRATEGIES) == {"quality-trend", "value-trend"}
+
+
+def test_a_zip_that_unpacks_too_large_is_refused_and_leaves_nothing(folder, monkeypatch):
+    # A few kilobytes of zeros that unpack to far more than the limit: a "zip bomb".
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("first.csv", RESULTS)
+        z.writestr("bomb.csv", b"0" * (8 * 2**20))
+    (folder / "big.zip").write_bytes(data.getvalue())
+    assert len(data.getvalue()) < 64 * 2**10
+    monkeypatch.setattr(autopilot, "MAX_UNPACKED", 2**20)
+    imported: list[str] = []
+    autopilot.process_imports(folder, lambda args, log_file: imported.append(args[1]) or 0)
+    assert imported == []
+    assert not (folder / "first.csv").exists() and not (folder / "bomb.csv").exists()
+    assert (folder / "failed" / "big.zip").exists()
+    assert "unpacks to more than 1 MB" in (folder / "failed" / "big.zip.log").read_text()
