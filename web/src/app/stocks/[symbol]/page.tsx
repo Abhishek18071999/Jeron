@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { RRuler } from "@/components/trade-picture";
 import { WatchStar } from "@/components/watch-star";
@@ -12,6 +13,7 @@ import {
   type StockView,
   type Watchlist,
   getJson,
+  isNotFound,
 } from "@/lib/api";
 
 import { signClass } from "../../backtests/format";
@@ -32,6 +34,7 @@ export default async function StockPage({ params }: { params: Promise<{ symbol: 
     getJson<NewsView>(`/stocks/${encodeURIComponent(symbol)}/news`),
     getJson<ExplainView>(`/stocks/${encodeURIComponent(symbol)}/explain`),
   ]);
+  if (isNotFound(result)) notFound();
   if (!result.ok) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">

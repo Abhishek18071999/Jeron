@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { RRuler } from "@/components/trade-picture";
 import { Card, ErrorNote, ResearchBadge, inr, rMultiple, shortDate } from "@/components/ui";
-import { type JournalEntry, type SavedPlan, getJson } from "@/lib/api";
+import { type JournalEntry, type SavedPlan, getJson, isNotFound } from "@/lib/api";
 
 import { signClass } from "../../backtests/format";
 import { addFill, deleteFill, updateEntry } from "../actions";
@@ -20,6 +21,7 @@ export default async function EntryPage({
   const { id } = await params;
   const { error } = await searchParams;
   const result = await getJson<JournalEntry>(`/journal/${encodeURIComponent(id)}`);
+  if (isNotFound(result)) notFound();
   if (!result.ok) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-8">

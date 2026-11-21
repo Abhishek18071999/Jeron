@@ -38,6 +38,7 @@ import {
   getJson,
 } from "@/lib/api";
 import { briefing } from "@/lib/briefing";
+import { listInSentence } from "@/lib/text";
 
 export const dynamic = "force-dynamic";
 
@@ -501,8 +502,8 @@ function SetupBanner({ setup }: { setup: SetupView | null }) {
   if (!you.length && !working.length) return null;
   return (
     <Notice tone={you.length ? "warn" : "accent"}>
-      {working.length > 0 && <>Jeron is setting itself up ({working.map((s) => s.title.toLowerCase()).join(", ")}). </>}
-      {you.length > 0 && <>Needs you: {you.map((s) => s.title.toLowerCase()).join(", ")}. </>}
+      {working.length > 0 && <>Jeron is setting itself up: {listInSentence(working.map((s) => s.title))}. </>}
+      {you.length > 0 && <>Needs you: {listInSentence(you.map((s) => s.title))}. </>}
       <Link href="/setup" className="font-medium underline">
         See Setup
       </Link>

@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
-import { getJson, type PaperAccountView } from "@/lib/api";
+import { getJson, type PaperAccountView, isNotFound } from "@/lib/api";
 
 import { num, rupees, signClass } from "../../backtests/format";
 import { EquityLine, SignalCard, StageBadge, TradesTable } from "../parts";
@@ -19,6 +20,7 @@ function Stat({ label, value, className = "" }: { label: string; value: string; 
 export default async function PaperAccountPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const view = await getJson<PaperAccountView>(`/paper/accounts/${id}`);
+  if (isNotFound(view)) notFound();
   if (!view.ok) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">

@@ -79,7 +79,9 @@ export function PriceChart({
       },
       grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
       timeScale: { borderVisible: false },
-      rightPriceScale: { borderVisible: false },
+      // A label that would not fit inside its own pane is left out, so the price pane's
+      // lowest label and the index pane's highest one never print over each other.
+      rightPriceScale: { borderVisible: false, entireTextOnly: true },
     });
     const series = chart.addSeries(CandlestickSeries, {
       upColor: UP,

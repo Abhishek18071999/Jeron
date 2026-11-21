@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { RRuler } from "@/components/trade-picture";
 import { Card, ErrorNote, LinkButton, ResearchBadge, inr, shortDate } from "@/components/ui";
-import { type SavedPlan, type SignalJournal, getJson } from "@/lib/api";
+import { type SavedPlan, type SignalJournal, getJson, isNotFound } from "@/lib/api";
 
 import { decideSignal } from "../../actions";
 import { PlanForm, PlanSummary } from "../../forms";
@@ -20,6 +20,7 @@ export default async function SignalDecision({
   const { id } = await params;
   const { error } = await searchParams;
   const result = await getJson<SignalJournal>(`/journal/signal/${encodeURIComponent(id)}`);
+  if (isNotFound(result)) notFound();
   if (!result.ok) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-8">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { EvidenceBadge } from "@/components/strategy-status";
 import {
@@ -11,6 +12,7 @@ import {
   type EquityPoint,
   type RiskProfile,
   type TradeStats,
+  isNotFound,
 } from "@/lib/api";
 
 import { num, pct, rupees, signClass } from "../format";
@@ -376,6 +378,7 @@ export default async function BacktestPage({ params }: { params: Promise<{ id: s
     getJson<BacktestView>(`/backtests/${id}`),
     getJson<BacktestTrade[]>(`/backtests/${id}/trades`),
   ]);
+  if (isNotFound(view)) notFound();
   if (!view.ok) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">

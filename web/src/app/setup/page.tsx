@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Badge, Card, ErrorNote, Notice, Page, PageHeader, Table, Td, Th, type Tone, buttonClass, shortDate } from "@/components/ui";
 import { type SetupStep, type SetupView, getJson } from "@/lib/api";
+import { listInSentence } from "@/lib/text";
 
 import { uploadFiles } from "./actions";
 
@@ -74,7 +75,7 @@ export default async function SetupPage({
       {needYou.length > 0 ? (
         <Notice tone="warn">
           {needYou.length === 1 ? "One thing needs you" : `${needYou.length} things need you`}:{" "}
-          {needYou.map((s) => s.title.toLowerCase()).join(", ")}. Everything else runs by itself.
+          {listInSentence(needYou.map((s) => s.title))}. Everything else runs by itself.
         </Notice>
       ) : (
         <Notice tone="good">Nothing needs you. Jeron keeps itself up to date while it runs.</Notice>

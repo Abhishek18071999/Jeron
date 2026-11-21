@@ -699,7 +699,15 @@ export type AuditEvent = {
   recorded_at: string;
 };
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
+// `status` is the backend's HTTP status when it answered (404: no such row), absent when
+// it could not be reached.
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status?: number };
+
+// True when the backend answered that the thing asked for does not exist: the page then
+// shows Next's not-found page (src/app/not-found.tsx) and answers 404.
+export function isNotFound<T>(result: ApiResult<T>): boolean {
+  return !result.ok && result.status === 404;
+}
 
 export async function getJson<T>(path: string): Promise<ApiResult<T>> {
   try {
@@ -707,7 +715,7 @@ export async function getJson<T>(path: string): Promise<ApiResult<T>> {
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
       const detail = typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`;
-      return { ok: false, error: detail };
+      return { ok: false, error: detail, status: res.status };
     }
     return { ok: true, data: (await res.json()) as T };
   } catch {
