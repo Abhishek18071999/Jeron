@@ -19,6 +19,7 @@ from uuid import UUID
 from app.alerts.format import inr, order_line
 from app.backtest.costs import small_trade_warning
 from app.backtest.strategies import Tier
+from app.dates import day_label
 
 
 class SectionKey(StrEnum):
@@ -185,7 +186,7 @@ def status(section: SectionDef, strategies: Sequence[StrategyState]) -> SectionS
 
 def _day(d: date | str) -> str:
     d = date.fromisoformat(d) if isinstance(d, str) else d
-    return d.strftime("%a %-d %b")
+    return day_label(d)
 
 
 def _dec(value: Any) -> Decimal:

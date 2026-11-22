@@ -15,6 +15,7 @@ from app.backtest.strategies import COMBINED, STRATEGIES, Combined, Strategy
 from app.backups import BackupStatus, configured_status
 from app.calendar.nse import TradingCalendar
 from app.config import get_settings
+from app.dates import day_label, day_time_label
 from app.db import get_session
 from app.halt import halt_state
 from app.models import (
@@ -88,10 +89,10 @@ def _backup_step(b: BackupStatus) -> Step:
     detail = (
         f"{b.count} nightly backup{'' if b.count == 1 else 's'} "
         f"({b.size_bytes / 2**20:,.1f} MB), newest {b.newest} "
-        f"written {at:%a %-d %b %H:%M} IST."
+        f"written {day_time_label(at)} IST."
     )
     if b.check is not None and b.check.ok and b.check.at is not None:
-        detail += f" Restore test passed {b.check.at.astimezone(IST):%a %-d %b}" + (
+        detail += f" Restore test passed {day_label(b.check.at.astimezone(IST))}" + (
             f": {b.check.detail}." if b.check.detail else "."
         )
     return Step(

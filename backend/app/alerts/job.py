@@ -31,6 +31,7 @@ from app.backtest.market import market_state
 from app.config import Settings
 from app.data import store
 from app.data.nse_lists import INDIA_VIX, NIFTY_50, NIFTY_500
+from app.dates import day_month, weekday_label_year_time
 from app.halt import halt_state
 from app.journal.service import entry_views, pending_signals
 from app.models import (
@@ -325,7 +326,7 @@ def send_data_late(
         f"late:{due.isoformat()}",
         "late",
         text,
-        f"Jeron: NSE data for {due:%-d %b} has not arrived",
+        f"Jeron: NSE data for {day_month(due)} has not arrived",
         AlertOutcome(due, "ok"),
         now or datetime.now(IST),
         day=due,
@@ -347,7 +348,7 @@ def send_test(
     outcome = AlertOutcome(None, "ok")
     text = (
         "Jeron test message: alerts are working.\n"
-        f"Sent {now:%a %-d %b %Y %H:%M} IST. Signals and the daily summary arrive here "
+        f"Sent {weekday_label_year_time(now)} IST. Signals and the daily summary arrive here "
         "after each daily run."
     )
     return _send(

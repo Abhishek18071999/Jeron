@@ -76,6 +76,7 @@ from app.data.fundamentals import (
 from app.data.http import Fetcher, FetchError, NotPublishedError
 from app.data.nse import NseArchive
 from app.data.yahoo import YahooClient
+from app.dates import day_time_label
 from app.db import get_engine
 from app.enums import QualityStatus
 from app.exits.job import due_session, run_preopen
@@ -755,7 +756,7 @@ def main(argv: list[str] | None = None) -> int:
                     _log("Jeron was not stopped.")
                     return 0
                 text = (
-                    f"Jeron restarted. It was stopped from {ended.since:%a %-d %b %H:%M} "
+                    f"Jeron restarted. It was stopped from {day_time_label(ended.since)} "
                     f"({ended.reason}). Signals made while stopped stay research only."
                 )
             _log(text)

@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.backtest.costs import small_trade_warning
+from app.dates import weekday_label_year
 
 # Telegram's limit for one message.
 TELEGRAM_LIMIT = 4096
@@ -33,7 +34,7 @@ def inr(value: Decimal | float | int, decimals: int = 2) -> str:
 
 def _day(d: date | str) -> str:
     d = date.fromisoformat(d) if isinstance(d, str) else d
-    return d.strftime("%a %-d %b %Y")
+    return weekday_label_year(d)
 
 
 def _num(value: Any, places: int = 2) -> str:

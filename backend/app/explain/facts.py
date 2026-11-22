@@ -22,6 +22,8 @@ from datetime import date
 from enum import StrEnum
 from typing import Any
 
+from app.dates import day_label_year
+
 
 class Kind(StrEnum):
     DATA = "data"
@@ -214,14 +216,14 @@ def setup_status(s: SignalInputs, today: date, last_close: float | None) -> Setu
     broke = next(((d, low) for d, _, low, _ in s.since if low <= s.stop), None)
     if broke is not None:
         reasons.append(
-            f"traded at or below the stop {_rs(s.stop)} on {broke[0]:%-d %b %Y} "
+            f"traded at or below the stop {_rs(s.stop)} on {day_label_year(broke[0])} "
             f"(low {_rs(broke[1])}): the setup is invalidated"
         )
         return SetupStatus("invalidated", False, reasons)
     filled = next((d for d, open_, low, _ in s.since if low <= s.entry_high), None)
     if today > s.valid_until and filled is None:
         reasons.append(
-            f"the entry zone was valid until {s.valid_until:%-d %b %Y} and never traded: "
+            f"the entry zone was valid until {day_label_year(s.valid_until)} and never traded: "
             "the signal expired"
         )
         return SetupStatus("expired", False, reasons)
@@ -271,7 +273,8 @@ def build_brief(i: StockInputs) -> Brief:
         unknowns.append("No prices are stored for this stock.")
     if stale and i.last_date is not None:
         unknowns.append(
-            f"The newest prices are for {i.last_date:%-d %b %Y}; everything below is as of then."
+            f"The newest prices are for {day_label_year(i.last_date)}; "
+            "everything below is as of then."
         )
 
     # --- The scan -------------------------------------------------------------------
@@ -602,7 +605,7 @@ def build_brief(i: StockInputs) -> Brief:
             "signal",
             "Entry zone",
             f"{_rs(sig.entry_low)} to {_rs(sig.entry_high)}, "
-            f"valid until {sig.valid_until:%-d %b %Y}",
+            f"valid until {day_label_year(sig.valid_until)}",
             Kind.RULE,
             f"paper account {sig.strategy}",
             sig.signal_date,
@@ -645,13 +648,13 @@ def build_brief(i: StockInputs) -> Brief:
         setup.facts = [zone, stop]
         cancels.append(f"A trade at or below the stop {_rs(sig.stop)} ({sig.stop_reason}).")
         cancels.append(
-            f"No fill by {sig.valid_until:%-d %b %Y}, or an open above {_rs(sig.entry_high)}."
+            f"No fill by {day_label_year(sig.valid_until)}, or an open above {_rs(sig.entry_high)}."
         )
         if sig.invalidation:
             cancels.append(sig.invalidation)
     if i.blackout is False and i.results_date is not None:
         cancels.append(
-            f"Results on {i.results_date:%-d %b %Y}: no new entries from 3 sessions before."
+            f"Results on {day_label_year(i.results_date)}: no new entries from 3 sessions before."
         )
     if s is not None and "ema200" in levels:
         cancels.append(f"A close below the 200-day EMA ({_rs(levels['ema200'])}) ends the uptrend.")
@@ -712,7 +715,7 @@ def build_brief(i: StockInputs) -> Brief:
         Check(
             "Data is current",
             "fail" if stale else "pass",
-            "no prices" if i.last_date is None else f"prices to {i.last_date:%-d %b %Y}",
+            "no prices" if i.last_date is None else f"prices to {day_label_year(i.last_date)}",
         )
     )
     checklist.append(

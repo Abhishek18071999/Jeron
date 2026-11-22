@@ -20,6 +20,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.dates import day_time_label
 from app.models import SettingChange
 
 HALT_KEY = "halt"
@@ -33,7 +34,7 @@ class Halt:
 
     def headline(self) -> str:
         return (
-            f"JERON IS STOPPED (since {self.since:%a %-d %b %H:%M}): {self.reason}. No new "
+            f"JERON IS STOPPED (since {day_time_label(self.since)}): {self.reason}. No new "
             "buys; exits still apply. To restart: python -m app.cli resume"
         )
 

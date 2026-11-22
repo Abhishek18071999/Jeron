@@ -33,6 +33,7 @@ from app.config import Settings
 from app.data import store
 from app.data.adjust import SHARE_COUNT_ACTIONS, Adjustment, adjust_bars, build_adjustments
 from app.data.events import next_results
+from app.dates import day_label, weekday_label_year
 from app.enums import CorporateActionType
 from app.exits.rules import Action, ExitBar, ExitPlan, exit_plan
 from app.halt import halt_state
@@ -242,7 +243,7 @@ def _events(session: Session, checks: Sequence[PositionCheck], day: date, last: 
     for c in checks:
         upcoming = next_results(results.get(c.ticker, []), day)
         if upcoming is not None and upcoming.meeting_date <= last:
-            c.events.append(f"results board meeting on {upcoming.meeting_date:%a %-d %b}")
+            c.events.append(f"results board meeting on {day_label(upcoming.meeting_date)}")
     for a in store.actions_between(session, store.NSE_ACTIONS, day, last, symbols):
         what = a.action_type.value
         if a.action_type in (CorporateActionType.SPLIT, CorporateActionType.BONUS):
@@ -251,7 +252,7 @@ def _events(session: Session, checks: Sequence[PositionCheck], day: date, last: 
             what += f" {inr(a.amount)}"
         for c in checks:
             if c.ticker == a.symbol:
-                c.events.append(f"{what}, ex-date {a.ex_date:%a %-d %b}: stop and shares change")
+                c.events.append(f"{what}, ex-date {day_label(a.ex_date)}: stop and shares change")
 
 
 def build_preopen(session: Session, day: date, calendar: TradingCalendar | None = None) -> PreOpen:
@@ -365,7 +366,7 @@ def entry_checks(session: Session, p: PreOpen, settings: Settings) -> list[Entry
 
 
 def _entry_line(e: EntryCheck) -> str:
-    head = f"- {e.ticker} ({e.strategy_key}, signal {e.signal_date:%a %-d %b})"
+    head = f"- {e.ticker} ({e.strategy_key}, signal {day_label(e.signal_date)})"
     if e.skip:
         return "\n".join([f"{head}: SKIP", *(f"  {r}" for r in e.skip)])
     lines = [
@@ -437,24 +438,25 @@ def preopen_message(
     tax_notes: Sequence[str] = (),
     halted: str | None = None,
 ) -> str:
-    lines = [f"Jeron pre-open check, {p.day:%a %-d %b %Y}"]
+    lines = [f"Jeron pre-open check, {weekday_label_year(p.day)}"]
     if halted:
         lines += ["", halted]
     if p.stale:
         when = "never"
         if p.data_as_of:
             # The year only when it isn't this one: a long-stopped install shows its age.
-            fmt = "%a %-d %b" if p.data_as_of.year == p.day.year else "%a %-d %b %Y"
-            when = f"{p.data_as_of:{fmt}}"
+            same_year = p.data_as_of.year == p.day.year
+            when = (day_label if same_year else weekday_label_year)(p.data_as_of)
         lines += [
             "",
-            f"Prices for {p.expected:%a %-d %b} are not loaded (latest: {when}). No actions "
+            f"Prices for {day_label(p.expected)} are not loaded (latest: {when}). No actions "
             "today: run the daily job first, then this check again.",
         ]
     elif not p.positions:
         lines += ["", "No open positions in the journal."]
     else:
-        lines[0] += f" (closes to {p.data_as_of:%a %-d %b})"
+        assert p.data_as_of is not None  # not stale, so prices are loaded
+        lines[0] += f" (closes to {day_label(p.data_as_of)})"
         for action in ORDER:
             group = [c for c in p.positions if c.action == action]
             if group:
