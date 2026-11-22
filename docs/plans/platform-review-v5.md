@@ -30,7 +30,7 @@ owner's own database, Telegram or email delivery (no credentials).
 |---|---|---|---|
 | 1 | Security | `opentelemetry-api` 1.45.1, pulled in by FastAPI, has CVE-2026-126360; CI's audit step would fail | Upgraded to 1.45.2 |
 | 2 | Security | `next` 16.4.2 has seven advisories (cache disclosure, response injection on self-hosted servers, SVG bypass, others) | `next` and `eslint-config-next` to 16.4.6; in-range audit fix for the lint tooling |
-| 3 | Product | Quarterly results stay current only if the owner runs `fundamentals-fetch` by hand. `value-trend-v1`, the best-supported strategy, then goes to cash 200 days after the newest quarter | The autopilot checks NSE weekly, retries the next day on failure, and re-backtests both results strategies when filings arrive (`fundamentals-fetch-v1.md`) |
+| 3 | Product | Quarterly results stay current only if the owner runs `fundamentals-fetch` by hand. `value-trend-v1`, the best-supported strategy, then goes to cash 200 days after the newest quarter | The autopilot checks NSE daily (merged with PR #57's design: 200 days back, or from the newest stored quarter if older), retries the next day on failure, and re-backtests both results strategies when filings arrive (`fundamentals-fetch-v1.md`) |
 | 4 | Correctness | New results re-backtested `quality-trend` but not `value-trend`, which reads the same filings | Both, through `RESULTS_STRATEGIES` |
 | 5 | Security | An uploaded zip could unpack to any size; an oversized upload was read into memory before the size check | Unpacking stops at 2 GB counted as written, and removes what it wrote; uploads are refused on their declared length first |
 | 6 | UX | A missing stock, backtest, paper account or journal entry showed a bare line with no way back, and answered 200 | A 404 from the API shows a not-found page with links back, and answers 404 |
@@ -84,7 +84,7 @@ flowchart LR
   Yahoo --> daily
   subgraph scheduler
     daily[daily 19:00: prices, cross-check, quality, scan, news, paper, alerts]
-    autopilot[autopilot every minute: setup steps, weekly results check, backtests, imports]
+    autopilot[autopilot every minute: setup steps, daily results check, backtests, imports]
   end
   NSEint[NSE Integrated Filing list] --> autopilot
   daily --> db[(PostgreSQL)]

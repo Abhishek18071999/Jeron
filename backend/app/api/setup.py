@@ -181,7 +181,7 @@ def setup_view(session: SessionDep) -> SetupView:
     ).one()
     busy = imports["running"] or imports["pending"]
     newer = (
-        "Jeron's weekly check of NSE for new results has not worked. Run "
+        "Jeron's daily check of NSE for new results has not worked. Run "
         "`python -m app.cli fundamentals-fetch` to see why (it reads NSE's Integrated "
         "Filing list, at about one filing a second)."
     )
@@ -206,7 +206,7 @@ def setup_view(session: SessionDep) -> SetupView:
                 state="working",
                 detail=f"{now['why']} {filings:,} quarters stored, newest ending {newest}. "
                 "The first check after the bundled lists loads about 18 months of filings "
-                "and takes some hours; later weeks take minutes.",
+                "and takes some hours; later days take minutes.",
             )
         )
     elif filings:
@@ -214,7 +214,7 @@ def setup_view(session: SessionDep) -> SetupView:
         ap = autopilot.load_state()
         fetched, tried = ap.get("results_fetched"), ap.get("results_tried")
         checked = f" Checked NSE for new results on {fetched}." if fetched else ""
-        # Stale results are the owner's to fix only once the weekly check has failed.
+        # Stale results are the owner's to fix only once the daily check has failed.
         failing = stale and tried is not None and tried != fetched
         steps.append(
             Step(
@@ -226,7 +226,7 @@ def setup_view(session: SessionDep) -> SetupView:
                     " Jeron fetches the newer quarters from NSE by itself, in the market lane "
                     "after the daily run."
                     if stale and not failing
-                    else " New results are fetched once a week."
+                    else " New results are fetched once a day."
                 ),
                 todo=[newer] if failing else [],
             )

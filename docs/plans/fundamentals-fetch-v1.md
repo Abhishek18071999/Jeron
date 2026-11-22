@@ -25,14 +25,18 @@ sat in cash.
   revision has only a creation time and is known from then.
 - `parse_xbrl` needed no change: the integrated XBRL uses the same contexts.
 
-## Scheduled (2026-11-21)
-- The autopilot runs it in the market lane once a week, once the bundled lists are in
-  (`autopilot.results_due`, `RESULTS_EVERY_DAYS`). A check that fails (NSE down) is
-  tried again the next day, not the same day. When it stores new filings, both
+## Scheduled (2026-11-22, daily, as PR #57 proposed)
+- The autopilot runs it in the market lane once a day, once the bundled lists are in
+  (`autopilot.results_due`, `RESULTS_EVERY_DAYS`), before the backtests and `paper`, so
+  the evening's paper replay sees the new filings. Each check lists from
+  `results_start`: 200 days back, which covers the newest quarter and a late filer of
+  the one before (PR #57), or the newest stored quarter when that is older, so an
+  install whose results stop at December 2024 catches up every missing quarter. A
+  check that fails (NSE down) is tried again the next day, not the same day. When it stores new filings, both
   strategies that read them (`RESULTS_STRATEGIES`: quality-trend and value-trend) are
   backtested again. Setup shows the last check, and asks the owner only when the check
   keeps failing while the results are stale. The first check on an install loads about
-  18 months of filings (some hours); later weeks take minutes.
+  18 months of filings (some hours); later days take minutes.
 
 ## Not built
 - Half-yearly balance sheets and cash flow for fundamentals-v2 come with the same files

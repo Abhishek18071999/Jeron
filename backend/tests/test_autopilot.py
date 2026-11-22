@@ -144,11 +144,11 @@ def test_new_results_are_checked_weekly_and_a_failure_tomorrow():
     assert not due({}, day, loaded=False, busy=False)
     assert not due({}, day, loaded=True, busy=True)
     assert due({}, day, loaded=True, busy=False)
-    week = autopilot.RESULTS_EVERY_DAYS
-    last = day - autopilot.timedelta(days=week)
+    every = autopilot.RESULTS_EVERY_DAYS
+    assert every == 1  # once a day, before the evening's paper replay
+    last = day - autopilot.timedelta(days=every)
     assert due({"results_fetched": str(last)}, day, loaded=True, busy=False)
-    recent = str(day - autopilot.timedelta(days=week - 1))
-    assert not due({"results_fetched": recent}, day, loaded=True, busy=False)
+    assert not due({"results_fetched": str(day)}, day, loaded=True, busy=False)
     # A check tried today, worked or not, isn't tried again today.
     assert not due({"results_tried": str(day)}, day, loaded=True, busy=False)
     assert set(autopilot.RESULTS_STRATEGIES) == {"quality-trend", "value-trend"}
@@ -169,3 +169,15 @@ def test_a_zip_that_unpacks_too_large_is_refused_and_leaves_nothing(folder, monk
     assert not (folder / "first.csv").exists() and not (folder / "bomb.csv").exists()
     assert (folder / "failed" / "big.zip").exists()
     assert "unpacks to more than 1 MB" in (folder / "failed" / "big.zip.log").read_text()
+
+
+def test_each_check_lists_200_days_back_or_from_the_newest_quarter_if_older():
+    day = autopilot.date(2026, 11, 20)
+    back = day - autopilot.timedelta(days=200)
+    # Up to date: the newest quarter and the one before, so late filers are picked up.
+    assert autopilot.results_start(autopilot.date(2026, 9, 30), day) == back
+    # Stopped at the bundled lists' end: every missing quarter since.
+    assert autopilot.results_start(autopilot.date(2024, 12, 31), day) == autopilot.date(
+        2024, 12, 31
+    )
+    assert autopilot.results_start(None, day) == back

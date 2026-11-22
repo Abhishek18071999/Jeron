@@ -9,9 +9,10 @@ Two lanes, so a long import never holds up the daily run:
   cache), the news labeller's last 30 days once a day when its key is set, a backtest of
   every strategy version that has none (and of the strategies that read quarterly
   results after new results, and once more of a paper-traded version whose newest run
-  has no evidence rating), then `paper`; and once a week, the quarterly results
-  published since the newest one stored (`fundamentals-fetch`), so the strategies that
-  read them never go stale (docs/plans/fundamentals-fetch-v1.md);
+  has no evidence rating), then `paper`; and once a day, the newest quarterly results
+  (`fundamentals-fetch`, from `results_start`), before the backtests and `paper`, so
+  the strategies that read fund-v1 or the earnings yield never run on expired scores
+  (docs/plans/fundamentals-fetch-v1.md);
 - the imports lane: each file in the imports folder (the `imports` folder next to
   docker-compose.yml, or uploaded on the Setup page) is recognised by its columns and
   imported with its CLI command, then moved to `imports/done` or `imports/failed` with
@@ -60,8 +61,12 @@ NEWS_BACKLOG_DAYS = 30
 # The strategies that read quarterly results: backtested again when new results arrive.
 RESULTS_STRATEGIES = ("quality-trend", "value-trend")
 # How often NSE's results list is checked for new filings. Off season a check is a few
-# list requests; in results season it stores that week's filings at about one a second.
-RESULTS_EVERY_DAYS = 7
+# list requests; in results season it stores that day's filings at about one a second.
+RESULTS_EVERY_DAYS = 1
+# How far back each check lists: the newest quarter and the one before it, so a late
+# filer of the previous quarter is still picked up (fund-v1 drops a quarter as stale
+# after STALE_DAYS, also 200).
+RESULTS_LOOKBACK_DAYS = 200
 LOG_TAIL = 12
 
 # The market lane. The scheduler's jobs take it too, so nothing writes prices twice.
@@ -396,11 +401,19 @@ def unrated(session: Session) -> list[str]:
 def results_due(state: dict[str, Any], today: date, loaded: bool, busy: bool) -> bool:
     """Whether to check NSE for new quarterly results: once the bundled lists are in and
     no import is running, at most once a day, and only when the last check that worked
-    is a week old."""
+    is `RESULTS_EVERY_DAYS` old."""
     if not loaded or busy or state.get("results_tried") == today.isoformat():
         return False
     last = state.get("results_fetched")
     return last is None or date.fromisoformat(last) <= today - timedelta(days=RESULTS_EVERY_DAYS)
+
+
+def results_start(newest: date | None, today: date) -> date:
+    """The first quarter end a results check lists: `RESULTS_LOOKBACK_DAYS` back, or
+    the newest stored quarter when that is older, so an install whose results stop
+    earlier (the bundled lists end in December 2024) catches up every missing quarter."""
+    back = today - timedelta(days=RESULTS_LOOKBACK_DAYS)
+    return back if newest is None or newest > back else newest
 
 
 def _results_rows(session: Session) -> int:
@@ -441,11 +454,11 @@ def next_step(session: Session, today: date, news_on: bool) -> Step | None:
 
     importing = bool(state.get("importing") or pending(imports_dir()))
     if results_due(state, today, results_loaded(session), importing):
-        newest = newest_period_end(session)
+        start = results_start(newest_period_end(session), today)
         return Step(
             "results",
-            f"Checking NSE for quarterly results published since the quarter to {newest}.",
-            ["fundamentals-fetch"],
+            f"Checking NSE for quarterly results for quarters ending from {start}.",
+            ["fundamentals-fetch", "--start", start.isoformat()],
             results_before=_results_rows(session),
         )
     tried = state.get("backtests_tried", {})
@@ -476,8 +489,9 @@ def _finish(step: Step, session: Session, code: int, today: date) -> None:
         _update(news_backlog=today.isoformat())
     elif step.name == "results":
         grew = step.results_before is not None and _results_rows(session) > step.results_before
-        # A check that stored filings, or found nothing to fail on, lasts a week; one that
-        # failed (NSE down) is tried again tomorrow. Keys are only ever set here: `None`
+        # A check that stored filings, or found nothing to fail on, lasts until
+        # RESULTS_EVERY_DAYS have passed; one that failed (NSE down) is tried again the
+        # next day, never again the same day. Keys are only ever set here: `None`
         # would delete them, losing the last good check or a change not yet backtested.
         changes: dict[str, Any] = {"results_tried": today.isoformat()}
         if code == 0 or grew:

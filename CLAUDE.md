@@ -247,8 +247,9 @@ behaviour by adding a version, not by editing what a stored row meant.
     lane, shared with the scheduler's jobs through `market_lock`); and imports files
     dropped in `imports/` or uploaded (`PUT /imports/{name}`), recognised by their
     columns, filed under `imports/done` or `imports/failed` with a log; a zip may unpack to
-    at most `MAX_UNPACKED`. Once a week it runs `fundamentals-fetch` (`results_due`), and
-    new filings send both results strategies (`RESULTS_STRATEGIES`) back to backtest. Queues
+    at most `MAX_UNPACKED`. Once a day it runs `fundamentals-fetch` (`results_due`,
+    from `results_start`: 200 days back, or the newest stored quarter if older), and new
+    filings send both results strategies (`RESULTS_STRATEGIES`) back to backtest. Queues
     `backend/seed/nse-results-2016-2026.zip` once when no results are loaded. Each step
     is a CLI command in its own process. `GET /setup` (`app/api/setup.py`) says what is
     done, running, or needs the owner.

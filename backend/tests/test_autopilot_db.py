@@ -261,7 +261,7 @@ def _filing(session: Session, period_end: date, url: str) -> None:
     )
 
 
-def test_new_results_are_fetched_weekly_and_retested(session, monkeypatch):
+def test_new_results_are_fetched_daily_and_retested(session, monkeypatch):
     # Everything else is set up: only the results check can be due.
     store.save_bars(session, store.NSE_BARS, [_bar("AAA", date(2025, 3, 3), 100)])
     session.add(ScanRun(trade_date=date(2025, 3, 3), score_version=SCORE_VERSION, status="ok"))
@@ -286,17 +286,19 @@ def test_new_results_are_fetched_weekly_and_retested(session, monkeypatch):
     assert autopilot.run_market_step(lambda: Session(get_engine()), fetch_one, today=TODAY) == (
         "results"
     )
-    assert ran[-1] == ["fundamentals-fetch"]
+    # The stored results stop at December 2024: the check catches up from there.
+    assert ran[-1] == ["fundamentals-fetch", "--start", "2024-12-31"]
     state = autopilot.load_state()
     assert state["results_fetched"] == state["results_tried"] == str(TODAY)
     # New filings: both strategies that read them are backtested again, then paper.
     assert _run(session, ran) == "backtest"
     assert ran[-1] == ["backtest", "--strategy", "quality-trend", "--strategy", "value-trend"]
     assert _run(session, ran) == "paper"
-    assert _run(session, ran) is None  # checked this week
+    assert _run(session, ran) is None  # checked today
 
-    # A week later NSE is down: the check fails and is tried again the next day, not
-    # the same day, and the last good check is kept.
+    # The next day NSE is down: the check fails and is tried again the day after, not
+    # the same day, and the last good check is kept. It starts from the newest stored
+    # quarter, still older than 200 days back.
     later = TODAY + timedelta(days=autopilot.RESULTS_EVERY_DAYS)
 
     def nse_down(args, log_file):
@@ -306,6 +308,7 @@ def test_new_results_are_fetched_weekly_and_retested(session, monkeypatch):
     assert autopilot.run_market_step(lambda: Session(get_engine()), nse_down, today=later) == (
         "results"
     )
+    assert ran[-1] == ["fundamentals-fetch", "--start", "2025-03-31"]
     state = autopilot.load_state()
     assert state["results_fetched"] == str(TODAY) and state["results_tried"] == str(later)
     assert "results_changed" not in state
