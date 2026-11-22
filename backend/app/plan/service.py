@@ -18,6 +18,7 @@ from app.data import store
 from app.data.adjust import adjust_bars, build_adjustments
 from app.data.events import EVENT_LOOKAHEAD_DAYS, blackout_signal_days, event_risk, next_results
 from app.data.pipeline import BOARD_MEETINGS_SOURCE
+from app.dates import day_label
 from app.enums import CorporateActionType, Exchange
 from app.halt import halt_state
 from app.journal.service import SignalInfo, signal_info
@@ -184,7 +185,7 @@ def events_ahead(session: Session, symbol: str, day: date | None) -> Events:
             what += f" {_n(a.ratio_new)}:{_n(a.ratio_old)}"
         elif a.amount:
             what += f" ₹{_n(a.amount)}"
-        ex_dates.append(f"{what}, ex-date {a.ex_date:%a %-d %b}")
+        ex_dates.append(f"{what}, ex-date {day_label(a.ex_date)}")
     return Events(when, line, blackout, ex_dates)
 
 

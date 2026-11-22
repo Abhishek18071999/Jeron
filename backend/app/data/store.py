@@ -22,6 +22,7 @@ from app.data.nse_lists import (
 )
 from app.data.provider import Bar, CorporateActionRecord, InstrumentRecord
 from app.data.quality import DROPS_CHECK
+from app.dates import day_month
 from app.enums import Exchange
 from app.models import Announcement as AnnouncementRow
 from app.models import BlockDeal as DealRow
@@ -987,7 +988,7 @@ def held_drops(session: Session, day: date) -> dict[str, str]:
     )
     out: dict[str, str] = {}
     for item in items:
-        reason = f"fell {item['move_pct']}% on {day:%-d %b} with no split or bonus"
+        reason = f"fell {item['move_pct']}% on {day_month(day)} with no split or bonus"
         if item.get("actions"):
             reason += f" ({item['actions']}, which Jeron could not price)"
         out[item["symbol"]] = reason
